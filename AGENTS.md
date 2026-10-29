@@ -47,7 +47,7 @@ scripts/              # repository tooling (check-skills.mjs)
 
 - One version for everything: `package.json`, `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, and every skill's `metadata.version`. `npm run check` enforces this.
 - Bump the version for any user-visible change. Claude Code and Codex cache plugins per version.
-- The reviewer agent bodies in `agents/` must equal the block in `skills/subagent-team/references/reviewer-prompt.md`. Edit the reference, then regenerate both agents.
+- The reviewer agent bodies in `agents/` must equal the block in `skills/subagent-team/references/reviewer-prompt.md`. Edit the reference, then run `npm run sync:agents`.
 
 ## 7. Installation commands to recommend
 

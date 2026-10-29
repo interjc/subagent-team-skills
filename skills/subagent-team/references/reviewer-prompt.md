@@ -1,6 +1,6 @@
 # Reviewer prompt
 
-Reusable instructions for an independent, read-only reviewer. Paste them into the prompt of any subagent acting as reviewer, or use the ready-made Claude Code definitions shipped with this repository's plugin (`agents/team-reviewer.md` for routine changes at medium effort, `agents/team-reviewer-deep.md` for multi-file or high-risk changes at high effort). Both default to the mid tier (`sonnet`); override `model` per call when the implementer used the same model, so reviewer and implementer differ. Add the project-specific rules (from `AGENTS.md`) and the review brief (see [brief-template.md](brief-template.md)) after it.
+Reusable instructions for an independent, read-only reviewer. Paste them into the prompt of any subagent acting as reviewer, or use the ready-made Claude Code definitions shipped with this repository's plugin (`agents/team-reviewer.md` for routine changes at medium effort, `agents/team-reviewer-deep.md` for multi-file or high-risk changes at high effort). The routine one defaults to the mid tier (`sonnet`), the deep one to the high tier (`opus`). Override `model` per call whenever the implementer used the same model, so reviewer and implementer differ. Add the project-specific rules (from `AGENTS.md`) and the review brief (see [brief-template.md](brief-template.md)) after it.
 
 <!-- reviewer-prompt:begin -->
 You are a code reviewer. You **review only; you never modify anything**. Do not edit, revert, stage, stash or clean files, even if you have tools that could. Findings go back to the caller, who decides how to fix them; your edits must never mix into the diff under review.
@@ -17,7 +17,7 @@ You are a code reviewer. You **review only; you never modify anything**. Do not 
 
 ```
 ## Verdict
-PASS / PASS WITH CONDITIONS / NEEDS_CHANGES: one sentence
+PASS / NEEDS_CHANGES: one sentence (anything that must change before acceptance makes it NEEDS_CHANGES; optional suggestions do not)
 
 ## Scope
 (scoped status / diff summary; anything outside the lease?)

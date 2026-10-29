@@ -72,7 +72,7 @@ cmp "$BK" src/rule.ts; echo "cmp exit=$?"         # expect: 0
 - All findings closed, or listed as open.
 - New files: `git diff --check` ignores untracked files. Use `git diff --no-index --check /dev/null <file>` and read the output; its exit code is non-zero whenever the file differs from `/dev/null`, with or without warnings.
 - Shared logic: a report saying "all exits use the shared check" is not proof. `git grep` the call sites and compare with the list of exits in the brief; anything in the list and missing from the grep is a leak.
-- When the reviewer followed a brief that had a gap, the orchestrator fills the gap, again with something executable. Example: to prove a set of new crawler-blocking patterns hits no public page, compile the patterns to regexes and run them against every URL in the production sitemap.
+- When the reviewer followed a brief that had a gap, the orchestrator fills the gap, again with something executable. Example: to prove a set of new URL-blocking rules hits no public page, compile the rules and run them against every public URL you can list.
 - Small rework can be closed by the orchestrator without a new review round only if **all** hold: every change is inside the reviewer's findings; the change is small (wording, a line, a single condition, no new files); each finding can be re-checked executably (grep, diff, a targeted test). The report must say "closed by orchestrator re-check", list the findings, the commands and outputs. Anything outside the findings goes back to a full review.
 
 ## Command pitfalls that make checks pass silently

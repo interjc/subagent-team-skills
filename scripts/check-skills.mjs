@@ -4,6 +4,8 @@
 //   node scripts/check-skills.mjs [--root <dir>]
 //
 // Checks: skill frontmatter (name, description, version), SKILL.md length,
+// every reference linked from its SKILL.md, no relative links across skills,
+// English-only skill content, README / README_ZH structural parity,
 // relative Markdown links, version consistency across manifests, reviewer
 // agent definitions in sync with the shared prompt, and a privacy scan for
 // personal paths, emails and token-like strings. Terms listed one per line in
@@ -29,7 +31,8 @@ const PRIVACY_PATTERNS = [
 ];
 const EMAIL_ALLOW = [/@example\.(com|org)$/i, /^noreply@/i];
 
-export function parseFrontmatter(text) {
+export function parseFrontmatter(raw) {
+  const text = raw.replace(/\r\n/g, '\n');
   const m = text.match(/^---\n([\s\S]*?)\n---\n/);
   if (!m) return null;
   const data = {};
@@ -100,6 +103,12 @@ export function checkSkills(root) {
     const lines = text.split('\n').length;
     if (lines > MAX_SKILL_LINES) errors.push(`skills/${name}/SKILL.md: ${lines} lines (max ${MAX_SKILL_LINES}); move detail to references/`);
     skills.push({ name, version: data.metadata?.version });
+    const refDir = path.join(dir, 'references');
+    if (fs.existsSync(refDir)) {
+      for (const ref of fs.readdirSync(refDir).filter((f) => f.endsWith('.md'))) {
+        if (!text.includes(`references/${ref}`)) errors.push(`skills/${name}/references/${ref}: not linked from SKILL.md`);
+      }
+    }
   }
   if (skills.length === 0) errors.push('no skills found under skills/');
   return { errors, skills };
@@ -118,6 +127,61 @@ export function checkLinks(root, files) {
         errors.push(`${path.relative(root, file)}: broken link ${target}`);
       }
     }
+  }
+  return errors;
+}
+
+// Each skill must work when installed alone: no relative links leaving its directory.
+export function checkSkillIsolation(root, files) {
+  const errors = [];
+  const skillsDir = path.join(root, 'skills');
+  for (const file of files.filter((f) => f.endsWith('.md') && f.startsWith(skillsDir + path.sep))) {
+    const skillRoot = path.join(skillsDir, path.relative(skillsDir, file).split(path.sep)[0]);
+    const text = fs.readFileSync(file, 'utf8').replace(/```[\s\S]*?```/g, '');
+    for (const m of text.matchAll(/\[[^\]]*\]\(([^)\s]+)\)/g)) {
+      if (/^(https?:|mailto:|#)/.test(m[1])) continue;
+      const target = path.resolve(path.dirname(file), decodeURIComponent(m[1].split('#')[0]));
+      if (target !== skillRoot && !target.startsWith(skillRoot + path.sep)) {
+        errors.push(`${path.relative(root, file)}: link ${m[1]} leaves the skill directory`);
+      }
+    }
+  }
+  return errors;
+}
+
+const CJK_RE = /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uff00-\uffef]/;
+
+// Skill content and agent definitions are English-only.
+export function checkEnglish(root, files) {
+  const errors = [];
+  const scoped = [path.join(root, 'skills') + path.sep, path.join(root, 'agents') + path.sep];
+  for (const file of files.filter((f) => scoped.some((s) => f.startsWith(s)) && TEXT_EXT.has(path.extname(f)))) {
+    fs.readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+      if (CJK_RE.test(line)) errors.push(`${path.relative(root, file)}:${i + 1}: non-English text in skill content`);
+    });
+  }
+  return errors;
+}
+
+export function markdownShape(text) {
+  const body = text.replace(/\r\n/g, '\n');
+  const fences = (body.match(/^```/gm) || []).length;
+  const noCode = body.replace(/```[\s\S]*?```/g, '');
+  const headings = noCode.split('\n').filter((l) => /^#{1,6} /.test(l)).map((l) => l.match(/^#+/)[0].length);
+  const links = [...noCode.matchAll(/\]\(([^)\s]+)\)/g)].map((m) => m[1]).sort();
+  return { headings: headings.join(','), fences, links: links.join(' ') };
+}
+
+// README.md and README_ZH.md must keep the same structure: heading levels, code blocks and link targets.
+export function checkReadmeParity(root) {
+  const en = path.join(root, 'README.md');
+  const zh = path.join(root, 'README_ZH.md');
+  if (!fs.existsSync(en) || !fs.existsSync(zh)) return [];
+  const a = markdownShape(fs.readFileSync(en, 'utf8'));
+  const b = markdownShape(fs.readFileSync(zh, 'utf8'));
+  const errors = [];
+  for (const key of ['headings', 'fences', 'links']) {
+    if (a[key] !== b[key]) errors.push(`README.md and README_ZH.md differ in ${key}: "${a[key]}" vs "${b[key]}"`);
   }
   return errors;
 }
@@ -204,6 +268,9 @@ export function runChecks(root) {
   return [
     ...skillErrors,
     ...checkLinks(root, files),
+    ...checkSkillIsolation(root, files),
+    ...checkEnglish(root, files),
+    ...checkReadmeParity(root),
     ...checkVersions(root, skills),
     ...checkAgents(root),
     ...checkPrivacy(root, files, loadDenylist(root)),
@@ -212,6 +279,10 @@ export function runChecks(root) {
 
 function main(argv) {
   const i = argv.indexOf('--root');
+  if (i >= 0 && !argv[i + 1]) {
+    console.error('usage: check-skills.mjs [--root <dir>]');
+    process.exit(1);
+  }
   const root = path.resolve(i >= 0 ? argv[i + 1] : path.join(path.dirname(fileURLToPath(import.meta.url)), '..'));
   const errors = runChecks(root);
   if (errors.length) {

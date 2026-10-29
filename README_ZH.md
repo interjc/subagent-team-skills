@@ -71,7 +71,7 @@ codex plugin add subagent-team@subagent-team-skills
 
 | Skill | 内容 | 什么时候加载 |
 |---|---|---|
-| [`subagent-team`](skills/subagent-team/SKILL.md)（核心） | 三种模式（单干 / 标准 / 严格）；团队角色；抽象档位与 effort；外包准入；契约先行的并行开发；任务说明模板；可执行验证与三步审核；以 grill me 清单收尾的决策升级阶梯；agent 复用与槽位限制；Claude Code 与 Codex 的差异 | 任务跨多个文件或阶段；要派活、选模型或 effort、写任务说明、审核委派结果，或者拿不准要不要问用户 |
+| [`subagent-team`](skills/subagent-team/SKILL.md)（核心） | 首次使用时约定团队策略（各角色的模型和 effort，或 `auto`）；三种模式（单干 / 标准 / 严格）；团队角色；抽象档位与 effort；外包准入；契约先行的并行开发；任务说明模板；可执行验证与三步审核；以 grill me 清单收尾的决策升级阶梯；agent 复用与槽位限制；Claude Code 与 Codex 的差异 | 任务跨多个文件或阶段；要派活、选模型或 effort、写任务说明、审核委派结果，或者拿不准要不要问用户 |
 | [`cli-agent-delegation`](skills/cli-agent-delegation/SKILL.md) | 外包给 Google Antigravity（`agy`，装不装 [agy-staff](https://github.com/keli-wen/agy-staff) 都行）和 OpenAI Codex CLI：两者怎么选、安全封装、进度追踪、续做、验收、实测数据 | 把需求明确的批量活交给其他厂商的 agent 时 |
 | [`agent-handover`](skills/agent-handover/SKILL.md) | 进度记录；规则落进仓库而不是本地记忆；commit hash 占位与回填；决策记录；交出与接手清单 | 验收之后、会话可能中断之前、切换 agent 或工具时、接手别人的工作时 |
 
@@ -80,7 +80,7 @@ Claude Code 插件附带两个审核 agent：
 - `team-reviewer`：常规改动，medium effort
 - `team-reviewer-deep`：高风险或跨模块改动，high effort
 
-两者的工具集里没有写文件的工具，天然只读。
+两者靠指令约束为只读，工具集里没有编辑和写文件工具。但为了跑测试保留了 Bash，Bash 仍然可以写文件，所以需要时请对工作区做指纹核对（见 `verification.md`）。
 
 ## 辅助脚本
 
@@ -91,19 +91,22 @@ Claude Code 插件附带两个审核 agent：
 | `skills/cli-agent-delegation/scripts/agy-run.mjs` | 没装 agy-staff 时直接 headless 调用 `agy`。会校验模型 id；拒绝绕道调用 Claude / GPT 模型；`--write` 对应不受限模式；可以按 conversation id 续做 |
 | `skills/cli-agent-delegation/scripts/doctor.mjs` | 只读的环境报告：CLI 是否安装及版本、Codex 默认 effort 的坑、可用模型、agy-staff 是否已安装 |
 
-## 按你的项目定制
+## 首次使用：约定团队策略
 
-项目专属的内容写在项目自己的 `AGENTS.md` / `CLAUDE.md` 里，不写进 skill。至少补上这些：
+核心 skill 第一次在某个项目里运行时，会先在 `AGENTS.md`（或 `CLAUDE.md`）里找 `## Subagent team` 小节。
 
-```markdown
-## Subagent team
-- 档位映射：总管 = <模型> · high；项目经理 = <模型>；员工 = <模型>；跑腿 = <模型>；
-  专家 = <模型>；外包·快 = agy <模型>；外包·强 = Codex <模型> · medium–high
-- 不外包：<计费 / 支付 / 鉴权路径>
-- 共享文件（只由总管写）：<语言文件、文档索引、契约文件>
-- 验收命令：<类型检查>、<lint>、<测试>（写可执行文件路径）
-- 提交与推送：<例如：检查通过后本地 commit；只推 dev；不合并 main>
-```
+如果没有，它会先探测当前可用的模型和 CLI，再问你五个简短的问题。每题都带推荐答案，可以一次性全部采纳。答案写进这个小节，之后的会话直接照办，不再重复询问：
+
+1. **模型策略**：
+   - `auto`（推荐）：主 session 按当时可用的模型，为每个角色自行选定推荐的模型和 effort，并说明选了什么。
+   - `fixed`：由你为每个档位指定模型和 effort。
+   - `hybrid`：部分角色固定，其余 auto。
+2. **成本偏好**：均衡 / 省钱 / 质量优先
+3. **外包员工**：agy（装不装 agy-staff 均可）、Codex CLI，或者不用
+4. **不外包的路径与共享文件**：例如计费、支付、鉴权；语言文件、文档索引
+5. **提交与推送规则**
+
+这个小节随时可以手工修改。模板与规则见 [project-setup.md](skills/subagent-team/references/project-setup.md)。
 
 ## 开发
 

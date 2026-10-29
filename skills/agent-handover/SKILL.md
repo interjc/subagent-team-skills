@@ -66,7 +66,7 @@ A commit hash is unknown until the commit exists, so the task writes `<pending-c
 4. Self-check, so that only the current task's placeholder remains:
 
    ```bash
-   grep -n '<pending-commit>\|not yet committed\|awaiting commit' docs/**/*.md; echo "exit=$?"
+   grep -rn --include='*.md' -e '<pending-commit>' -e 'not yet committed' -e 'awaiting commit' docs; echo "exit=$?"
    ```
 
 Lesson: backfill with a grep over all docs, not just the log table. A placeholder once survived in three other sections for a whole task.

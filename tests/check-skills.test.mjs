@@ -12,6 +12,9 @@ import {
   checkVersions,
   checkAgents,
   checkPrivacy,
+  checkSkillIsolation,
+  checkEnglish,
+  checkReadmeParity,
   runChecks,
   walk,
 } from '../scripts/check-skills.mjs';
@@ -56,6 +59,58 @@ test('checkSkills accepts a valid skill and rejects bad ones', () => {
   assert.match(joined, /long.*lines/);
   assert.match(joined, /angle.*angle brackets/);
   assert.ok(skills.some((s) => s.name === 'good' && s.version === '1.0.0'));
+});
+
+test('checkSkills flags references not linked from SKILL.md', () => {
+  const root = tmpRepo({
+    'skills/demo/SKILL.md': skill('demo', 'See [a](references/a.md).\n'),
+    'skills/demo/references/a.md': '# a',
+    'skills/demo/references/orphan.md': '# orphan',
+  });
+  const { errors } = checkSkills(root);
+  assert.deepEqual(errors, ['skills/demo/references/orphan.md: not linked from SKILL.md']);
+});
+
+test('parseFrontmatter tolerates CRLF line endings', () => {
+  assert.equal(parseFrontmatter(skill('demo').replace(/\n/g, '\r\n')).data.name, 'demo');
+});
+
+test('checkSkillIsolation rejects relative links that leave a skill', () => {
+  const root = tmpRepo({
+    'skills/a/SKILL.md': '[own](references/x.md) [other](../b/SKILL.md) [web](https://x.y)',
+    'skills/a/references/x.md': '[up](../SKILL.md) [repo](../../../README.md)',
+    'skills/b/SKILL.md': '# b',
+    'README.md': '# r',
+  });
+  const errors = checkSkillIsolation(root, walk(root));
+  assert.deepEqual(errors.sort(), [
+    'skills/a/SKILL.md: link ../b/SKILL.md leaves the skill directory',
+    'skills/a/references/x.md: link ../../../README.md leaves the skill directory',
+  ]);
+});
+
+test('checkEnglish rejects CJK text in skills and agents only', () => {
+  const root = tmpRepo({
+    'skills/a/SKILL.md': '# a\n\u4e2d\u6587\n',
+    'agents/r.md': 'ok\n\u65e5\u672c\u8a9e\n',
+    'README_ZH.md': '\u4e2d\u6587 is fine here',
+  });
+  const errors = checkEnglish(root, walk(root));
+  assert.deepEqual(errors.sort(), [
+    'agents/r.md:2: non-English text in skill content',
+    'skills/a/SKILL.md:2: non-English text in skill content',
+  ]);
+});
+
+test('checkReadmeParity compares headings, code blocks and link targets', () => {
+  const en = '# T\n## A\n[x](a.md)\n```\ncode\n```\n';
+  const same = tmpRepo({ 'README.md': en, 'README_ZH.md': '# \u6807\u9898\n## \u7532\n[\u6587](a.md)\n```\n\u4ee3\u7801\n```\n' });
+  assert.deepEqual(checkReadmeParity(same), []);
+  const diff = tmpRepo({ 'README.md': en, 'README_ZH.md': '# T\n[x](b.md)\n' });
+  const errors = checkReadmeParity(diff).join('\n');
+  assert.match(errors, /headings/);
+  assert.match(errors, /fences/);
+  assert.match(errors, /links/);
 });
 
 test('checkLinks flags broken relative links and ignores URLs, anchors and code blocks', () => {
@@ -128,6 +183,7 @@ test('CLI exits non-zero on problems', () => {
   const root = tmpRepo({ 'skills/x/SKILL.md': '# missing frontmatter' });
   const script = path.join(repoRoot, 'scripts/check-skills.mjs');
   assert.throws(() => execFileSync(process.execPath, [script, '--root', root], { stdio: 'pipe' }), /Command failed/);
+  assert.throws(() => execFileSync(process.execPath, [script, '--root'], { stdio: 'pipe' }), /Command failed/);
   const out = execFileSync(process.execPath, [script, '--root', repoRoot], { encoding: 'utf8' });
   assert.match(out, /all checks passed/);
 });

@@ -10,7 +10,7 @@ Measured outsourcing runs from real projects (2026-10). Model names were current
 | Frozen key list + file lease + runnable acceptance command; two languages × 17 keys | ~5 min | Passed first time, stayed inside the lease |
 | Same pattern; two languages × 23 keys, brief included base-language text, insertion points and a line-aligned acceptance command | ~7 min | Passed first time, `\n` escapes preserved; ~1.4M cached tokens |
 | Two languages × 53 keys with placeholders and long example prompts | ~9 min | Passed first time, zero placeholder differences; ~4.4M cached tokens. Context cost grows with batch size but stays far below translating in-house. |
-| Three translation batches during one five-phase feature (116 keys total) | — | All accepted after director review |
+| Three translation batches during one five-phase feature (over a hundred keys) | — | All accepted after director review |
 
 Lessons:
 
@@ -23,8 +23,8 @@ Lessons:
 
 | Model · effort | Task | Time / tokens | Outcome |
 |---|---|---|---|
-| `gpt-6-luna` · high | Rebuild a docs index covering ~60 documents | ~1.7 min / 82k | Passed first time, inside the lease, no dead links; also flagged documents that looked stale |
-| `gpt-6.1-sol` · high | Rewrite the root README from current code (+213 / −513 lines) | ~4.8 min / 88k | Versions, scripts, paths, 28 environment variables and webhook events all correct; one duplicated heading for the director to fix |
+| `gpt-6-luna` · high | Rebuild a docs index covering dozens of documents | ~1.7 min / 82k | Passed first time, inside the lease, no dead links; also flagged documents that looked stale |
+| `gpt-6.1-sol` · high | Rewrite the root README from current code (several hundred lines changed) | ~4.8 min / 88k | Versions, scripts, paths, dozens of environment variables and webhook events all correct; one duplicated heading for the director to fix |
 
 Lessons:
 

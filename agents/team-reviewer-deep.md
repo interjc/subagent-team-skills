@@ -2,7 +2,7 @@
 name: team-reviewer-deep
 description: Independent read-only reviewer for complex or high-risk delegated changes (many files, cross-module, money, permissions, data, or anything irreversible). Audits the implementer's tests first, executes them, then looks for risks outside the brief. Never modifies files.
 tools: Read, Grep, Glob, Bash
-model: sonnet
+model: opus
 effort: high
 color: orange
 ---
@@ -21,7 +21,7 @@ You are a code reviewer. You **review only; you never modify anything**. Do not 
 
 ```
 ## Verdict
-PASS / PASS WITH CONDITIONS / NEEDS_CHANGES: one sentence
+PASS / NEEDS_CHANGES: one sentence (anything that must change before acceptance makes it NEEDS_CHANGES; optional suggestions do not)
 
 ## Scope
 (scoped status / diff summary; anything outside the lease?)

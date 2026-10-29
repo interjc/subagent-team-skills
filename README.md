@@ -25,7 +25,7 @@ The method is distilled from the author's day-to-day work on several production 
 |---|---|
 | **Claude Code** | Primary. Developed and used daily; plugin with skills and reviewer agents. |
 | **Codex** | Secondary. Used as the main session on real projects; skills install as a plugin. The reviewer agents are Claude Code definitions (use `reviewer-prompt.md` instead). |
-| Others (OpenCode, Pi, Cursor, Gemini CLI, ...) | Not tested. The skills follow the open [Agent Skills](https://agentskills.io) format and the method is tool-neutral, so they install and load anywhere skills are supported. Install through `npx skills` or your agent's own plugin/skill marketplace, then adapt the harness-specific parts yourself. |
+| Others (OpenCode, Pi, Cursor, Gemini CLI, ...) | Not tested; quality not guaranteed. The skills follow the open [Agent Skills](https://agentskills.io) format and the method is tool-neutral, so any agent that supports skills can install and load them. Install through `npx skills` or your agent's own plugin/skill marketplace, then adapt the harness-specific parts yourself. |
 
 ## Install
 
@@ -58,11 +58,11 @@ Restart the agent afterwards. The helper scripts need **Node.js 20+** and no dep
 
 | Skill | What it covers | Loads when |
 |---|---|---|
-| [`subagent-team`](skills/subagent-team/SKILL.md) (core) | Modes (solo / standard / strict), team roles, abstract model tiers and effort, the outsourcing gate, contracts-first parallel work, brief templates, executable verification and three-step review, the escalation ladder ending in one batched question list, agent reuse and slot limits, Claude Code and Codex specifics | A task spans several files or phases; you delegate, choose a model or effort, write a brief, review delegated work, or wonder whether to ask the user |
+| [`subagent-team`](skills/subagent-team/SKILL.md) (core) | First-use team policy (models and effort per role, or `auto`), modes (solo / standard / strict), team roles, abstract model tiers and effort, the outsourcing gate, contracts-first parallel work, brief templates, executable verification and three-step review, the escalation ladder ending in one batched question list, agent reuse and slot limits, Claude Code and Codex specifics | A task spans several files or phases; you delegate, choose a model or effort, write a brief, review delegated work, or wonder whether to ask the user |
 | [`cli-agent-delegation`](skills/cli-agent-delegation/SKILL.md) | Outsourcing to Google Antigravity (`agy`, with or without [agy-staff](https://github.com/keli-wen/agy-staff)) and OpenAI Codex CLI: agy vs Codex, safe wrappers, tracking, resuming, acceptance, measured runs | Sending bulk, fully specified work to another vendor's agent |
 | [`agent-handover`](skills/agent-handover/SKILL.md) | Progress records, rules in the repo instead of local memory, commit-hash placeholders, decision records, hand-off and take-over checklists | After accepting work, before a session may end, when switching agents or tools, when resuming someone else's work |
 
-Agents shipped with the Claude Code plugin: `team-reviewer` (routine changes, medium effort) and `team-reviewer-deep` (risky or cross-module changes, high effort). Both are read-only by tool set.
+Agents shipped with the Claude Code plugin: `team-reviewer` (routine changes, medium effort) and `team-reviewer-deep` (risky or cross-module changes, high effort). Both are read-only by instruction and have no edit or write tools; they keep Bash so they can run tests, so fingerprint the working tree when it matters (see `verification.md`).
 
 ## Helper scripts
 
@@ -73,19 +73,20 @@ Agents shipped with the Claude Code plugin: `team-reviewer` (routine changes, me
 | `skills/cli-agent-delegation/scripts/agy-run.mjs` | Runs `agy` headless when the agy-staff plugin is not installed. Validates model ids, refuses routing back to Claude/GPT models, maps `--write` to unrestricted mode, and supports continuation by conversation id. |
 | `skills/cli-agent-delegation/scripts/doctor.mjs` | Read-only environment report: CLIs and versions, Codex's default effort footgun, available models, agy-staff installation. |
 
-## Make it yours
+## First use: agree on the team policy
 
-Project specifics belong in your project's `AGENTS.md` / `CLAUDE.md`, not in the skill. At minimum, add:
+The first time the core skill runs in a project, it looks for a `## Subagent team` section in `AGENTS.md` (or `CLAUDE.md`). If there is none, it detects which models and CLIs are available and asks you five short questions, each with a recommended answer you can accept in one go. It then writes the answers into that section, and later sessions follow it without asking again:
 
-```markdown
-## Subagent team
-- Tier mapping: director = <model> · high; managers = <models>; workers = <models>; runner = <model>;
-  expert = <model>; external-fast = agy <model>; external-strong = Codex <model> · medium–high
-- Never outsourced: <billing / payment / auth paths>
-- Shared files (director only): <locale files, docs index, contract files>
-- Acceptance commands: <type check>, <lint>, <tests> (use executable paths)
-- Commit / push policy: <e.g. commit locally after checks; push only dev; never merge main>
-```
+1. **Model policy**:
+   - `auto` (recommended): the main session picks the recommended model and effort for each role from what is available, and says what it picked.
+   - `fixed`: you set the model and effort for every tier.
+   - `hybrid`: fixed for some roles, auto for the rest.
+2. **Cost preference**: balanced / economize / max quality.
+3. **External staff**: agy (with or without agy-staff), Codex CLI, or none.
+4. **Never outsourced and shared files**: e.g. billing, payment and auth paths; locale files and doc indexes.
+5. **Commit and push rules**.
+
+Edit the section any time. Template and rules: [project-setup.md](skills/subagent-team/references/project-setup.md).
 
 ## Development
 

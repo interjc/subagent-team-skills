@@ -92,7 +92,7 @@ The director must be able to decide on integration without redoing the investiga
   <problem and root cause>
   - <change>
 
-  Verified: <key numbers, e.g. "37 patterns against 142 sitemap URLs, 0 false hits">
+  Verified: <key numbers, e.g. "N rules against M real URLs, 0 false hits">
   MSG
   ```
 

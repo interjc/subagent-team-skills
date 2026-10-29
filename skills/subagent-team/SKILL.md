@@ -1,6 +1,6 @@
 ---
 name: subagent-team
-description: Run multi-file, multi-phase coding work as a team. The main session is the director (product manager + project manager + architect); manager-level subagents split work, design, review and accept; worker subagents and external CLI agents (agy, Codex CLI) implement; the human gets one batched question list at the end. Use this whenever a task spans several files or phases, and whenever you are about to delegate to a subagent or an external agent, choose a model or reasoning effort for one, write a task brief, review or accept delegated work, run work in parallel, or decide whether to stop and ask the user, even if the user never says "subagent".
+description: Run multi-file, multi-phase coding work as a team. The main session is the director (product manager + project manager + architect); manager-level subagents split work, design, review and accept; worker subagents and external CLI agents (agy, Codex CLI) implement; the human gets one batched question list at the end. Use this whenever a task spans several files or phases, and whenever you are about to delegate to a subagent or an external agent, choose a model or reasoning effort for one, write a task brief, review or accept delegated work, run work in parallel, set up which models and effort a project's agents use, or decide whether to stop and ask the user, even if the user never says "subagent".
 license: MIT
 metadata:
   version: "0.1.0"
@@ -10,9 +10,9 @@ metadata:
 
 Treat a large coding task like a small company: one director, a few strong managers, many cheap and fast staff, and a human owner who is asked as little as possible, all at once, at the end.
 
-This skill is the method. Project facts (commands, sensitive modules, shared files, which concrete model sits in which tier) belong in the project's `AGENTS.md` / `CLAUDE.md`, and project rules always win over this skill.
+This skill is the method. Project facts (commands, sensitive modules, shared files, which concrete model sits in which tier) belong in the project's `AGENTS.md` / `CLAUDE.md`, in a `## Subagent team` section created on first use, and project rules always win over this skill.
 
-Harness support: written and battle-tested in **Claude Code**, also used with **Codex** as the main session. Any harness that can spawn subagents can follow it; harness-specific mechanics live in [references/harness-claude-code.md](references/harness-claude-code.md) and [references/harness-codex.md](references/harness-codex.md). For outsourcing to external CLIs, load the companion skill `cli-agent-delegation`; for progress records and mid-task handover, `agent-handover`.
+Harness support: developed and used day to day in **Claude Code**, also used with **Codex** as the main session. Any harness that can spawn subagents can follow it; harness-specific mechanics live in [references/harness-claude-code.md](references/harness-claude-code.md) and [references/harness-codex.md](references/harness-codex.md). For outsourcing to external CLIs, load the companion skill `cli-agent-delegation`; for progress records and mid-task handover, `agent-handover`.
 
 ## 0. Pick a mode first
 
@@ -23,6 +23,8 @@ Harness support: written and battle-tested in **Claude Code**, also used with **
 | **Strict** | Long programs with several task lines, high-risk areas (money, auth, irreversible data), or many agents running for days | Never. Every file change goes through a task-line manager → implementer → independent reviewer. See [references/strict-mode.md](references/strict-mode.md) |
 
 Say which mode you picked in one line when you start. Escalate from Standard to Strict when you notice yourself losing track of who is editing what.
+
+**First use in a project (Standard and Strict).** Before the first dispatch, look for a `## Subagent team` section in the project's `AGENTS.md` (or `CLAUDE.md`). If it exists, follow its model policy without asking. If not, detect what is available, ask the user a short questionnaire (model policy `auto` / `fixed` / `hybrid`, cost preference, external staff, never-outsourced paths, commit and push rules), and write the section. With `auto`, you pick the recommended model and effort per role yourself and state each pick in one line. Procedure, questions and the section template: [references/project-setup.md](references/project-setup.md).
 
 ## 1. The team
 
@@ -65,7 +67,7 @@ Describe roles with abstract tiers and pick concrete models per harness:
 - The director runs at **high tier, high effort**. As of 2026-10 that meant Claude Opus 5.5 or GPT-6.1 Sol at `high`.
 - Tier and effort are independent. Mid + high effort suits a precise but fiddly implementation; high + low effort suits a quick architectural sanity check.
 - Effort follows **how much can only be settled by reasoning**, not the size of the change. Good tests let a reviewer run at lower effort, because the judgment is already encoded in executable checks.
-- Mapping procedure, a role-by-role table, a dated example roster and the `scripts/model-roster.mjs` helper are in [references/model-tiers.md](references/model-tiers.md). Use the models your harness actually exposes, not names from memory. If the harness cannot set effort per call, choose by tier only and ask for a thorough job in the brief.
+- The project's `## Subagent team` policy (section 0) decides which concrete model and effort each role gets; under `auto` you choose. Mapping procedure, a role-by-role table, a dated example roster and the `scripts/model-roster.mjs` helper are in [references/model-tiers.md](references/model-tiers.md). Use the models your harness actually exposes, not names from memory. If the harness cannot set effort per call, choose by tier only and ask for a thorough job in the brief.
 
 ## 3. Who does it: yourself, in-house, or outsourced
 
@@ -82,6 +84,8 @@ Describe roles with abstract tiers and pick concrete models per harness:
 3. **Objective acceptance**: runnable commands or a checklist anyone can tick (key sets, placeholders, line counts, snapshots).
 4. **Bulk or repetitive**: translations, homogeneous integrations, filling in from a template, snapshot and exhaustive tests, doc syncs, mechanical refactors.
 
+**Exception: read-only second opinions.** A review of a diff or plan by another vendor's model changes nothing, so criterion 4 does not apply; the external verdict is input for your in-house reviewer, never the acceptance itself.
+
 Tests and snapshots *for* a sensitive module can be outsourced; the module's business code cannot. Outsourced deliverables are only done after in-house acceptance, and content (copy, translations, examples) must be reviewed and edited, not just accepted. How to call agy and Codex, track jobs and resume them: skill `cli-agent-delegation`.
 
 ## 4. Workflow (Standard mode)
@@ -92,13 +96,13 @@ Tests and snapshots *for* a sensitive module can be outsourced; the module's bus
 4. **Integrate.** Wire things together, update shared files (locale files, doc indexes, contracts), delete dead code.
 5. **Verify.** Type check, lint, tests, then a short targeted manual pass on the user's running dev server. Do not start, stop or restart the user's services; ask them to.
 6. **Review.** One high-tier manager reviews each phase (medium effort is usually enough); a final cross-phase review at the end catches what phase reviews cannot see (lifecycle ordering between subsystems, module-level caches, leftover dead code and keys).
-7. **Record and commit.** Lessons go into the design doc; project-wide rules into `AGENTS.md`; reusable method into this skill's [references/field-notes.md](references/field-notes.md) or your own fork. Commit each independently verifiable unit once checks pass. Push, merge or deploy only as the project's rules or the user allow.
+7. **Record and commit.** Lessons go into the design doc; project-wide rules into `AGENTS.md`; reusable method into this skill's [references/field-notes.md](references/field-notes.md) or your own fork. Where the project or user allows the agent to commit, commit each independently verifiable unit once checks pass. Push, merge or deploy only as the project's rules or the user allow.
 
 ## 5. Briefs
 
 A subagent knows only what you write. Every brief is self-contained and covers: goal; background with **verified facts** (marked "verified, do not re-check", with file:line or command) separated from **things to verify yourself** (with "if it differs, stop and report" instructions); the read-only contract; the file lease (may edit / must not touch); reference files to imitate; constraints *with reasons*; runnable acceptance commands; deliverables; report format.
 
-Standing prohibitions for every worker unless the brief says otherwise: no git operations; do not start or restart dev servers; do not edit `.env*` or read secrets; no repo-wide rewriting commands (`eslint --fix .`, formatters) while others work in parallel; do not edit shared files. Ask workers to *report* new i18n keys or shared-file changes instead of writing them.
+Standing prohibitions for every worker unless the brief says otherwise: no state-changing git operations (add, commit, stash, checkout, reset, push; read-only `git status` / `git diff` for evidence is expected); do not start or restart dev servers; do not edit `.env*` or read secrets; no repo-wide rewriting commands (`eslint --fix .`, formatters) while others work in parallel; do not edit shared files. Ask workers to *report* new i18n keys or shared-file changes instead of writing them.
 
 Outsourced briefs additionally paste in every spec they need (the external agent cannot ask questions or read your chat), use executable paths in acceptance commands (`./node_modules/.bin/tsc --noEmit -p .`), and say: "If anything falls outside this spec, stop and explain it in your final reply; do not decide."
 
@@ -143,6 +147,7 @@ At the end of each phase spend a few minutes on: what was redone, which brief wa
 
 ## References
 
+- [references/project-setup.md](references/project-setup.md): first-use questionnaire and the `## Subagent team` policy section
 - [references/model-tiers.md](references/model-tiers.md): tier mapping, role table, dated roster, `scripts/model-roster.mjs`
 - [references/brief-template.md](references/brief-template.md): implementer, outsourced, reviewer and expert briefs; pre-dispatch checklist
 - [references/verification.md](references/verification.md): review procedure, fingerprints, mutation checks, command pitfalls

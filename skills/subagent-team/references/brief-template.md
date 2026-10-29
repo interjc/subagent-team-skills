@@ -18,8 +18,8 @@ Working tree: <clean | existing changes and who owns them>
 
 ## Verified (do not re-check)
 - <fact> (how it was verified: <file:line> or <command + output summary>)
-- Write root causes, not just symptoms: not "robots.txt is empty" but "the static
-  public/robots.txt is served before the route handler, so app/robots.ts never runs".
+- Write root causes, not just symptoms: not "login fails" but "the session cookie is
+  set for the wrong domain, so the API never receives it" (otherwise the worker may fix the wrong file).
 
 ## Verify yourself first
 - <claim>: check with <command / experiment>.
@@ -43,7 +43,8 @@ Imitate <path> for <naming / structure / test style>.
 - <edge cases>
 
 ## Constraints (with reasons)
-- No git operations: the director reviews the diff and commits.
+- No state-changing git operations (add, commit, stash, checkout, reset, push): the director reviews
+  the diff and commits. Read-only `git status` / `git diff` is fine and needed for evidence.
 - Do not start or restart dev servers; the user's server is already running at <url>.
 - Do not edit .env* or read secrets.
 - No repo-wide rewriting commands (eslint --fix ., formatters): others are editing in parallel.
@@ -82,7 +83,7 @@ External agents only know the brief and cannot ask follow-up questions.
 - **Freeze the list first**: an external agent will not pick up keys or endpoints you add after dispatch.
 - **Acceptance commands use executable paths** (`./node_modules/.bin/tsc --noEmit -p .`, `./node_modules/.bin/eslint <files>`), not package-manager scripts, which may fail on engine checks or a different shell environment.
 - **No decisions**: "If anything falls outside this spec, stop and explain it in your final reply; do not decide."
-- **Prohibitions**: git operations; installing packages, builds, dev servers, database commands; reading `.env*`; editing outside the lease.
+- **Prohibitions**: state-changing git operations (read-only status/diff is fine); installing packages, builds, dev servers, database commands; reading `.env*`; editing outside the lease.
 - **Report**: files changed and why, uncertain spots, problems noticed but not fixed.
 
 ## Reviewer brief

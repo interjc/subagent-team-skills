@@ -1,6 +1,6 @@
 # Field notes
 
-Lessons from real projects (Next.js SaaS apps, an Expo + Cloudflare Workers monorepo), each one either a mistake that cost time or a practice that proved itself. Product details are removed; the lessons are not.
+Lessons from several real web and mobile projects, each one either a mistake that cost time or a practice that proved itself. Product details are removed; the lessons are not.
 
 ## Pace and authorization
 
@@ -30,7 +30,7 @@ Lessons from real projects (Next.js SaaS apps, an Expo + Cloudflare Workers mono
 
 ## A complete example
 
-A unified creation workspace built in five phases: the director wrote contracts, integration and browser regression; about 20 subagent tasks ran (the high tier for splitting, risky implementation, billing-related work and all reviews; the mid tier for storage, UI and layout; an external fast agent for three translation batches, 116 keys); each phase had one or two review-and-fix rounds; the user was never interrupted mid-way, and open questions were delivered together in the design doc.
+A multi-phase feature built in five phases: the director wrote contracts, integration and browser regression; about 20 subagent tasks ran (the high tier for splitting, risky implementation, billing-related work and all reviews; the mid tier for storage, UI and layout; an external fast agent for three translation batches, over a hundred keys); each phase had one or two review-and-fix rounds; the user was never interrupted mid-way, and open questions were delivered together in the design doc.
 
 Typical shape that kept recurring: **director builds the skeleton → several mid-tier workers fill it in parallel (with clearly specified bulk work outsourced at the same time) → high-tier review.**
 
@@ -38,19 +38,19 @@ More assignment examples:
 
 | Project | Work | Who |
 |---|---|---|
-| AI core refactor | Architecture, migration steps, billing strategy extraction, final review | director (high) |
-| | Model registry: skeleton by director, then chat / image / video adapters | 3 mid-tier workers in parallel |
+| Core module refactor | Architecture, migration steps, billing strategy extraction, final review | director (high) |
+| | Registry: skeleton by director, then three families of adapters | 3 mid-tier workers in parallel |
 | | Billing lifecycle characterization tests, adapter request-body tests | mid · high (precise but fiddly, money-adjacent) |
-| | Prompt golden snapshots, catalog snapshots, exhaustive price tables, env parsing tests | external-fast (mechanical, tedious, fully specifiable) |
+| | Golden snapshots, catalog snapshots, exhaustive price tables, env parsing tests | external-fast (mechanical, tedious, fully specifiable) |
 | | Import path rewrites, constant moves | external-fast or low tier |
 | | Per-phase diff review | high · medium |
-| Writing-style templates | Schema, migration, CRUD API, limits | mid · medium → high-tier review |
-| | Extraction route (constrained Markdown + parser), dialogs and editor | mid · high |
-| | 10 built-in styles from 3 hand-written exemplars | external → director edits |
+| Template feature (full stack) | Schema, migration, CRUD API, limits | mid · medium → high-tier review |
+| | Parsing route, dialogs and editor | mid · high |
+| | The remaining built-in templates from 3 hand-written exemplars | external → director edits |
 | | 4-language i18n | 2 base languages by a mid-tier worker, 2 by an external agent |
 | README and docs index sync | Self-contained briefs, fact checks, final fixes, commit | director |
 | | Rewrite root README from current code | Codex, strong model, high |
-| | Rebuild the docs index over ~60 documents | Codex, light model, high |
+| | Rebuild the docs index | Codex, light model, high |
 
 The two Codex jobs touched disjoint files, ran at the same time in one workspace, and both passed first time.
 
