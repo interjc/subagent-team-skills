@@ -9,7 +9,7 @@
 //
 // Dependency-free (node: builtins only). Run with --help for details.
 
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -69,8 +69,8 @@ Output:
   One JSON object on stdout (also saved as summary.json). Hints go to stderr.
   Exit code: codex's exit code; 124 on timeout; 1 on usage or launch errors;
   130/143 when this wrapper is interrupted by SIGINT/SIGTERM (forwarded to codex).
-  codex runs in its own process group; on timeout or interrupt the whole group is
-  stopped, so commands codex started do not outlive it.
+  codex runs in its own process group; on timeout or interrupt the group and every
+  descendant process are stopped, so commands codex started do not outlive it.
 `;
 
 export class UsageError extends Error {}
@@ -327,23 +327,56 @@ export function buildResult(cfg, { exitCode, timedOut, logText, launchError, int
 
 // ---------- process runner ----------
 
-// Sends a signal to the child's whole process group (POSIX) or just the child (Windows).
-export function signalTree(child, sig) {
-  if (!child || child.pid === undefined) return;
+// Pids of every live descendant of `pid`, from `ps` (POSIX); [] if ps fails.
+export function descendantPids(pid) {
+  let out;
   try {
-    if (process.platform === 'win32') child.kill(sig);
-    else process.kill(-child.pid, sig);
-  } catch { /* already gone */ }
+    out = execFileSync('ps', ['-A', '-o', 'pid=', '-o', 'ppid='], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch { return []; }
+  const children = new Map();
+  for (const line of out.split('\n')) {
+    const [c, p] = line.trim().split(/\s+/).map(Number);
+    if (!Number.isInteger(c) || !Number.isInteger(p)) continue;
+    if (!children.has(p)) children.set(p, []);
+    children.get(p).push(c);
+  }
+  const found = [];
+  const queue = [pid];
+  while (queue.length) {
+    for (const c of children.get(queue.shift()) || []) { found.push(c); queue.push(c); }
+  }
+  return found;
+}
+
+// Sends a signal to the child's process group and to every descendant (POSIX),
+// or just the child (Windows). codex-cli 0.165.0 runs tool commands in their own
+// session, outside the group, so descendants are also signalled one by one.
+// `known` remembers them across calls: once codex dies they are reparented and
+// can no longer be found from its pid.
+export function signalTree(child, sig, known = new Set()) {
+  if (!child || child.pid === undefined) return;
+  if (process.platform === 'win32') {
+    try { child.kill(sig); } catch { /* already gone */ }
+    return;
+  }
+  if (child.exitCode === null && child.signalCode === null) {
+    for (const pid of descendantPids(child.pid)) known.add(pid);
+  }
+  try { process.kill(-child.pid, sig); } catch { /* already gone */ }
+  for (const pid of known) {
+    try { process.kill(pid, sig); } catch { /* already gone */ }
+  }
 }
 
 // Runs codex in its own process group with stdin from a file and stdout+stderr
-// into the log. On timeout (or SIGINT/SIGTERM to this wrapper) the whole group
-// gets SIGTERM, then SIGKILL after 5s. Leftover group members are cleaned up
-// when codex exits.
+// into the log. On timeout (or SIGINT/SIGTERM to this wrapper) the group and all
+// descendants get SIGTERM, then SIGKILL after 5s. Leftover group members are
+// cleaned up when codex exits.
 export function runCodex({ bin, args, cwd, stdinFile, logFile, timeoutSec, killGraceMs = KILL_GRACE_MS }) {
   return new Promise((resolve) => {
     const logFd = fs.openSync(logFile, 'w');
     const inFd = fs.openSync(stdinFile, 'r');
+    const known = new Set();
     let timedOut = false;
     let interrupted = null;
     let settled = false;
@@ -353,8 +386,8 @@ export function runCodex({ bin, args, cwd, stdinFile, logFile, timeoutSec, killG
     const onSignal = (sig) => {
       if (interrupted) return;
       interrupted = sig;
-      signalTree(child, sig);
-      killTimer = killTimer || setTimeout(() => signalTree(child, 'SIGKILL'), killGraceMs);
+      signalTree(child, sig, known);
+      killTimer = killTimer || setTimeout(() => signalTree(child, 'SIGKILL', known), killGraceMs);
     };
     const onInt = () => onSignal('SIGINT');
     const onTerm = () => onSignal('SIGTERM');
@@ -366,7 +399,7 @@ export function runCodex({ bin, args, cwd, stdinFile, logFile, timeoutSec, killG
       process.off('SIGINT', onInt);
       process.off('SIGTERM', onTerm);
       // Clean up anything codex left behind in its group.
-      signalTree(child, timedOut || interrupted ? 'SIGKILL' : 'SIGTERM');
+      signalTree(child, timedOut || interrupted ? 'SIGKILL' : 'SIGTERM', known);
       try { fs.closeSync(logFd); } catch { /* ignore */ }
       try { fs.closeSync(inFd); } catch { /* ignore */ }
       resolve({ ...res, timedOut, interrupted });
@@ -389,8 +422,8 @@ export function runCodex({ bin, args, cwd, stdinFile, logFile, timeoutSec, killG
     if (timeoutSec) {
       timer = setTimeout(() => {
         timedOut = true;
-        signalTree(child, 'SIGTERM');
-        killTimer = setTimeout(() => signalTree(child, 'SIGKILL'), killGraceMs);
+        signalTree(child, 'SIGTERM', known);
+        killTimer = setTimeout(() => signalTree(child, 'SIGKILL', known), killGraceMs);
       }, timeoutSec * 1000);
     }
   });

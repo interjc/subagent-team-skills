@@ -325,6 +325,15 @@ describe('codex-run: running the fake codex', () => {
     assert.ok(waitUntilGone(r.record.pid), 'fake codex should be gone');
   });
 
+  test('timeout also kills a grandchild that moved to its own session', () => {
+    const r = run(['exec', '--repo', repo, '--prompt-file', prompt, '--effort', 'low', '--model', 'm',
+      '--timeout', '1s', '--out-dir', outDir()], { mode: 'setsid-grandchild-hang' });
+    assert.equal(r.status, 124, r.stderr);
+    assert.ok(Number.isInteger(r.record.grandchildPid));
+    assert.ok(waitUntilGone(r.record.grandchildPid), 'detached grandchild sleep should be gone');
+    assert.ok(waitUntilGone(r.record.pid), 'fake codex should be gone');
+  });
+
   test('SIGTERM is escalated to SIGKILL for a codex that ignores it', () => {
     const started = Date.now();
     const r = run(['exec', '--repo', repo, '--prompt-file', prompt, '--effort', 'low', '--model', 'm',

@@ -13,7 +13,7 @@ If the user prefers a separate file, write it (e.g. `docs/agents/subagent-team.m
 1. Look for the `## Subagent team` section (or the pointer to it). If it has a `Model policy:` line, **use it and do not ask**. If something it names is unavailable (a model was retired, a CLI is not installed), fall back as in the "auto" rules below and tell the user in one line.
 2. No section: run the questionnaire before dispatching the first subagent. Solo-mode work (section 0 of SKILL.md) does not need it.
 3. The user cannot be asked right now (non-interactive run, or they said "don't ask, just go"): write the section with `Model policy: auto` and `Decided: default, not confirmed`, continue, and include the policy in the end-of-task grill-me list.
-4. The user later changes their mind ("use Sonnet for reviews"): update the section in place, with the date.
+4. The user later changes their mind ("use another vendor's model for reviews"): update the section in place, with the date.
 
 ## Detect first, then ask
 
@@ -75,5 +75,5 @@ With `fixed` or `hybrid`, replace `auto` in the rows the user fixed with a concr
 - Never change the director's own model; the user chose it when starting the session.
 - Keep reviewers on a different model from the implementer they review (ideally another vendor).
 - Respect the cost preference.
-- State the choice at dispatch ("worker: sonnet · medium") and list the models used in the final report. When a pick turns out wrong (too weak, too slow), adjust and note it in the design doc's *Lessons*. Do not write per-task picks into `AGENTS.md`; the policy stays "auto".
+- State the choice at dispatch ("worker: <model> · medium") and list the models used in the final report. When a pick turns out wrong (too weak, too slow), adjust and note it in the design doc's *Lessons*. Do not write per-task picks into `AGENTS.md`; the policy stays "auto".
 - If the preferred model is unavailable (refused, out of quota, slot limit), fall back one step and say so.

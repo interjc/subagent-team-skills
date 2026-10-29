@@ -4,7 +4,7 @@ description: Outsource well-specified bulk coding work to another vendor's agent
 license: MIT
 compatibility: Needs a shell. The helper scripts need Node.js 18+ (24 recommended); external agents need their own CLIs and accounts (Codex CLI, agy). Run scripts/doctor.mjs first.
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # CLI Agent Delegation
@@ -33,7 +33,7 @@ If writing the brief costs as much as doing the job (a ten-line edit), do not ou
 | Syncs that require reading the code to get right (docs against code, tests following existing patterns) | Codex at `high` | Reads code on its own initiative and checks facts; modest token use |
 | Read-only second opinion on a diff or plan | Codex at `medium`–`high` in a `read-only` sandbox, or agy's reviewer persona | Another vendor covers blind spots. The verdict stays with your in-house reviewer. |
 
-Model names are examples from 2026-10. List what is actually available with `agy models` and Codex's `~/.codex/models_cache.json` (or `node scripts/doctor.mjs`). Do not use agy to call Claude or GPT models: that routes outsourced work back to your in-house family.
+Model names are examples from 2026-10. List what is actually available with `agy models` (or `node scripts/agy-run.mjs models`) and Codex's `~/.codex/models_cache.json` (`node scripts/doctor.mjs` lists the Codex ones). Do not use agy to call Claude or GPT models: that routes outsourced work back to your in-house family.
 
 ## 3. Before dispatch
 
@@ -66,10 +66,10 @@ node scripts/codex-run.mjs exec --repo /abs/repo --prompt-file /scratch/job.md \
 ```
 
 - **Effort is required on every call** (`low`, `medium`, `high`, `xhigh`, `max`; codex-cli 0.165.0 accepted all of them). Without `-c model_reasoning_effort=…`, raw Codex inherits `~/.codex/config.toml` (often `high` on a personal machine), not the model's own default. The log header prints the applied value; the wrapper flags any mismatch. Use `low` for mechanical work, `medium` by default, `high` when much code must be read. `xhigh` and `max` rarely pay off: work that needs them should not be outsourced. Never use `ultra`: in the author's use it dispatched its own sub-tasks outside the director's control, so the wrapper refuses it.
-- **Sandbox**: `read-only` for reviews (the default), `workspace-write` for edits (it can write the workdir and temp directories). In `exec` mode approvals are `never`, so a job never hangs waiting for approval.
+- **Sandbox**: `read-only` for reviews (the default), `workspace-write` for edits (it can write the workdir and temp directories; network access follows `[sandbox_workspace_write] network_access` in `~/.codex/config.toml`). The wrapper always passes the sandbox, so a `sandbox_mode` default in `config.toml` does not leak in. In `exec` mode approvals are `never`, so a job never hangs waiting for approval.
 - **Tracking**: completion notification → read `last.md` (final reply) → `git status --short` / `git diff --stat` for the truth → `log.txt` only when diagnosing (it shows every command, the replies, and `tokens used`). Add `--json` for JSONL events.
-- **Resume** with context: `node scripts/codex-run.mjs resume --repo /abs/repo --session <id> --prompt-file /scratch/followup.md --effort medium`. The session id is in the summary. Resume has no `-C`/`-s`, so the wrapper runs it from the repo directory and passes the sandbox as config.
-- **No network → endless reconnects.** Codex retries indefinitely ("Reconnecting... waiting for network"). There is no default timeout, so set `--timeout` (max `24h`); on expiry the wrapper kills Codex's whole process group.
+- **Resume** with context: `node scripts/codex-run.mjs resume --repo /abs/repo --session <id> --prompt-file /scratch/followup.md --effort medium --sandbox workspace-write`. The sandbox is not inherited from the first run: without `--sandbox` a resume is `read-only`, so rework cannot edit. The summary's `resumeHint` carries the session id and the original sandbox. Resume has no `-C`/`-s`, so the wrapper runs it from the repo directory and passes the sandbox as config.
+- **No network → endless reconnects.** Codex retries indefinitely ("Reconnecting... waiting for network"). There is no default timeout, so set `--timeout` (max `24h`); on expiry the wrapper kills Codex's process group and every descendant. Codex runs tool commands in their own session, outside its group, so killing the group alone would leave them running.
 - **Wrapper contract**: files in `--out-dir` (default under the system temp dir): `log.txt`, `last.md`, `summary.json`. The JSON printed on stdout (same as `summary.json`) has `ok`, `exitCode`, `timedOut`, `sessionId`, `effortRequested`/`effortReported`/`effortMismatch`, `sandbox`, `tokensUsed` and a ready `resumeHint`. Exit code: Codex's own, `124` on timeout, `1` for usage or launch errors. `--dry-run` prints the command without running it; `summary <log.txt>` re-parses an existing log.
 - Two Codex jobs touching disjoint files can run in the same workspace at the same time.
 - A dispatch *plugin* for Codex may assume an MCP server mode the installed CLI no longer has. If its tools do not appear, call `codex exec` directly and keep the plugin's conventions.
@@ -110,7 +110,14 @@ node scripts/agy-run.mjs run ... --conversation <id>      # continue with contex
 node scripts/agy-run.mjs models                           # list model ids
 ```
 
-It runs `agy -p <brief> --model <id> --output-format json --print-timeout <t> --add-dir <repo>` from the repo directory. With `--write` it adds `--dangerously-skip-permissions`, because headless edits need it. It saves the final reply to `last.md` (plus `result.json`, `stderr.txt`, `summary.json` in `--out-dir`) and prints a JSON summary whose `conversationId` and `continueHint` let you continue. Defaults: `--timeout 10m` (max `24h`); the wrapper kills agy's process group at timeout + 60s. Exit codes: `0` ok (a reply came back; `warning` set, `partial: true` if agy hit its time limit mid-answer), `1` usage error, `2` agy reported an error with no reply, `3` launch failure or unparseable output, `5` timed out with no reply (resumable with `--conversation` if an id is known). These are **agy-run's** codes; agy-staff's `wait` uses its own (above). Model ids for Claude or GPT families are refused unless you pass `--allow-any-model`. `--dry-run` shows the command.
+Raw equivalent of what it runs, from the repo directory (add `--conversation <id>` to continue):
+
+```bash
+cd /abs/repo && agy -p "$(cat /scratch/job.md)" --model gemini-3.8-flash-high --output-format json \
+  --print-timeout 15m --add-dir /abs/repo --dangerously-skip-permissions   # last flag only for edits
+```
+
+With `--write` the wrapper adds `--dangerously-skip-permissions`, because headless edits need it. It saves the final reply to `last.md` (plus `result.json`, `stderr.txt`, `summary.json` in `--out-dir`) and prints a JSON summary whose `conversationId` and `continueHint` let you continue. Defaults: `--timeout 10m` (max `24h`); the wrapper kills agy's process group and every descendant at timeout + 60s. agy 1.4.10 keeps `status: "SUCCESS"` when its print timeout fires and reports it only on stderr (`[agy] print timeout after …`); the wrapper reads stderr and treats that as a timeout. When agy ends a turn while a background task it started is still running, it kills the task; the wrapper then sets `warning`, because the reply may describe work that never finished. Exit codes: `0` ok (a reply came back; `warning` set, `partial: true` if agy hit its time limit mid-answer), `1` usage error, `2` agy reported an error with no reply, `3` launch failure or unparseable output, `5` timed out with no reply (resumable with `--conversation` if an id is known). These are **agy-run's** codes; agy-staff's `wait` uses its own (above). Model ids for Claude or GPT families are refused unless you pass `--allow-any-model`. `--dry-run` shows the command.
 
 The brief travels as a command-line argument, so keep it under 100 KB (the wrapper refuses larger ones). For bigger specs, put the spec in a file inside the repo and make the brief "Read docs/tasks/<job>.md and follow it".
 

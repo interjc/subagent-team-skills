@@ -56,7 +56,7 @@ node scripts/model-roster.mjs --vendors anthropic,google --limit 4
 node scripts/model-roster.mjs --json > roster.json     # for further processing
 ```
 
-Paths are relative to the `subagent-team` skill directory. Behind an HTTP(S) proxy, run with `NODE_USE_ENV_PROXY=1` on a Node release that supports it (recent 22.x and 24.x; it worked on 22.22). Without it, Node's built-in `fetch` ignores `HTTPS_PROXY`; on older Node, run the script where OpenRouter is reachable or pass a saved list with `--file`. The `listed` column is the date OpenRouter listed the model, which is close to but not the vendor's release date. If OpenRouter is unreachable the script exits 2 and points to the vendor pages below.
+Paths are relative to the `subagent-team` skill directory. Behind an HTTP(S) proxy, run with `NODE_USE_ENV_PROXY=1` on a Node release that supports it (recent 22.x and 24.x; it worked on 22.22). Without it, Node's built-in `fetch` ignores `HTTPS_PROXY`; on older Node, run the script where OpenRouter is reachable or pass a saved list with `--file`. The `listed` column is the date OpenRouter listed the model, which is close to but not the vendor's release date. If OpenRouter is unreachable the script exits 2 and points to the vendor pages above (step 3).
 
 Ranking heuristic: within a vendor, the newest model at the highest price is usually the top or high tier, the newest mid-priced one mid, the cheapest recent "flash/mini/haiku"-class model low or external-fast. Confirm with the vendor page when two candidates look close.
 

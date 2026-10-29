@@ -52,8 +52,10 @@ model_reasoning_effort = "low"
 const MODELS_CACHE = {
   fetched_at: '2026-10-01T00:00:00Z',
   models: [
-    { slug: 'gpt-6.1-sol', display_name: 'GPT-6.1 Sol', supported_reasoning_levels: [{ effort: 'low' }, { effort: 'high' }] },
+    { slug: 'gpt-6.1-sol', display_name: 'GPT-6.1 Sol', supported_reasoning_levels: [{ effort: 'low' }, { effort: 'high' }],
+      service_tiers: [{ id: 'priority' }], visibility: 'list' },
     { slug: 'gpt-6.1-mini' },
+    { slug: 'internal-review', visibility: 'hide', service_tiers: [{ id: 'priority' }] },
     { id: 'gpt-6.1-sol' },
     { meta: { model: 'codex-max-2' } },
   ],
@@ -73,7 +75,7 @@ describe('doctor: pure helpers', () => {
     assert.deepEqual(parseCodexConfig(''), { model: null, reasoningEffort: null });
   });
 
-  test('extractModelIds collects slug/id/model values and dedupes', () => {
+  test('extractModelIds collects model ids, skips nested ids and hidden models, dedupes', () => {
     assert.deepEqual(extractModelIds(MODELS_CACHE), ['gpt-6.1-sol', 'gpt-6.1-mini', 'codex-max-2']);
     assert.deepEqual(extractModelIds(null), []);
   });

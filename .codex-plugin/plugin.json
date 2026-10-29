@@ -1,6 +1,6 @@
 {
   "name": "subagent-team",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Run coding work as a team: a director session, manager and worker subagents, outsourced CLI agents (agy, Codex CLI), independent read-only reviewers, and resumable handover.",
   "author": {
     "name": "Justin Chen",

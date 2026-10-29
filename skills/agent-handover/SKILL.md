@@ -3,7 +3,7 @@ name: agent-handover
 description: Keep multi-agent coding work resumable at any moment. Record progress, in-flight agents and jobs, decisions, user preferences and open questions in the repository, not in chat or local agent memory, so another agent or tool can take over in minutes. Use this after a delegated task is accepted or committed, before a session may be interrupted or context compacted, when handing work to another agent or another tool (Claude Code ↔ Codex), when taking over someone else's half-finished work or starting cold, and whenever the user states a decision or preference that should outlive this session.
 license: MIT
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # Agent Handover

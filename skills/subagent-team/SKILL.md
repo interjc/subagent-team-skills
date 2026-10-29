@@ -4,7 +4,7 @@ description: Run multi-file, multi-phase coding work as a team. The main session
 license: MIT
 compatibility: The method itself needs nothing but a harness that can spawn subagents. The optional helper scripts need Node.js 18+ (24 recommended) and git; run scripts/env-check.cjs at the start of a session.
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # Subagent Team
@@ -17,10 +17,10 @@ Harness support: developed and used day to day in **Claude Code**, also used wit
 
 ## Start: environment health check
 
-Once per session, before the first dispatch, and again after anything is installed or changed, run the check from the project root (the path is relative to this skill's directory):
+Once per session, before the first dispatch, and again after anything is installed or changed, run the check. It works from any directory; `--root` names the project:
 
 ```bash
-node scripts/env-check.cjs --root <project root>
+node <this skill's directory>/scripts/env-check.cjs --root <project root>
 ```
 
 It checks the hard requirements, the recommended setup and the project policy, and installs nothing:

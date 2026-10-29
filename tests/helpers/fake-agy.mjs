@@ -1,9 +1,12 @@
 // Fake `agy` used by tests (loaded through a generated executable shim).
 // Records { argv, cwd, pid } to $FAKE_RECORD; behavior chosen by $FAKE_MODE:
 //   ok (default), error-with-response, error-no-response, error-timeout-text,
-//   timeout-status, timeout-partial, noise-before-json, pretty-json-trailing,
-//   unparseable, hang, grandchild-hang (spawns `sleep 30` sharing stdout, then
-//   hangs; grandchildPid is recorded), ignore-term (ignores SIGTERM, hangs).
+//   timeout-status, timeout-partial, print-timeout-empty, print-timeout-partial,
+//   background-task-killed,
+//   noise-before-json, pretty-json-trailing, unparseable, hang, grandchild-hang
+//   (spawns `sleep 30` sharing stdout, then hangs; grandchildPid is recorded),
+//   setsid-grandchild-hang (same, but the sleep gets its own session),
+//   ignore-term (ignores SIGTERM, hangs).
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 
@@ -51,6 +54,20 @@ switch (mode) {
   case 'timeout-partial':
     emit({ status: 'TIMEOUT', response: 'Half done: steps 1-3.', ...base });
     break;
+  // What agy 1.4.10 actually does when --print-timeout fires: status stays
+  // SUCCESS, the timeout shows up only on stderr.
+  case 'print-timeout-empty':
+    process.stderr.write('[agy] print timeout after 15s with turn in progress; returning partial output\n');
+    emit({ status: 'SUCCESS', response: '', ...base });
+    break;
+  case 'background-task-killed':
+    process.stderr.write('root agent idle; waiting up to 15s for 1 background task(s)\nterminating 1 background task(s) on exit\n');
+    emit({ status: 'SUCCESS', response: 'Started it in the background.', ...base });
+    break;
+  case 'print-timeout-partial':
+    process.stderr.write('[agy] print timeout after 15s with turn in progress; returning partial output\n');
+    emit({ status: 'SUCCESS', response: 'Steps 1-2 done.', ...base });
+    break;
   case 'pretty-json-trailing':
     process.stdout.write('Loading {workspace}...\n');
     process.stdout.write(`${JSON.stringify({ status: 'SUCCESS', response: 'Pretty {braces} and "quotes" inside.', ...base }, null, 2)}\n`);
@@ -68,6 +85,12 @@ switch (mode) {
     break;
   case 'grandchild-hang': {
     const gc = spawn('sleep', ['30'], { stdio: ['ignore', 'inherit', 'inherit'] });
+    record({ grandchildPid: gc.pid });
+    setInterval(() => {}, 1000);
+    break;
+  }
+  case 'setsid-grandchild-hang': {
+    const gc = spawn('sleep', ['30'], { stdio: 'ignore', detached: true });
     record({ grandchildPid: gc.pid });
     setInterval(() => {}, 1000);
     break;

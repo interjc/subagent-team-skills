@@ -89,16 +89,21 @@ export function parseCodexConfig(text) {
   return { model: get('model'), reasoningEffort: get('model_reasoning_effort') };
 }
 
-// Collects string values of keys slug / id / model anywhere in the JSON.
+// Collects model ids: the first string slug / id / model of each object, anywhere
+// in the JSON. An object that names a model is not searched further, so nested
+// ids such as service_tiers[].id ("priority") are not mistaken for models.
+// Entries with visibility "hide" (internal models) are skipped.
 export function extractModelIds(json) {
   const ids = new Set();
   const walk = (node) => {
     if (Array.isArray(node)) { node.forEach(walk); return; }
     if (!node || typeof node !== 'object') return;
-    for (const [k, v] of Object.entries(node)) {
-      if ((k === 'slug' || k === 'id' || k === 'model') && typeof v === 'string' && v.trim()) ids.add(v.trim());
-      else walk(v);
+    const key = ['slug', 'id', 'model'].find((k) => typeof node[k] === 'string' && node[k].trim());
+    if (key) {
+      if (node.visibility !== 'hide') ids.add(node[key].trim());
+      return;
     }
+    Object.values(node).forEach(walk);
   };
   walk(json);
   return [...ids];
@@ -248,7 +253,7 @@ export function formatReport(r) {
   lines.push(
     '',
     `agy: ${a.present ? `found (${a.version ?? 'unknown version'})` : 'not found'} [${a.bin}]`,
-    `  agy-staff plugin: ${a.agyStaff.installed ? `installed (${a.agyStaff.key})` : 'not found'}`,
+    `  agy-staff plugin: ${a.agyStaff.installed ? `installed (${a.agyStaff.key})` : 'not found in Claude Code'}`,
   );
   if (a.agyStaff.installed) {
     lines.push(`  install path: ${a.agyStaff.installPath ?? '(unknown)'}`);

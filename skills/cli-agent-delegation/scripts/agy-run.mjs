@@ -8,7 +8,7 @@
 //
 // Dependency-free (node: builtins only). Run with --help for details.
 
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -57,8 +57,8 @@ Options:
                          with its default permission prompts; in headless mode,
                          actions that need approval are not performed.
   --timeout <dur>        agy --print-timeout, e.g. 90s, 10m, 1h (default ${DEFAULT_TIMEOUT},
-                         max 24h). The wrapper stops agy's whole process group at
-                         timeout + 60s (SIGTERM, then SIGKILL after 5s).
+                         max 24h). The wrapper stops agy's process group and every
+                         descendant at timeout + 60s (SIGTERM, then SIGKILL after 5s).
   --conversation <id>    Continue an earlier conversation.
   --out-dir <dir>        Where to write result.json, last.md, stderr.txt, summary.json
                          (default: <tmp>/agy-run/<YYYYMMDD-HHMMSS>-<hex>).
@@ -283,8 +283,14 @@ export function isTimeoutStatus(status) {
   return typeof status === 'string' && /time[\s_-]?d?[\s_-]?out|deadline/i.test(status);
 }
 
+// agy 1.4.10 keeps status "SUCCESS" when --print-timeout fires and says so only
+// on stderr: "[agy] print timeout after 15s with turn in progress; ...".
+export function stderrReportsTimeout(stderr) {
+  return /\bprint timeout after\b/i.test(String(stderr ?? ''));
+}
+
 // Pure classification of a finished run -> { exitCode, ok, timedOut, warning, error, ... }.
-export function classify({ payload, launchError, killedByTimeout, interrupted, agyExitCode, conversation = null }) {
+export function classify({ payload, launchError, killedByTimeout, interrupted, agyExitCode, conversation = null, stderr = '' }) {
   const base = {
     status: payload?.status ?? null,
     conversationId: payload?.conversation_id ?? payload?.conversationId ?? conversation ?? null,
@@ -308,13 +314,15 @@ export function classify({ payload, launchError, killedByTimeout, interrupted, a
   if (!payload) {
     return { ...base, exitCode: EXIT.LAUNCH_OR_PARSE, error: `could not parse agy output as JSON (agy exit code ${agyExitCode})` };
   }
-  if (isTimeoutStatus(base.status)) {
+  const statusTimeout = isTimeoutStatus(base.status);
+  if (statusTimeout || stderrReportsTimeout(stderr)) {
     if (hasResponse) {
       const cont = base.conversationId ? `--conversation ${base.conversationId}` : '--conversation <id>';
       return { ...base, exitCode: EXIT.OK, timedOut: true, partial: true,
         warning: `agy hit its time limit; the response may be incomplete; continue with ${cont}` };
     }
-    return { ...base, exitCode: EXIT.TIMEOUT, timedOut: true, error: base.error || `agy reported status ${base.status}` };
+    return { ...base, exitCode: EXIT.TIMEOUT, timedOut: true,
+      error: base.error || (statusTimeout ? `agy reported status ${base.status}` : 'agy hit its print timeout before replying') };
   }
   const isError = isErrorStatus(base.status) || (!base.status && base.error !== null);
   if (isError) {
@@ -325,6 +333,8 @@ export function classify({ payload, launchError, killedByTimeout, interrupted, a
   }
   const warnings = [];
   if (!hasResponse) warnings.push('agy returned an empty response');
+  const killedTasks = String(stderr ?? '').match(/terminating (\d+) background task/i);
+  if (killedTasks) warnings.push(`agy terminated ${killedTasks[1]} background task(s) on exit; work they were doing did not finish`);
   if (agyExitCode) warnings.push(`agy exited with code ${agyExitCode} despite status ${base.status ?? 'unknown'}`);
   return { ...base, exitCode: EXIT.OK, warning: warnings.length ? warnings.join('; ') : null };
 }
@@ -340,20 +350,53 @@ export function buildContinueHint(cfg, conversationId, scriptPath = SCRIPT_PATH)
 
 // ---------- process runner ----------
 
-// Sends a signal to the child's whole process group (POSIX) or just the child (Windows).
-export function signalTree(child, sig) {
-  if (!child || child.pid === undefined) return;
+// Pids of every live descendant of `pid`, from `ps` (POSIX); [] if ps fails.
+export function descendantPids(pid) {
+  let out;
   try {
-    if (process.platform === 'win32') child.kill(sig);
-    else process.kill(-child.pid, sig);
-  } catch { /* already gone */ }
+    out = execFileSync('ps', ['-A', '-o', 'pid=', '-o', 'ppid='], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch { return []; }
+  const children = new Map();
+  for (const line of out.split('\n')) {
+    const [c, p] = line.trim().split(/\s+/).map(Number);
+    if (!Number.isInteger(c) || !Number.isInteger(p)) continue;
+    if (!children.has(p)) children.set(p, []);
+    children.get(p).push(c);
+  }
+  const found = [];
+  const queue = [pid];
+  while (queue.length) {
+    for (const c of children.get(queue.shift()) || []) { found.push(c); queue.push(c); }
+  }
+  return found;
+}
+
+// Sends a signal to the child's process group and to every descendant (POSIX),
+// or just the child (Windows). Descendants that moved to their own session are
+// outside the group, so they are also signalled one by one. `known` remembers
+// them across calls: once agy dies they are reparented and can no longer be
+// found from its pid.
+export function signalTree(child, sig, known = new Set()) {
+  if (!child || child.pid === undefined) return;
+  if (process.platform === 'win32') {
+    try { child.kill(sig); } catch { /* already gone */ }
+    return;
+  }
+  if (child.exitCode === null && child.signalCode === null) {
+    for (const pid of descendantPids(child.pid)) known.add(pid);
+  }
+  try { process.kill(-child.pid, sig); } catch { /* already gone */ }
+  for (const pid of known) {
+    try { process.kill(pid, sig); } catch { /* already gone */ }
+  }
 }
 
 // Runs agy in its own process group. Resolves shortly after agy exits even if a
 // grandchild still holds stdout/stderr open. On timeout (or SIGINT/SIGTERM to
-// this wrapper) the whole group gets SIGTERM, then SIGKILL after 5s.
+// this wrapper) the group and all descendants get SIGTERM, then SIGKILL after 5s.
 export function runAgy({ bin, args, cwd, killAfterSec, killGraceMs = KILL_GRACE_MS, drainMs = DRAIN_MS }) {
   return new Promise((resolve) => {
+    const known = new Set();
     let stdout = '';
     let stderr = '';
     let timedOut = false;
@@ -366,8 +409,8 @@ export function runAgy({ bin, args, cwd, killAfterSec, killGraceMs = KILL_GRACE_
     const onSignal = (sig) => {
       if (interrupted) return;
       interrupted = sig;
-      signalTree(child, sig);
-      killTimer = killTimer || setTimeout(() => signalTree(child, 'SIGKILL'), killGraceMs);
+      signalTree(child, sig, known);
+      killTimer = killTimer || setTimeout(() => signalTree(child, 'SIGKILL', known), killGraceMs);
     };
     const onInt = () => onSignal('SIGINT');
     const onTerm = () => onSignal('SIGTERM');
@@ -380,7 +423,7 @@ export function runAgy({ bin, args, cwd, killAfterSec, killGraceMs = KILL_GRACE_
       process.off('SIGINT', onInt);
       process.off('SIGTERM', onTerm);
       // Clean up anything agy left behind in its group, and stop waiting on its pipes.
-      signalTree(child, timedOut || interrupted ? 'SIGKILL' : 'SIGTERM');
+      signalTree(child, timedOut || interrupted ? 'SIGKILL' : 'SIGTERM', known);
       child?.stdout?.destroy();
       child?.stderr?.destroy();
       resolve({ stdout, stderr, timedOut, interrupted, ...res });
@@ -402,8 +445,8 @@ export function runAgy({ bin, args, cwd, killAfterSec, killGraceMs = KILL_GRACE_
     child.on('close', (code, signal) => finish({ exitCode: code, signal }));
     timer = setTimeout(() => {
       timedOut = true;
-      signalTree(child, 'SIGTERM');
-      killTimer = setTimeout(() => signalTree(child, 'SIGKILL'), killGraceMs);
+      signalTree(child, 'SIGTERM', known);
+      killTimer = setTimeout(() => signalTree(child, 'SIGKILL', known), killGraceMs);
     }, killAfterSec * 1000);
   });
 }
@@ -438,7 +481,7 @@ async function runMode(opts) {
   const run = await runAgy({ bin, args, cwd: cfg.repo, killAfterSec: cfg.timeoutSec + outerGraceSec() });
   const payload = run.launchError ? null : parseAgyOutput(run.stdout);
   const c = classify({ payload, launchError: run.launchError, killedByTimeout: run.timedOut,
-    interrupted: run.interrupted, agyExitCode: run.exitCode, conversation: cfg.conversation });
+    interrupted: run.interrupted, agyExitCode: run.exitCode, conversation: cfg.conversation, stderr: run.stderr });
 
   const lastMessageFile = path.join(cfg.outDir, 'last.md');
   fs.writeFileSync(path.join(cfg.outDir, 'result.json'), payload ? `${JSON.stringify(payload, null, 2)}\n` : run.stdout);

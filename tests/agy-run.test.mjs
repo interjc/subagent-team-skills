@@ -304,6 +304,31 @@ describe('agy-run: running the fake agy', () => {
     assert.equal(fs.readFileSync(r.json.lastMessageFile, 'utf8'), 'Half done: steps 1-3.');
   });
 
+  test('print timeout reported only on stderr, no response: exit 5', () => {
+    const r = run([...baseArgs(), '--out-dir', outDir()], { mode: 'print-timeout-empty' });
+    assert.equal(r.status, 5, r.stderr);
+    assert.equal(r.json.ok, false);
+    assert.equal(r.json.timedOut, true);
+    assert.equal(r.json.status, 'SUCCESS');
+    assert.equal(r.json.error, 'agy hit its print timeout before replying');
+    assert.match(r.stderr, /resumable with --conversation conv-123/);
+  });
+
+  test('print timeout reported only on stderr, with response: exit 0, partial', () => {
+    const r = run([...baseArgs(), '--out-dir', outDir()], { mode: 'print-timeout-partial' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.json.partial, true);
+    assert.equal(r.json.timedOut, true);
+    assert.match(r.json.warning, /agy hit its time limit/);
+  });
+
+  test('background tasks agy killed on exit produce a warning', () => {
+    const r = run([...baseArgs(), '--out-dir', outDir()], { mode: 'background-task-killed' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.json.timedOut, false);
+    assert.match(r.json.warning, /agy terminated 1 background task\(s\) on exit/);
+  });
+
   test('error text mentioning a timeout is an agy error: exit 2', () => {
     const r = run([...baseArgs(), '--out-dir', outDir()], { mode: 'error-timeout-text' });
     assert.equal(r.status, 2);
@@ -348,6 +373,15 @@ describe('agy-run: running the fake agy', () => {
     assert.ok(elapsed < 1000 + 5000 + 4000, `took ${elapsed}ms`);
     assert.ok(Number.isInteger(r.record.grandchildPid));
     assert.ok(waitUntilGone(r.record.grandchildPid), 'grandchild sleep should be gone');
+    assert.ok(waitUntilGone(r.record.pid), 'fake agy should be gone');
+  });
+
+  test('timeout also kills a grandchild that moved to its own session', () => {
+    const r = run([...baseArgs(), '--timeout', '1s', '--out-dir', outDir()],
+      { mode: 'setsid-grandchild-hang', env: { AGY_RUN_GRACE_SECONDS: '0' } });
+    assert.equal(r.status, 5, r.stderr);
+    assert.ok(Number.isInteger(r.record.grandchildPid));
+    assert.ok(waitUntilGone(r.record.grandchildPid), 'detached grandchild sleep should be gone');
     assert.ok(waitUntilGone(r.record.pid), 'fake agy should be gone');
   });
 

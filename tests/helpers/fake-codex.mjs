@@ -1,7 +1,8 @@
 // Fake `codex` used by tests (loaded through a generated executable shim).
 // Records { argv, cwd, stdin } to $FAKE_RECORD; behavior chosen by $FAKE_MODE:
 //   ok (default), effort-mismatch, fail, hang, grandchild-hang (spawns
-//   `sleep 30` sharing stdout, then hangs), ignore-term (ignores SIGTERM, hangs).
+//   `sleep 30` sharing stdout, then hangs), setsid-grandchild-hang (same, but
+//   the sleep gets its own session), ignore-term (ignores SIGTERM, hangs).
 // The record also holds the fake's pid and, for grandchild-hang, grandchildPid.
 // $FAKE_TOKENS=inline prints "tokens used: N" instead of the two-line form.
 import { spawn } from 'node:child_process';
@@ -47,6 +48,11 @@ if (mode === 'hang') {
   setInterval(() => {}, 1000);
 } else if (mode === 'grandchild-hang') {
   const gc = spawn('sleep', ['30'], { stdio: ['ignore', 'inherit', 'inherit'] });
+  record({ grandchildPid: gc.pid });
+  setInterval(() => {}, 1000);
+} else if (mode === 'setsid-grandchild-hang') {
+  // codex-cli 0.165.0 runs tool commands in their own session, outside codex's group.
+  const gc = spawn('sleep', ['30'], { stdio: 'ignore', detached: true });
   record({ grandchildPid: gc.pid });
   setInterval(() => {}, 1000);
 } else if (mode === 'ignore-term') {

@@ -6,7 +6,7 @@ How the method maps onto Claude Code, and the behaviour observed in real session
 
 | Action | Claude Code |
 |---|---|
-| Spawn a subagent (cold start) | `Agent` tool: `subagent_type`, `model`, `effort`, `prompt`, `description`, `run_in_background`, `isolation` |
+| Spawn a subagent (cold start) | `Agent` tool: `subagent_type`, `model`, `effort`, `prompt`, `description`, `isolation`, and in some versions `run_in_background` (parameters vary by version; check the tool's schema) |
 | Continue an existing subagent with its context | `SendMessage` to the agent's name or id. A new `Agent` call starts from zero. |
 | List running / finished agents | `ListAgents` |
 | Run an external CLI agent | `Bash` with `run_in_background: true`; the harness notifies on exit (see skill `cli-agent-delegation`) |
@@ -22,7 +22,7 @@ How the method maps onto Claude Code, and the behaviour observed in real session
 
 ## Background agents (observed)
 
-- `Agent` runs in the background by default. If your very next step depends on the result, dispatch with `run_in_background: false`.
+- `Agent` runs in the background by default. If your very next step depends on the result, dispatch with `run_in_background: false` where the parameter exists; where it does not (agents always run in the background), wait for the completion notification before that step.
 - **Nested background agents report to the root.** When an orchestrator subagent dispatches background implementers or reviewers, they appear next to it in the root's `ListAgents`, and their completion reports are delivered to the root, not reliably to the orchestrator.
 - **Orchestrators get their turn ended while waiting.** An orchestrator waiting on a background child was repeatedly forced to hand back an "unfinished" report, three or four times in one slice.
 
