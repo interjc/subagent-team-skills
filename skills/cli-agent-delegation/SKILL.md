@@ -2,6 +2,7 @@
 name: cli-agent-delegation
 description: Outsource well-specified bulk coding work to another vendor's agent through its CLI. Covers Google Antigravity (agy), with or without the agy-staff plugin, and OpenAI Codex CLI (codex exec), driven from Claude Code, Codex or any harness that can run shell commands. Use this when handing translations, mechanical refactors, test or snapshot backfills, doc syncs or a second-opinion review to agy or Codex; when running agy or codex headless; when choosing between them; when tracking, resuming or accepting their jobs; or when a dispatch plugin for them is missing or broken.
 license: MIT
+compatibility: Needs a shell. The helper scripts need Node.js 18+ (24 recommended); external agents need their own CLIs and accounts (Codex CLI, agy). Run scripts/doctor.mjs first.
 metadata:
   version: "0.1.0"
 ---
@@ -36,11 +37,13 @@ Model names are examples from 2026-10. List what is actually available with `agy
 
 ## 3. Before dispatch
 
-Script paths in this skill are relative to the skill's own directory and need Node.js 20+ (no dependencies). Run the doctor once per machine or session:
+Script paths in this skill are relative to the skill's own directory. They need Node.js 18 or newer (24 recommended) and no dependencies; each script refuses to run on an older Node with a clear message. Run the doctor once per session:
 
 ```bash
-node scripts/doctor.mjs          # CLIs present? versions? Codex default effort? agy-staff installed?
+node scripts/doctor.mjs          # Node version, CLIs present? versions? Codex default effort? agy-staff installed?
 ```
+
+Report blockers and recommendations to the user and install only with their consent. If Node.js is missing or older than 18, use the raw commands instead of the wrappers: the `codex exec` line in section 4 (always with `-c model_reasoning_effort=…`; bound it with the shell's `timeout 30m …` if available), and agy through agy-staff or the raw `agy -p` command in section 5.
 
 Write the brief to a file in your scratch directory. If the `subagent-team` skill is installed, start from its brief template; either way, apply these outsourcing rules:
 

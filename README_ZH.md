@@ -65,7 +65,21 @@ codex plugin marketplace add https://github.com/interjc/subagent-team-skills
 codex plugin add subagent-team@subagent-team-skills
 ```
 
-装完重启 agent。辅助脚本只需要 **Node.js 20+**，没有其他依赖。
+装完重启 agent。
+
+**环境要求**：方法本身没有任何依赖。可选的辅助脚本也不依赖任何包，但需要：
+
+- **Node.js 18 及以上**（硬性下限，在 Node 18 / 20 / 22 / 24 上实测通过）。版本更低时，脚本会给出明确提示并拒绝运行。
+- **Node.js 24**（推荐版本，写在 [`.nvmrc`](.nvmrc) 里）。
+- **git**。
+
+核心 skill 在会话开始时会先做一次**环境健康检查**（`env-check.cjs`），报告这几件事：
+
+- 阻塞项和警告，每一条都附上修复命令；
+- 缺了哪些可选的外部 CLI；
+- 项目里是否已经有团队策略。
+
+agent 只有在你同意之后才会安装东西，装完会重新检查。如果你不想装，就按文档里写好的替代方案继续。
 
 ## Skills 一览
 
@@ -86,6 +100,7 @@ Claude Code 插件附带两个审核 agent：
 
 | 脚本 | 作用 |
 |---|---|
+| `skills/subagent-team/scripts/env-check.cjs` | 会话开始时的环境健康检查，覆盖 Node.js（下限 18、推荐 24）、git、Codex CLI、agy、agy-staff，以及项目的团队策略。用最保守的语法编写，Node 版本过旧时也能运行，并把问题说清楚 |
 | `skills/subagent-team/scripts/model-roster.mjs` | 从 OpenRouter 的公开模型列表拉取 Anthropic / OpenAI / Google / DeepSeek 的最新模型，附价格和上下文长度，用来把抽象档位映射到当前型号 |
 | `skills/cli-agent-delegation/scripts/codex-run.mjs` | 封装 `codex exec` 和 `exec resume`。必须显式传 effort；拒绝 `ultra` 和 `danger-full-access`；支持超时；日志和最终回复写到文件；输出带 session id 的 JSON 摘要 |
 | `skills/cli-agent-delegation/scripts/agy-run.mjs` | 没装 agy-staff 时直接 headless 调用 `agy`。会校验模型 id；拒绝绕道调用 Claude / GPT 模型；`--write` 对应不受限模式；可以按 conversation id 续做 |

@@ -13,6 +13,15 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+// Hard minimum: below it, built-ins these scripts rely on (global fetch,
+// process-group handling as tested) are missing or untested. Recommended: 24.
+export const MIN_NODE_MAJOR = 18;
+if (Number(process.versions.node.split('.')[0]) < MIN_NODE_MAJOR) {
+  console.error(`doctor.mjs: Node.js >= ${MIN_NODE_MAJOR} is required (found v${process.versions.node}). ` +
+    'Install Node.js 24 LTS (e.g. `nvm install 24`), or use the fallback described in SKILL.md.');
+  process.exit(1);
+}
+
 const PROBE_TIMEOUT_MS = 10_000;
 
 export const USAGE = `doctor.mjs - check the environment for Codex CLI and agy delegation.
@@ -182,8 +191,14 @@ export function checkAgy(env = process.env) {
   return agy;
 }
 
-export function recommend({ codex, agy }) {
+export const RECOMMENDED_NODE_MAJOR = 24;
+
+export function recommend({ codex, agy, nodeVersion = process.version }) {
   const recs = [];
+  const major = Number(String(nodeVersion).replace(/^v/, '').split('.')[0]);
+  if (major < RECOMMENDED_NODE_MAJOR) {
+    recs.push(`Node.js ${nodeVersion} meets the minimum (${MIN_NODE_MAJOR}); ${RECOMMENDED_NODE_MAJOR} is recommended (e.g. \`nvm install ${RECOMMENDED_NODE_MAJOR}\`).`);
+  }
   if (!codex.present) recs.push(`Codex CLI not found (${codex.bin}): install it (npm install -g @openai/codex) or set CODEX_BIN.`);
   else if (codex.error) recs.push(`Codex CLI found but \`${codex.bin} --version\` failed: ${codex.error}.`);
   if (codex.defaultEffort) recs.push(`Codex default effort is "${codex.defaultEffort}": always delegate through codex-run.mjs (it passes --effort explicitly).`);
@@ -204,7 +219,14 @@ export function recommend({ codex, agy }) {
 export function runChecks(env = process.env) {
   const codex = checkCodex(env);
   const agy = checkAgy(env);
-  return { node: process.version, codex, agy, recommendations: recommend({ codex, agy }) };
+  return {
+    node: process.version,
+    minNode: MIN_NODE_MAJOR,
+    recommendedNode: RECOMMENDED_NODE_MAJOR,
+    codex,
+    agy,
+    recommendations: recommend({ codex, agy }),
+  };
 }
 
 export function formatReport(r) {

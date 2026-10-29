@@ -2,6 +2,7 @@
 name: subagent-team
 description: Run multi-file, multi-phase coding work as a team. The main session is the director (product manager + project manager + architect); manager-level subagents split work, design, review and accept; worker subagents and external CLI agents (agy, Codex CLI) implement; the human gets one batched question list at the end. Use this whenever a task spans several files or phases, and whenever you are about to delegate to a subagent or an external agent, choose a model or reasoning effort for one, write a task brief, review or accept delegated work, run work in parallel, set up which models and effort a project's agents use, or decide whether to stop and ask the user, even if the user never says "subagent".
 license: MIT
+compatibility: The method itself needs nothing but a harness that can spawn subagents. The optional helper scripts need Node.js 18+ (24 recommended) and git; run scripts/env-check.cjs at the start of a session.
 metadata:
   version: "0.1.0"
 ---
@@ -13,6 +14,37 @@ Treat a large coding task like a small company: one director, a few strong manag
 This skill is the method. Project facts (commands, sensitive modules, shared files, which concrete model sits in which tier) belong in the project's `AGENTS.md` / `CLAUDE.md`, in a `## Subagent team` section created on first use, and project rules always win over this skill.
 
 Harness support: developed and used day to day in **Claude Code**, also used with **Codex** as the main session. Any harness that can spawn subagents can follow it; harness-specific mechanics live in [references/harness-claude-code.md](references/harness-claude-code.md) and [references/harness-codex.md](references/harness-codex.md). For outsourcing to external CLIs, load the companion skill `cli-agent-delegation`; for progress records and mid-task handover, `agent-handover`.
+
+## Start: environment health check
+
+Once per session, before the first dispatch, and again after anything is installed or changed, run the check from the project root (the path is relative to this skill's directory):
+
+```bash
+node scripts/env-check.cjs --root <project root>
+```
+
+It checks the hard requirements, the recommended setup and the project policy, and installs nothing:
+
+- **Hard requirements**: Node.js 18 or newer for the helper scripts, and git.
+- **Recommended**: Node.js 24.
+- **Optional external staff**: Codex CLI, agy, the agy-staff plugin.
+- **Project policy**: whether the project already has its `## Subagent team` section.
+
+Exit `0` means ready, possibly with warnings; `2` means blocked. If `node` itself is missing, the command fails with "not found": treat that as a failed Node check. Then:
+
+1. **Tell the user in one short message**: blockers, warnings, missing optional tools, and the fix for each. The report contains the commands.
+2. **Install only with consent.** Offer to run the fixes. Never change the user's default Node version, shell profile or global packages unasked; prefer per-shell or per-project changes (`nvm install 24 && nvm use 24`).
+3. **Re-run the check** after any change. Start the work once it no longer reports blockers.
+4. **If the user declines or cannot install**, continue with the fallback:
+
+| Missing | Fallback |
+|---|---|
+| Node.js 18+ | The method needs no scripts. Map tiers from the harness's model list and the vendor pages ([references/model-tiers.md](references/model-tiers.md)) instead of `model-roster.mjs`. For external staff, `cli-agent-delegation` lists the raw CLI commands. |
+| git | Not workable for team mode: leases, diffs, reviews and commits rely on it. Stay in Solo mode until git is installed. |
+| Codex CLI or agy | Keep that work in-house, or use whichever external agent is available. |
+| agy-staff plugin | Use the raw `agy` CLI (skill `cli-agent-delegation`). |
+
+5. **Record the result** in the project's policy section (`Environment:` line, see [references/project-setup.md](references/project-setup.md)). Warnings the user already accepted get one line next time, not a new question.
 
 ## 0. Pick a mode first
 
@@ -148,6 +180,7 @@ At the end of each phase spend a few minutes on: what was redone, which brief wa
 ## References
 
 - [references/project-setup.md](references/project-setup.md): first-use questionnaire and the `## Subagent team` policy section
+- `scripts/env-check.cjs`: environment health check (Node.js minimum 18 / recommended 24, git, external CLIs, project policy)
 - [references/model-tiers.md](references/model-tiers.md): tier mapping, role table, dated roster, `scripts/model-roster.mjs`
 - [references/brief-template.md](references/brief-template.md): implementer, outsourced, reviewer and expert briefs; pre-dispatch checklist
 - [references/verification.md](references/verification.md): review procedure, fingerprints, mutation checks, command pitfalls

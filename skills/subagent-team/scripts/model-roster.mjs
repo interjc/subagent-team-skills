@@ -13,6 +13,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+// Hard minimum: below it, built-ins these scripts rely on (global fetch,
+// process-group handling as tested) are missing or untested. Recommended: 24.
+export const MIN_NODE_MAJOR = 18;
+if (Number(process.versions.node.split('.')[0]) < MIN_NODE_MAJOR) {
+  console.error(`model-roster.mjs: Node.js >= ${MIN_NODE_MAJOR} is required (found v${process.versions.node}). ` +
+    'Install Node.js 24 LTS (e.g. `nvm install 24`), or use the fallback described in SKILL.md.');
+  process.exit(1);
+}
+
 export const SOURCE_URL = 'https://openrouter.ai/api/v1/models';
 export const DEFAULT_VENDORS = ['anthropic', 'openai', 'google', 'deepseek'];
 const FETCH_TIMEOUT_MS = 20_000;

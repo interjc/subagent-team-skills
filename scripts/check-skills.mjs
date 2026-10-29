@@ -19,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const MAX_SKILL_LINES = 500;
 const MAX_DESCRIPTION = 1024;
 const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-const TEXT_EXT = new Set(['.md', '.mjs', '.js', '.json', '.yml', '.yaml', '.txt', '.toml', '.sh']);
+const TEXT_EXT = new Set(['.md', '.mjs', '.cjs', '.js', '.json', '.yml', '.yaml', '.txt', '.toml', '.sh']);
 const SKIP_DIRS = new Set(['.git', 'node_modules']);
 
 const PRIVACY_PATTERNS = [
@@ -100,6 +100,9 @@ export function checkSkills(root) {
     if (!desc) errors.push(`skills/${name}/SKILL.md: description is required`);
     if (desc.length > MAX_DESCRIPTION) errors.push(`skills/${name}/SKILL.md: description is ${desc.length} chars (max ${MAX_DESCRIPTION})`);
     if (/[<>]/.test(desc)) errors.push(`skills/${name}/SKILL.md: description must not contain angle brackets`);
+    if (data.compatibility !== undefined && (!data.compatibility || data.compatibility.length > 500)) {
+      errors.push(`skills/${name}/SKILL.md: compatibility must be 1-500 characters`);
+    }
     const lines = text.split('\n').length;
     if (lines > MAX_SKILL_LINES) errors.push(`skills/${name}/SKILL.md: ${lines} lines (max ${MAX_SKILL_LINES}); move detail to references/`);
     skills.push({ name, version: data.metadata?.version });
@@ -182,6 +185,46 @@ export function checkReadmeParity(root) {
   const errors = [];
   for (const key of ['headings', 'fences', 'links']) {
     if (a[key] !== b[key]) errors.push(`README.md and README_ZH.md differ in ${key}: "${a[key]}" vs "${b[key]}"`);
+  }
+  return errors;
+}
+
+// Node.js constraints must agree everywhere: the hard minimum in every script,
+// package.json engines and each scripted skill's compatibility field; the
+// recommended version in env-check.cjs, doctor.mjs and .nvmrc.
+export function checkNodeVersions(root, files) {
+  const errors = [];
+  const mins = new Map();
+  const recs = new Map();
+  const scriptRe = new RegExp(`^${path.join(root, 'skills').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\/][^\\/]+[\\/]scripts[\\/]`);
+  for (const file of files.filter((f) => scriptRe.test(f) && /\.(mjs|cjs|js)$/.test(f))) {
+    const text = fs.readFileSync(file, 'utf8');
+    const rel = path.relative(root, file);
+    const min = text.match(/MIN_NODE_MAJOR\s*=\s*(\d+)/);
+    if (!min) errors.push(`${rel}: missing MIN_NODE_MAJOR version guard`);
+    else mins.set(rel, Number(min[1]));
+    const rec = text.match(/RECOMMENDED_NODE_MAJOR\s*=\s*(\d+)/);
+    if (rec) recs.set(rel, Number(rec[1]));
+  }
+  if (mins.size === 0) return errors;
+  const min = Math.min(...mins.values());
+  for (const [rel, v] of mins) if (v !== min) errors.push(`${rel}: MIN_NODE_MAJOR ${v} differs from ${min}`);
+  const pkgFile = path.join(root, 'package.json');
+  if (fs.existsSync(pkgFile)) {
+    const engines = JSON.parse(fs.readFileSync(pkgFile, 'utf8')).engines?.node;
+    if (engines !== `>=${min}`) errors.push(`package.json: engines.node must be ">=${min}" (found ${engines})`);
+  }
+  const nvmrc = path.join(root, '.nvmrc');
+  const recommended = fs.existsSync(nvmrc) ? Number(fs.readFileSync(nvmrc, 'utf8').trim().replace(/^v/, '').split('.')[0]) : null;
+  if (recommended === null) errors.push('.nvmrc: missing (recommended Node.js version)');
+  else if (recommended < min) errors.push(`.nvmrc: ${recommended} is below the minimum ${min}`);
+  for (const [rel, v] of recs) if (v !== recommended) errors.push(`${rel}: RECOMMENDED_NODE_MAJOR ${v} differs from .nvmrc ${recommended}`);
+  const scripted = new Set([...mins.keys()].map((rel) => rel.split(/[\\/]/)[1]));
+  for (const skill of scripted) {
+    const fm = parseFrontmatter(fs.readFileSync(path.join(root, 'skills', skill, 'SKILL.md'), 'utf8'));
+    const compat = fm?.data.compatibility || '';
+    if (!compat.includes(`Node.js ${min}+`)) errors.push(`skills/${skill}/SKILL.md: compatibility must state "Node.js ${min}+"`);
+    if (recommended && !compat.includes(String(recommended))) errors.push(`skills/${skill}/SKILL.md: compatibility must mention the recommended version ${recommended}`);
   }
   return errors;
 }
@@ -271,6 +314,7 @@ export function runChecks(root) {
     ...checkSkillIsolation(root, files),
     ...checkEnglish(root, files),
     ...checkReadmeParity(root),
+    ...checkNodeVersions(root, files),
     ...checkVersions(root, skills),
     ...checkAgents(root),
     ...checkPrivacy(root, files, loadDenylist(root)),

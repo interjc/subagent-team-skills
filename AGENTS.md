@@ -8,7 +8,7 @@ Rules for AI agents and human contributors working on this repository.
 skills/<skill-name>/
 ├── SKILL.md          # required: YAML frontmatter (name, description, license, metadata.version) + body
 ├── references/       # optional: detail loaded on demand; link every file from SKILL.md
-└── scripts/          # optional: dependency-free Node.js (>= 20) helpers
+└── scripts/          # optional: dependency-free Node.js helpers (minimum 18, recommended 24)
 agents/               # Claude Code subagent definitions shipped with the plugin
 tests/                # node:test suites, offline only (fake binaries, fixtures)
 scripts/              # repository tooling (check-skills.mjs)
@@ -40,6 +40,11 @@ scripts/              # repository tooling (check-skills.mjs)
 ## 5. Scripts and tests
 
 - Scripts: `#!/usr/bin/env node`, ESM, only `node:` built-ins, `--help`, a JSON result on stdout and hints on stderr, documented exit codes. Export pure functions and guard `main()` so tests can import them.
+- Node.js has two constraints:
+  - **Hard minimum (18)**: the lowest version on which every script and test actually passes. Every script starts with a `MIN_NODE_MAJOR` guard. Only raise it after measuring on the old version, and update every script, `package.json` `engines`, each scripted skill's `compatibility` field and the CI matrix together.
+  - **Recommended (24)**: pinned in `.nvmrc` and in `RECOMMENDED_NODE_MAJOR` in `env-check.cjs` and `doctor.mjs`.
+  - `npm run check` enforces that all of these agree.
+- `skills/subagent-team/scripts/env-check.cjs` stays conservative CommonJS (no ESM, no optional chaining, no newer syntax), so it can still report "Node too old" on an old Node.
 - Tests run offline with fake `codex` / `agy` binaries (`CODEX_BIN`, `AGY_BIN`) and temporary `HOME` directories. Never call real model APIs in the default suite.
 - Before committing: `npm test` and `npm run check` must pass.
 

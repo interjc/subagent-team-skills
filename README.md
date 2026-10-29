@@ -52,7 +52,21 @@ codex plugin marketplace add https://github.com/interjc/subagent-team-skills
 codex plugin add subagent-team@subagent-team-skills
 ```
 
-Restart the agent afterwards. The helper scripts need **Node.js 20+** and no dependencies.
+Restart the agent afterwards.
+
+**Requirements.** The method itself needs nothing. The optional helper scripts have no dependencies, but they need:
+
+- **Node.js 18 or newer** (hard minimum, measured on Node 18 / 20 / 22 / 24). Below it the scripts refuse to run with a clear message.
+- **Node.js 24** (recommended, pinned in [`.nvmrc`](.nvmrc)).
+- **git**.
+
+At the start of a session the core skill runs an **environment health check** (`env-check.cjs`). It reports:
+
+- blockers and warnings, with the exact fix for each;
+- which optional external CLIs are missing;
+- whether your project already has a team policy.
+
+The agent installs anything only with your consent and then re-checks. If you decline, it continues with documented fallbacks.
 
 ## Skills
 
@@ -68,6 +82,7 @@ Agents shipped with the Claude Code plugin: `team-reviewer` (routine changes, me
 
 | Script | Purpose |
 |---|---|
+| `skills/subagent-team/scripts/env-check.cjs` | Environment health check at session start: Node.js (minimum 18, recommended 24), git, Codex CLI, agy, agy-staff, and the project's team policy. Written in conservative syntax so it still runs and explains on an old Node. |
 | `skills/subagent-team/scripts/model-roster.mjs` | Lists the newest Anthropic / OpenAI / Google / DeepSeek models with price and context, from OpenRouter's public model list. Use it to map abstract tiers to current models. |
 | `skills/cli-agent-delegation/scripts/codex-run.mjs` | Runs `codex exec` / `exec resume` with a required explicit effort. Refuses `ultra` and `danger-full-access`, supports a timeout, writes the log and final message to files, and prints a JSON summary with the session id. |
 | `skills/cli-agent-delegation/scripts/agy-run.mjs` | Runs `agy` headless when the agy-staff plugin is not installed. Validates model ids, refuses routing back to Claude/GPT models, maps `--write` to unrestricted mode, and supports continuation by conversation id. |

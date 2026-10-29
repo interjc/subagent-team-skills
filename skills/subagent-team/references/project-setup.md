@@ -17,7 +17,7 @@ If the user prefers a separate file, write it (e.g. `docs/agents/subagent-team.m
 
 ## Detect first, then ask
 
-Pre-fill every answer from what you can see, so the user can accept everything in one reply:
+Pre-fill every answer from what you can see, so the user can accept everything in one reply. Start from the environment health check (`scripts/env-check.cjs`, SKILL.md "Start"), which already reports Node.js, git, the external CLIs and whether a policy exists. Then:
 
 - Models the harness exposes (the `Agent` tool's model values in Claude Code; Codex's model picker or `~/.codex/models_cache.json`).
 - External staff: run the `cli-agent-delegation` skill's `scripts/doctor.mjs` if it is installed, or check `agy --version`, `codex --version`, and whether the agy-staff plugin is present.
@@ -45,6 +45,7 @@ Use the harness's question tool when there is one (several questions in one dial
 - Model policy: auto            <!-- auto | fixed | hybrid -->
 - Cost preference: balanced     <!-- balanced | economize | max-quality -->
 - Decided: <YYYY-MM-DD>, confirmed by the user   <!-- or: default, not confirmed -->
+- Environment (checked <YYYY-MM-DD>): Node.js <version>, git <version>, Codex CLI <version or none>, agy <version or none>, agy-staff <yes or no>; accepted warnings: <none, or e.g. "Node 22, not upgrading">
 
 | Role | Tier | Model | Effort |
 |---|---|---|---|

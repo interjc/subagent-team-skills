@@ -15,6 +15,7 @@ import {
   checkSkillIsolation,
   checkEnglish,
   checkReadmeParity,
+  checkNodeVersions,
   runChecks,
   walk,
 } from '../scripts/check-skills.mjs';
@@ -111,6 +112,34 @@ test('checkReadmeParity compares headings, code blocks and link targets', () => 
   assert.match(errors, /headings/);
   assert.match(errors, /fences/);
   assert.match(errors, /links/);
+});
+
+test('checkNodeVersions keeps minimum and recommended versions in agreement', () => {
+  const skillMd = (compat) => `---\nname: s\ndescription: d\ncompatibility: ${compat}\n---\n`;
+  const good = tmpRepo({
+    'skills/s/SKILL.md': skillMd('Scripts need Node.js 18+ (24 recommended).'),
+    'skills/s/scripts/a.mjs': 'export const MIN_NODE_MAJOR = 18;',
+    'skills/s/scripts/check.cjs': 'var MIN_NODE_MAJOR = 18;\nvar RECOMMENDED_NODE_MAJOR = 24;',
+    'package.json': '{"engines":{"node":">=18"}}',
+    '.nvmrc': '24\n',
+  });
+  assert.deepEqual(checkNodeVersions(good, walk(good)), []);
+  const bad = tmpRepo({
+    'skills/s/SKILL.md': skillMd('Scripts need Node.js 20+.'),
+    'skills/s/scripts/a.mjs': 'export const MIN_NODE_MAJOR = 18;',
+    'skills/s/scripts/b.mjs': 'export const MIN_NODE_MAJOR = 20;',
+    'skills/s/scripts/c.mjs': 'no guard here',
+    'skills/s/scripts/check.cjs': 'var MIN_NODE_MAJOR = 18;\nvar RECOMMENDED_NODE_MAJOR = 22;',
+    'package.json': '{"engines":{"node":">=20"}}',
+    '.nvmrc': '24\n',
+  });
+  const errors = checkNodeVersions(bad, walk(bad)).join('\n');
+  assert.match(errors, /c\.mjs: missing MIN_NODE_MAJOR/);
+  assert.match(errors, /b\.mjs: MIN_NODE_MAJOR 20 differs from 18/);
+  assert.match(errors, /engines\.node must be ">=18"/);
+  assert.match(errors, /RECOMMENDED_NODE_MAJOR 22 differs from \.nvmrc 24/);
+  assert.match(errors, /compatibility must state "Node\.js 18\+"/);
+  assert.match(errors, /compatibility must mention the recommended version 24/);
 });
 
 test('checkLinks flags broken relative links and ignores URLs, anchors and code blocks', () => {

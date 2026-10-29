@@ -15,6 +15,15 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+// Hard minimum: below it, built-ins these scripts rely on (global fetch,
+// process-group handling as tested) are missing or untested. Recommended: 24.
+export const MIN_NODE_MAJOR = 18;
+if (Number(process.versions.node.split('.')[0]) < MIN_NODE_MAJOR) {
+  console.error(`agy-run.mjs: Node.js >= ${MIN_NODE_MAJOR} is required (found v${process.versions.node}). ` +
+    'Install Node.js 24 LTS (e.g. `nvm install 24`), or use the fallback described in SKILL.md.');
+  process.exit(1);
+}
+
 const KILL_GRACE_MS = 5000;
 const DRAIN_MS = 500;
 const MAX_TIMEOUT_SEC = 24 * 3600;
