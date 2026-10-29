@@ -1,0 +1,159 @@
+{
+  "data": [
+    {
+      "id": "anthropic/claude-opus-5.5",
+      "name": "Anthropic: Claude Opus 5.5",
+      "created": 1791504000,
+      "context_length": 1000000,
+      "pricing": {
+        "prompt": "0.000015",
+        "completion": "0.000075"
+      }
+    },
+    {
+      "id": "anthropic/claude-sonnet-5",
+      "name": "Anthropic: Claude Sonnet 5",
+      "created": 1788048000,
+      "context_length": 1000000,
+      "pricing": {
+        "prompt": "0.000003",
+        "completion": "0.000015"
+      }
+    },
+    {
+      "id": "anthropic/claude-haiku-5",
+      "name": "Anthropic: Claude Haiku 5",
+      "created": 1785456000,
+      "context_length": 200000,
+      "pricing": {
+        "prompt": "0.000001",
+        "completion": "0.000005"
+      }
+    },
+    {
+      "id": "anthropic/claude-opus-5.5:thinking",
+      "name": "Anthropic: Claude Opus 5.5 (thinking)",
+      "created": 1791590400,
+      "context_length": 1000000,
+      "pricing": {
+        "prompt": "0.000015",
+        "completion": "0.000075"
+      }
+    },
+    {
+      "id": "anthropic/claude-3-opus",
+      "name": "Anthropic: Claude 3 Opus",
+      "created": 1715472000,
+      "context_length": 200000,
+      "pricing": {
+        "prompt": "0.000015",
+        "completion": "0.000075"
+      }
+    },
+    {
+      "id": "openai/gpt-6.1",
+      "name": "OpenAI: GPT-6.1",
+      "created": 1792368000,
+      "context_length": 400000,
+      "pricing": {
+        "prompt": "0.00000125",
+        "completion": "0.00001"
+      }
+    },
+    {
+      "id": "openai/gpt-6.1-mini",
+      "name": "OpenAI: GPT-6.1 mini",
+      "created": 1792324800,
+      "context_length": 400000,
+      "pricing": {
+        "prompt": "0.00000025",
+        "completion": "0.000002"
+      }
+    },
+    {
+      "id": "openai/gpt-oss-200b:free",
+      "name": "OpenAI: gpt-oss-200b (free)",
+      "created": 1790640000,
+      "context_length": 131072,
+      "pricing": {
+        "prompt": "0",
+        "completion": "0"
+      }
+    },
+    {
+      "id": "openai/o9-legacy",
+      "name": "OpenAI: o9 legacy",
+      "context_length": 128000
+    },
+    {
+      "id": "google/gemini-3.8-pro",
+      "name": "Google: Gemini 3.8 Pro",
+      "created": 1791936000,
+      "context_length": 2000000,
+      "pricing": {
+        "prompt": "0.0000025",
+        "completion": "0.000015"
+      }
+    },
+    {
+      "id": "google/gemini-3.8-flash",
+      "name": "Google: Gemini 3.8 Flash",
+      "created": 1789776000,
+      "context_length": 1000000,
+      "pricing": {
+        "prompt": "0.0000003",
+        "completion": "0.0000025"
+      }
+    },
+    {
+      "id": "google/gemma-5-27b",
+      "name": "Google: Gemma 5 27B",
+      "created": 1775952000,
+      "context_length": 131072,
+      "pricing": {
+        "prompt": "-1",
+        "completion": "-1"
+      }
+    },
+    {
+      "id": "deepseek/deepseek-v4",
+      "name": "DeepSeek: V4",
+      "created": 1788912000,
+      "context_length": 163840,
+      "pricing": {
+        "prompt": "0.00000027",
+        "completion": "0.0000011"
+      }
+    },
+    {
+      "id": "deepseek/deepseek-r2",
+      "name": "DeepSeek: R2",
+      "created": 1782864000,
+      "context_length": 163840,
+      "pricing": {
+        "prompt": "0.00000055",
+        "completion": "0.00000219"
+      }
+    },
+    {
+      "id": "meta-llama/llama-5-405b",
+      "name": "Meta: Llama 5 405B",
+      "created": 1790640000,
+      "context_length": 131072,
+      "pricing": {
+        "prompt": "0.000001",
+        "completion": "0.000003"
+      }
+    },
+    {
+      "id": "openrouter/auto",
+      "name": "Auto Router",
+      "created": 1792800000,
+      "context_length": 2000000,
+      "pricing": {
+        "prompt": "-1",
+        "completion": "-1"
+      }
+    }
+  ]
+}

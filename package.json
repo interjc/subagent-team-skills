@@ -1,0 +1,15 @@
+{
+  "name": "subagent-team-skills",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent Skills for running coding work as a team of subagents and external CLI agents.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node scripts/check-skills.mjs"
+  }
+}

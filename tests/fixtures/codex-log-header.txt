@@ -1,0 +1,14 @@
+OpenAI Codex v0.165.0
+--------
+workdir: /path/to/repo
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: medium
+reasoning summaries: none
+session id: 01a18757-565f-7be2-8317-c8463e263b5c
+--------
+user
+say hi
+
