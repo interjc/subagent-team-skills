@@ -1,0 +1,22 @@
+{
+  "name": "subagent-team",
+  "version": "0.1.1",
+  "description": "Run coding work as a team: a director session, manager and worker subagents, outsourced CLI agents (agy, Codex CLI), independent read-only reviewers, and resumable handover.",
+  "author": {
+    "name": "Justin Chen",
+    "url": "https://github.com/interjc"
+  },
+  "homepage": "https://github.com/interjc/subagent-team-skills",
+  "license": "MIT",
+  "keywords": ["subagents", "orchestration", "delegation", "code-review", "agy", "codex", "handover"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Subagent Team",
+    "shortDescription": "Run coding work as a team of subagents and external CLI agents",
+    "longDescription": "A director session splits and integrates; manager subagents design, review and accept; worker subagents and outsourced CLI agents (agy, Codex CLI) implement; the human gets one batched question list at the end.",
+    "developerName": "Justin Chen",
+    "category": "Engineering",
+    "capabilities": ["Instructions"],
+    "defaultPrompt": ["Use the subagent-team skill to plan and delegate this feature."]
+  }
+}

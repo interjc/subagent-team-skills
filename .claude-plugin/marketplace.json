@@ -1,0 +1,16 @@
+{
+  "name": "subagent-team-skills",
+  "owner": {
+    "name": "Justin Chen",
+    "url": "https://github.com/interjc"
+  },
+  "description": "Skills for running coding work as a team of subagents and external CLI agents.",
+  "plugins": [
+    {
+      "name": "subagent-team",
+      "source": "./",
+      "description": "Director / managers / staff orchestration, outsourcing to agy and Codex CLI, read-only reviewer agents, and agent handover.",
+      "tags": ["subagents", "orchestration", "delegation", "code-review"]
+    }
+  ]
+}
