@@ -1,7 +1,10 @@
 // Fake `codex` used by tests (loaded through a generated executable shim).
 // Records { argv, cwd, stdin } to $FAKE_RECORD; behavior chosen by $FAKE_MODE:
-//   ok (default), effort-mismatch, fail, hang, version.
+//   ok (default), effort-mismatch, fail, hang, grandchild-hang (spawns
+//   `sleep 30` sharing stdout, then hangs), ignore-term (ignores SIGTERM, hangs).
+// The record also holds the fake's pid and, for grandchild-hang, grandchildPid.
 // $FAKE_TOKENS=inline prints "tokens used: N" instead of the two-line form.
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 
 const argv = process.argv.slice(2);
@@ -15,9 +18,12 @@ if (argv[0] === '--version') {
 
 let stdin = '';
 try { stdin = fs.readFileSync(0, 'utf8'); } catch { /* no stdin */ }
-if (process.env.FAKE_RECORD) {
-  fs.writeFileSync(process.env.FAKE_RECORD, JSON.stringify({ argv, cwd: process.cwd(), stdin }));
-}
+const record = (extra = {}) => {
+  if (process.env.FAKE_RECORD) {
+    fs.writeFileSync(process.env.FAKE_RECORD, JSON.stringify({ argv, cwd: process.cwd(), stdin, pid: process.pid, ...extra }));
+  }
+};
+record();
 
 const valueAfter = (flag) => {
   const i = argv.indexOf(flag);
@@ -38,6 +44,13 @@ if (model) header = header.replace(/^model: .*$/m, `model: ${model}`);
 process.stdout.write(header);
 
 if (mode === 'hang') {
+  setInterval(() => {}, 1000);
+} else if (mode === 'grandchild-hang') {
+  const gc = spawn('sleep', ['30'], { stdio: ['ignore', 'inherit', 'inherit'] });
+  record({ grandchildPid: gc.pid });
+  setInterval(() => {}, 1000);
+} else if (mode === 'ignore-term') {
+  process.on('SIGTERM', () => {});
   setInterval(() => {}, 1000);
 } else if (mode === 'fail') {
   process.stderr.write('ERROR: stream disconnected before completion\n');

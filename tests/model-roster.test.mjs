@@ -36,6 +36,7 @@ describe('model-roster: parseArgs', () => {
     assert.throws(() => parseArgs(['--since-days', 'abc']), UsageError);
     assert.throws(() => parseArgs(['--vendors']), UsageError);
     assert.throws(() => parseArgs(['--what']), UsageError);
+    assert.throws(() => parseArgs(['--file', '--json']), /--file needs a value, got option --json/);
   });
 });
 
@@ -55,14 +56,14 @@ describe('model-roster: selectModels', () => {
     assert.deepEqual(v.anthropic[0], {
       id: 'anthropic/claude-opus-5.5',
       name: 'Anthropic: Claude Opus 5.5',
-      released: '2026-10-09',
+      listed: '2026-10-09',
       contextLength: 1000000,
       inputPerMTok: 15,
       outputPerMTok: 75,
     });
     assert.equal(v.openai[0].inputPerMTok, 1.25);
     const legacy = v.openai.find((m) => m.id === 'openai/o9-legacy');
-    assert.equal(legacy.released, null);
+    assert.equal(legacy.listed, null);
     assert.equal(legacy.inputPerMTok, null);
     const gemma = v.google.find((m) => m.id === 'google/gemma-5-27b');
     assert.equal(gemma.inputPerMTok, null); // "-1" means variable pricing
@@ -93,11 +94,11 @@ describe('model-roster: selectModels', () => {
 describe('model-roster: formatting', () => {
   test('formatTable aligns columns with 2-decimal prices and ? for unknowns', () => {
     const table = formatTable([
-      { id: 'anthropic/claude-opus-5.5', released: '2026-10-09', contextLength: 1000000, inputPerMTok: 15, outputPerMTok: 75 },
-      { id: 'x/y', released: null, contextLength: null, inputPerMTok: null, outputPerMTok: 0.1234 },
+      { id: 'anthropic/claude-opus-5.5', listed: '2026-10-09', contextLength: 1000000, inputPerMTok: 15, outputPerMTok: 75 },
+      { id: 'x/y', listed: null, contextLength: null, inputPerMTok: null, outputPerMTok: 0.1234 },
     ]);
     assert.equal(table, [
-      'id                         released    context  $/1M in  $/1M out',
+      'id                         listed      context  $/1M in  $/1M out',
       '-------------------------  ----------  -------  -------  --------',
       'anthropic/claude-opus-5.5  2026-10-09  1000000    15.00     75.00',
       'x/y                        ?                 ?        ?      0.12',
@@ -140,7 +141,8 @@ describe('model-roster: CLI', () => {
       fs.writeFileSync(bad, '{oops');
       const r = runScript(SCRIPTS.modelRoster, ['--file', bad]);
       assert.equal(r.status, 2);
-      assert.match(r.stderr, /docs\.anthropic\.com/);
+      assert.match(r.stderr, /https:\/\/platform\.claude\.com\/docs\/en\/about-claude\/models\/overview/);
+      assert.doesNotMatch(r.stderr, /docs\.anthropic\.com/);
       assert.match(r.stderr, /what your harness actually exposes/);
     } finally {
       removeDir(tmp);
@@ -148,7 +150,9 @@ describe('model-roster: CLI', () => {
   });
 
   test('--help and usage errors', () => {
-    assert.equal(runScript(SCRIPTS.modelRoster, ['--help']).status, 0);
+    const help = runScript(SCRIPTS.modelRoster, ['--help']);
+    assert.equal(help.status, 0);
+    assert.match(help.stdout, /listed = the date OpenRouter listed the model/);
     assert.equal(runScript(SCRIPTS.modelRoster, ['--limit', 'x']).status, 1);
   });
 });

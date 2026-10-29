@@ -7,7 +7,9 @@ import {
   parseArgs, validateEffort, validateSandbox, validateRunOptions, buildExecArgs,
   buildResumeArgs, parseLog, parseDuration, buildResumeHint, timestampDirName, UsageError,
 } from '../skills/cli-agent-delegation/scripts/codex-run.mjs';
-import { SCRIPTS, FIXTURES, makeTempDir, removeDir, makeFakeBin, runScript, readJson } from './helpers/fakes.mjs';
+import {
+  SCRIPTS, FIXTURES, makeTempDir, removeDir, makeFakeBin, runScript, readJson, waitUntilGone,
+} from './helpers/fakes.mjs';
 
 const fixture = (name) => fs.readFileSync(path.join(FIXTURES, name), 'utf8');
 
@@ -103,6 +105,24 @@ describe('codex-run: validation', () => {
     assert.throws(() => parseArgs(['exec', '--bogus']), /unknown option/);
   });
 
+  test('a value-taking option does not swallow the next flag', () => {
+    assert.throws(() => parseArgs(['exec', '--model', '--json']), /--model needs a value, got option --json/);
+    const r = run(['exec', '--repo', repo, '--prompt-file', prompt, '--effort', 'low', '--model', '--json']);
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /--model needs a value/);
+    assert.equal(r.record, null);
+  });
+
+  test('--timeout is capped at 24h', () => {
+    assert.equal(parseDuration('24h'), 86400);
+    assert.equal(parseDuration('1440m'), 86400);
+    assert.throws(() => parseDuration('86401'), /max 24h/);
+    const r = run(['exec', '--repo', repo, '--prompt-file', prompt, '--effort', 'low', '--model', 'm', '--timeout', '1000h', '--out-dir', outDir()]);
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /too long \(max 24h\)/);
+    assert.equal(r.record, null);
+  });
+
   test('--help exits 0 and missing command exits 1', () => {
     let r = runScript(SCRIPTS.codexRun, ['--help']);
     assert.equal(r.status, 0);
@@ -157,7 +177,7 @@ describe('codex-run: log parsing', () => {
     assert.equal(p.approval, 'never');
     assert.equal(p.sandbox, 'read-only');
     assert.equal(p.effortReported, 'medium');
-    assert.equal(p.sessionId, '01a18757-565f-7be2-8317-c8463e263b5c');
+    assert.equal(p.sessionId, '00000000-0000-7000-8000-000000000001');
     assert.equal(p.tokensUsed, null);
     assert.equal(p.execCount, 0);
   });
@@ -194,7 +214,7 @@ describe('codex-run: log parsing', () => {
     const r = runScript(SCRIPTS.codexRun, ['summary', path.join(FIXTURES, 'codex-log-tokens-nextline.txt')]);
     assert.equal(r.status, 0);
     assert.equal(r.json.tokensUsed, 88123);
-    assert.equal(r.json.sessionId, '01a18757-565f-7be2-8317-c8463e263b5c');
+    assert.equal(r.json.sessionId, '00000000-0000-7000-8000-000000000001');
     assert.equal(runScript(SCRIPTS.codexRun, ['summary', path.join(tmp, 'nope.txt')]).status, 1);
   });
 });
@@ -213,7 +233,7 @@ describe('codex-run: running the fake codex', () => {
     assert.equal(j.exitCode, 0);
     assert.equal(j.timedOut, false);
     assert.equal(j.mode, 'exec');
-    assert.equal(j.sessionId, '01a18757-565f-7be2-8317-c8463e263b5c');
+    assert.equal(j.sessionId, '00000000-0000-7000-8000-000000000001');
     assert.equal(j.model, 'gpt-6.1-sol');
     assert.equal(j.effortRequested, 'high');
     assert.equal(j.effortReported, 'high');
@@ -223,7 +243,7 @@ describe('codex-run: running the fake codex', () => {
     assert.equal(j.tokensUsed, 4321);
     assert.equal(j.outDir, out);
     assert.equal(j.lastMessageBytes, Buffer.byteLength('Hi from fake codex.\n'));
-    assert.match(j.resumeHint, /resume --repo .* --session 01a18757-565f-7be2-8317-c8463e263b5c --prompt-file <NEW_PROMPT> --effort high --model gpt-6.1-sol/);
+    assert.match(j.resumeHint, /resume --repo .* --session 00000000-0000-7000-8000-000000000001 --prompt-file <NEW_PROMPT> --effort high --model gpt-6.1-sol/);
     assert.deepEqual(readJson(path.join(out, 'summary.json')), j);
     assert.match(fs.readFileSync(path.join(out, 'log.txt'), 'utf8'), /OpenAI Codex v0\.165\.0/);
     assert.doesNotMatch(r.stderr, /no --model/);
@@ -287,8 +307,59 @@ describe('codex-run: running the fake codex', () => {
     assert.equal(r.json.timedOut, true);
     assert.equal(r.json.ok, false);
     assert.equal(r.json.exitCode, 124);
-    assert.equal(r.json.sessionId, '01a18757-565f-7be2-8317-c8463e263b5c');
+    assert.equal(r.json.sessionId, '00000000-0000-7000-8000-000000000001');
     assert.ok(Date.now() - started < 15_000);
+    assert.ok(waitUntilGone(r.record.pid), 'fake codex should be gone');
+  });
+
+  test('timeout kills the whole process group, including a grandchild', () => {
+    const started = Date.now();
+    const r = run(['exec', '--repo', repo, '--prompt-file', prompt, '--effort', 'low', '--model', 'm',
+      '--timeout', '1s', '--out-dir', outDir()], { mode: 'grandchild-hang' });
+    const elapsed = Date.now() - started;
+    assert.equal(r.status, 124, r.stderr);
+    assert.equal(r.json.timedOut, true);
+    assert.ok(elapsed < 1000 + 5000 + 4000, `took ${elapsed}ms`);
+    assert.ok(Number.isInteger(r.record.grandchildPid));
+    assert.ok(waitUntilGone(r.record.grandchildPid), 'grandchild sleep should be gone');
+    assert.ok(waitUntilGone(r.record.pid), 'fake codex should be gone');
+  });
+
+  test('SIGTERM is escalated to SIGKILL for a codex that ignores it', () => {
+    const started = Date.now();
+    const r = run(['exec', '--repo', repo, '--prompt-file', prompt, '--effort', 'low', '--model', 'm',
+      '--timeout', '1s', '--out-dir', outDir()], { mode: 'ignore-term' });
+    const elapsed = Date.now() - started;
+    assert.equal(r.status, 124, r.stderr);
+    assert.equal(r.json.timedOut, true);
+    assert.ok(elapsed >= 1000 + 4500, `SIGKILL came too early: ${elapsed}ms`);
+    assert.ok(elapsed < 1000 + 5000 + 4000, `took ${elapsed}ms`);
+    assert.ok(waitUntilGone(r.record.pid), 'fake codex should be gone');
+  });
+
+  test('SIGTERM to the wrapper is forwarded to codex; exit 143', async () => {
+    const { spawn } = await import('node:child_process');
+    const record = path.join(tmp, 'record-sigterm.json');
+    const child = spawn(process.execPath, [SCRIPTS.codexRun, 'exec', '--repo', repo, '--prompt-file', prompt,
+      '--effort', 'low', '--model', 'm', '--out-dir', outDir()], {
+      env: { ...process.env, CODEX_BIN: fakeCodex, FAKE_MODE: 'grandchild-hang', FAKE_RECORD: record },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    child.stdout.on('data', (d) => { stdout += d; });
+    const deadline = Date.now() + 5000;
+    while (!(fs.existsSync(record) && readJson(record).grandchildPid) && Date.now() < deadline) {
+      await new Promise((res) => setTimeout(res, 50));
+    }
+    const rec = readJson(record);
+    child.kill('SIGTERM');
+    const code = await new Promise((res) => child.on('close', res));
+    assert.equal(code, 143);
+    const j = JSON.parse(stdout);
+    assert.equal(j.ok, false);
+    assert.equal(j.interrupted, 'SIGTERM');
+    assert.ok(waitUntilGone(rec.pid), 'fake codex should be gone');
+    assert.ok(waitUntilGone(rec.grandchildPid), 'grandchild should be gone');
   });
 
   test('missing binary: exit 1 with error', () => {

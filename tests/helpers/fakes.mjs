@@ -45,3 +45,24 @@ export function runScript(script, args, { env = {}, cwd, timeout = 30_000 } = {}
 export function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
+
+// True while `pid` exists (process.kill(pid, 0) does not throw ESRCH).
+export function isAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code !== 'ESRCH';
+  }
+}
+
+// Polls (synchronously) until `pid` is gone; returns true if it went away in time.
+export function waitUntilGone(pid, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
+  const cell = new Int32Array(new SharedArrayBuffer(4));
+  while (Date.now() < deadline) {
+    if (!isAlive(pid)) return true;
+    Atomics.wait(cell, 0, 0, 50);
+  }
+  return !isAlive(pid);
+}

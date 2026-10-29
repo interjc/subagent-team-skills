@@ -28,12 +28,15 @@ Usage:
 
 Options:
   --vendors <list>     Comma-separated vendor prefixes (default: ${DEFAULT_VENDORS.join(',')}).
-  --since-days <n>     Only models released in the last n days (default 365).
+  --since-days <n>     Only models OpenRouter listed in the last n days (default 365).
   --limit <n>          Models per vendor, newest first (default 8).
   --include-variants   Keep ids containing ":" (e.g. :free, :thinking).
   --file <path>        Read a saved ${SOURCE_URL} response instead of fetching.
   --json               Print one JSON object instead of tables.
   --help               Show this help.
+
+Columns: listed = the date OpenRouter listed the model (its "created" field),
+not necessarily the vendor's release date. Prices are USD per 1M tokens.
 
 Exit codes: 0 ok; 1 usage error; 2 OpenRouter (or --file) could not be read.
 `;
@@ -61,6 +64,7 @@ export function parseArgs(argv) {
     const value = () => {
       const v = inline ?? argv[++i];
       if (v === undefined) throw new UsageError(`${arg} needs a value`);
+      if (v.startsWith('--')) throw new UsageError(`${arg} needs a value, got option ${v}`);
       return v;
     };
     switch (arg) {
@@ -89,7 +93,7 @@ function perMTok(price) {
   return Math.round(n * 1e6 * 10_000) / 10_000;
 }
 
-function releasedDate(created) {
+function listedDate(created) {
   if (typeof created !== 'number' || !Number.isFinite(created)) return null;
   return new Date(created * 1000).toISOString().slice(0, 10);
 }
@@ -114,7 +118,7 @@ export function selectModels(data, opts, nowMs = Date.now()) {
       .map((m) => ({
         id: m.id,
         name: m.name ?? null,
-        released: releasedDate(m.created),
+        listed: listedDate(m.created),
         contextLength: m.context_length ?? null,
         inputPerMTok: perMTok(m.pricing?.prompt),
         outputPerMTok: perMTok(m.pricing?.completion),
@@ -129,10 +133,10 @@ function money(v) {
 
 // One vendor's models -> aligned text table.
 export function formatTable(models) {
-  const header = ['id', 'released', 'context', '$/1M in', '$/1M out'];
+  const header = ['id', 'listed', 'context', '$/1M in', '$/1M out'];
   const rows = models.map((m) => [
     m.id,
-    m.released ?? '?',
+    m.listed ?? '?',
     m.contextLength != null ? String(m.contextLength) : '?',
     money(m.inputPerMTok),
     money(m.outputPerMTok),
@@ -167,7 +171,7 @@ async function fetchModels() {
 }
 
 const FALLBACK_HINT = `Fall back to the vendors' official model pages:
-  https://docs.anthropic.com/en/docs/about-claude/models/overview
+  https://platform.claude.com/docs/en/about-claude/models/overview
   https://platform.openai.com/docs/models
   https://ai.google.dev/gemini-api/docs/models
 and to what your harness actually exposes.`;

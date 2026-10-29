@@ -19,6 +19,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 export const SANDBOXES = ['read-only', 'workspace-write'];
 const KILL_GRACE_MS = 5000;
+const DRAIN_MS = 500;
+const MAX_TIMEOUT_SEC = 24 * 3600;
+const SIGNAL_EXIT = { SIGINT: 130, SIGTERM: 143 };
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 
 export const USAGE = `codex-run.mjs - run Codex CLI non-interactively with explicit settings.
@@ -44,7 +47,7 @@ Options:
   --session <id>        Session id to resume (resume only).
   --out-dir <dir>       Where to write log.txt, last.md, summary.json
                         (default: <tmp>/codex-run/<YYYYMMDD-HHMMSS>-<hex>).
-  --timeout <dur>       Kill codex after e.g. 90s, 10m, 1h (default: no timeout).
+  --timeout <dur>       Kill codex after e.g. 90s, 10m, 1h (max 24h; default: no timeout).
                         SIGTERM, then SIGKILL after 5s; exit code 124.
   --json                Ask codex for JSONL events (--json) instead of plain text.
   --dry-run             Validate and print the command without running it.
@@ -55,7 +58,10 @@ Environment:
 
 Output:
   One JSON object on stdout (also saved as summary.json). Hints go to stderr.
-  Exit code: codex's exit code; 124 on timeout; 1 on usage or launch errors.
+  Exit code: codex's exit code; 124 on timeout; 1 on usage or launch errors;
+  130/143 when this wrapper is interrupted by SIGINT/SIGTERM (forwarded to codex).
+  codex runs in its own process group; on timeout or interrupt the whole group is
+  stopped, so commands codex started do not outlive it.
 `;
 
 export class UsageError extends Error {}
@@ -67,6 +73,7 @@ export function parseDuration(value) {
   if (!m) throw new UsageError(`invalid duration "${value}" (use e.g. 90s, 10m, 1h)`);
   const n = Number(m[1]) * { s: 1, m: 60, h: 3600 }[(m[2] || 's').toLowerCase()];
   if (!(n > 0)) throw new UsageError(`duration must be positive: "${value}"`);
+  if (n > MAX_TIMEOUT_SEC) throw new UsageError(`duration "${value}" is too long (max 24h)`);
   return n;
 }
 
@@ -110,6 +117,7 @@ export function parseArgs(argv) {
     } else if (VALUE_OPTS[arg]) {
       const v = inline ?? argv[++i];
       if (v === undefined) throw new UsageError(`${arg} needs a value`);
+      if (v.startsWith('--')) throw new UsageError(`${arg} needs a value, got option ${v}`);
       opts[VALUE_OPTS[arg]] = v;
     } else if (arg.startsWith('-') && arg !== '-') {
       throw new UsageError(`unknown option: ${arg}`);
@@ -274,7 +282,7 @@ export function buildResumeHint(cfg, sessionId, scriptPath = SCRIPT_PATH) {
   return parts.map((p) => (p === '<NEW_PROMPT>' ? p : shellQuote(p))).join(' ');
 }
 
-export function buildResult(cfg, { exitCode, timedOut, logText, launchError }) {
+export function buildResult(cfg, { exitCode, timedOut, logText, launchError, interrupted = null }) {
   const parsed = parseLog(logText);
   const logFile = path.join(cfg.outDir, 'log.txt');
   const lastMessageFile = path.join(cfg.outDir, 'last.md');
@@ -283,7 +291,7 @@ export function buildResult(cfg, { exitCode, timedOut, logText, launchError }) {
   const sessionId = parsed.sessionId || cfg.session || null;
   const effortMismatch = Boolean(parsed.effortReported && parsed.effortReported.toLowerCase() !== cfg.effort);
   const result = {
-    ok: exitCode === 0 && !timedOut,
+    ok: exitCode === 0 && !timedOut && !interrupted,
     exitCode,
     timedOut,
     mode: cfg.mode,
@@ -303,38 +311,68 @@ export function buildResult(cfg, { exitCode, timedOut, logText, launchError }) {
     lastMessageBytes,
     resumeHint: buildResumeHint(cfg, sessionId),
   };
+  if (interrupted) result.interrupted = interrupted;
   if (launchError) result.error = launchError;
   return result;
 }
 
 // ---------- process runner ----------
 
-export function runCodex({ bin, args, cwd, stdinFile, logFile, timeoutSec }) {
+// Sends a signal to the child's whole process group (POSIX) or just the child (Windows).
+export function signalTree(child, sig) {
+  if (!child || child.pid === undefined) return;
+  try {
+    if (process.platform === 'win32') child.kill(sig);
+    else process.kill(-child.pid, sig);
+  } catch { /* already gone */ }
+}
+
+// Runs codex in its own process group with stdin from a file and stdout+stderr
+// into the log. On timeout (or SIGINT/SIGTERM to this wrapper) the whole group
+// gets SIGTERM, then SIGKILL after 5s. Leftover group members are cleaned up
+// when codex exits.
+export function runCodex({ bin, args, cwd, stdinFile, logFile, timeoutSec, killGraceMs = KILL_GRACE_MS }) {
   return new Promise((resolve) => {
     const logFd = fs.openSync(logFile, 'w');
     const inFd = fs.openSync(stdinFile, 'r');
     let timedOut = false;
+    let interrupted = null;
     let settled = false;
     let timer = null;
     let killTimer = null;
+    let child = null;
+    const onSignal = (sig) => {
+      if (interrupted) return;
+      interrupted = sig;
+      signalTree(child, sig);
+      killTimer = killTimer || setTimeout(() => signalTree(child, 'SIGKILL'), killGraceMs);
+    };
+    const onInt = () => onSignal('SIGINT');
+    const onTerm = () => onSignal('SIGTERM');
     const finish = (res) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       clearTimeout(killTimer);
+      process.off('SIGINT', onInt);
+      process.off('SIGTERM', onTerm);
+      // Clean up anything codex left behind in its group.
+      signalTree(child, timedOut || interrupted ? 'SIGKILL' : 'SIGTERM');
       try { fs.closeSync(logFd); } catch { /* ignore */ }
       try { fs.closeSync(inFd); } catch { /* ignore */ }
-      resolve({ ...res, timedOut });
+      resolve({ ...res, timedOut, interrupted });
     };
-    let child;
     try {
-      child = spawn(bin, args, { cwd, stdio: [inFd, logFd, logFd] });
+      child = spawn(bin, args, { cwd, stdio: [inFd, logFd, logFd], detached: process.platform !== 'win32' });
     } catch (err) {
       finish({ exitCode: 1, launchError: `failed to launch ${bin}: ${err.message}` });
       return;
     }
+    process.on('SIGINT', onInt);
+    process.on('SIGTERM', onTerm);
     child.on('error', (err) => finish({ exitCode: 1, launchError: `failed to launch ${bin}: ${err.message}` }));
     child.on('exit', (code, signal) => {
+      if (interrupted) return finish({ exitCode: SIGNAL_EXIT[interrupted] ?? 1, launchError: `interrupted by ${interrupted}; codex was stopped` });
       if (timedOut) return finish({ exitCode: 124 });
       if (code !== null) return finish({ exitCode: code });
       return finish({ exitCode: 1, launchError: `codex was terminated by ${signal}` });
@@ -342,9 +380,8 @@ export function runCodex({ bin, args, cwd, stdinFile, logFile, timeoutSec }) {
     if (timeoutSec) {
       timer = setTimeout(() => {
         timedOut = true;
-        child.kill('SIGTERM');
-        killTimer = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS);
-        killTimer.unref();
+        signalTree(child, 'SIGTERM');
+        killTimer = setTimeout(() => signalTree(child, 'SIGKILL'), killGraceMs);
       }, timeoutSec * 1000);
     }
   });
