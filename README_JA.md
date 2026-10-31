@@ -145,6 +145,7 @@ Claude Code プラグインに同梱される agent：`team-reviewer`（通常�
 | `skills/subagent-team/scripts/env-check.cjs` | セッション開始時の環境ヘルスチェック：Node.js（下限 18、推奨 24）、git、ホスト agent の推測、外部チーム（Codex CLI、agy、agy-staff、その他の agent CLI、プロジェクトの MCP サーバー）、プロジェクトのチームポリシーとチームボード。保守的な構文で書かれているため、古い Node でも動作して問題を説明できます。 |
 | `skills/subagent-team/scripts/team-board.mjs` | チームボード：`init` は `docs/agent-team/` の骨格を作り（既存ファイルは上書きしない）、`new` はタスクカードとその索引行を追加し、`status` はタスクの状態と未回答の質問を集計して、索引・カード・`AGENTS.md` の食い違いを報告します。 |
 | `skills/subagent-team/scripts/model-roster.mjs` | OpenRouter の公開モデル一覧から、Anthropic / OpenAI / Google / DeepSeek の最新モデルを価格とコンテキスト長付きで一覧表示します。抽象ティアを現在のモデルに対応づけるのに使います。 |
+| `skills/subagent-team/scripts/audit-dispatch.mjs` | ハーネスのトランスクリプトから、セッションで実際に何が動いたかを一覧表示します（各 agent のモデルと effort、および外部ジョブ）。Claude Code のみ。 |
 | `skills/cli-agent-delegation/scripts/codex-run.mjs` | `codex exec` / `exec resume` を、effort の明示指定を必須にして実行します。`ultra` と `danger-full-access` を拒否し、タイムアウトに対応し、ログと最終回答をファイルに書き、session id 付きの JSON サマリーを出力します。 |
 | `skills/cli-agent-delegation/scripts/agy-run.mjs` | agy-staff プラグインがない場合に `agy` をヘッドレスで実行します。モデル id を検証し、Claude / GPT モデルへの回り道を拒否し、`--write` を制限なしモードに対応させ、conversation id による継続に対応します。 |
 | `skills/cli-agent-delegation/scripts/doctor.mjs` | 読み取り専用の環境レポート：CLI の有無とバージョン、Codex のデフォルト effort の落とし穴、使えるモデル、agy-staff のインストール状況。 |

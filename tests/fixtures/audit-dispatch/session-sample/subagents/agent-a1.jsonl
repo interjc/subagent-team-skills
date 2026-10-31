@@ -1,0 +1,4 @@
+{"type":"user","message":{"content":[{"type":"text","text":"Review the payment module diff."}]}}
+{"type":"assistant","requestedModel":"opus","effort":"high","message":{"model":"claude-opus-5.5","content":[{"type":"text","text":"Checking test suite first."}]}}
+{malformed json line
+{"type":"assistant","requestedModel":"opus","effort":"high","message":{"model":"claude-opus-5.5","content":[{"type":"text","text":"PASS"}]}}

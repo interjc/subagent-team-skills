@@ -4,7 +4,7 @@ description: Outsource well-specified bulk coding work to another vendor's agent
 license: MIT
 compatibility: Needs a shell. The helper scripts need Node.js 18+ (24 recommended); external agents need their own CLIs and accounts (Codex CLI, agy). Run scripts/doctor.mjs first.
 metadata:
-  version: "0.2.0"
+  version: "0.2.1"
 ---
 
 # CLI Agent Delegation
@@ -20,7 +20,7 @@ Only when **all four** hold:
 1. **Fully specified**: what to do and which files are decided; no product or architecture decisions remain.
 2. **No risk**: no business code for billing, payment or auth; no data migrations; no concurrency or data-loss paths; mistakes are easy to see and roll back.
 3. **Objective acceptance**: runnable commands, or a checklist anyone can tick (key sets, placeholders, line counts, snapshots).
-4. **Bulk or repetitive**: translations from a frozen key list, mechanical renames, filling in from a template, homogeneous integrations, snapshot and exhaustive tests, doc and README syncs.
+4. **Bulk or repetitive**: translations from a frozen key list, mechanical renames, filling in from a template, homogeneous integrations, snapshot and exhaustive tests, doc and README syncs. A small pure module with no billing or auth role, a frozen signature and hand-checkable cases also qualifies.
 
 If writing the brief costs as much as doing the job (a ten-line edit), do not outsource. Tests and snapshots *for* a sensitive module are fine; the module's business code is not.
 
@@ -54,6 +54,7 @@ Write the brief to a file in your scratch directory. If the `subagent-team` skil
 - **"If anything falls outside this spec, stop and explain it in your final reply; do not decide."**
 - **Prohibitions**: no state-changing git operations (read-only `git status` / `git diff` is fine), no installs, builds, dev servers or database commands, no reading `.env*`, nothing outside the lease.
 - **Report**: files changed and why, uncertain spots, problems noticed but not fixed.
+- **Say where acceptance runs.** A sandboxed job may be unable to start test runners that need local ports. Tell it to report that and give what it could run; the liaison runs the rest outside the sandbox.
 
 ## 4. Codex CLI
 
@@ -127,6 +128,7 @@ The brief travels as a command-line argument, so keep it under 100 KB (the wrapp
 - Fixed overhead of about five minutes and millions of cached tokens per job, and context cost grows with batch size. Still far cheaper than translating in a top-tier session.
 - **Job state is per worktree.** Serialize agy writing jobs in one checkout, or give each its own worktree. While a job runs, do not edit its files. Add follow-up keys after it returns.
 - It needs to run outside restrictive host sandboxes, because it uses local ports and OAuth tokens.
+- **`--write` means no permission prompts at all.** A host's permission layer may refuse it. Do not retry with other flags. Ask the user or use Codex with `workspace-write`, which is a real sandbox. After the user authorizes writes, prove the path once with a tiny job in a scratch directory before a real one.
 
 ## 6. Acceptance after the job returns
 

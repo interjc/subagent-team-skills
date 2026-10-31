@@ -25,6 +25,7 @@ Lessons:
 |---|---|---|---|
 | `gpt-6-luna` · high | Rebuild a docs index covering dozens of documents | ~1.7 min / 82k | Passed first time, inside the lease, no dead links; also flagged documents that looked stale |
 | `gpt-6.1-sol` · high | Rewrite the root README from current code (several hundred lines changed) | ~4.8 min / 88k | Versions, scripts, paths, dozens of environment variables and webhook events all correct; one duplicated heading for the director to fix |
+| Mid-tier model · medium (`workspace-write`) | Small pure scoring module with a frozen signature and a spec | 1 round / ~27k | Passed in one round; both acceptance commands passed when the liaison ran them |
 
 Lessons:
 

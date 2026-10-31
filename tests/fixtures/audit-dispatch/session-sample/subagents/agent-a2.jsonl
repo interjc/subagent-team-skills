@@ -1,0 +1,4 @@
+{"type":"user","message":{"content":[{"type":"text","text":"Implement the scoring helper."}]}}
+{"type":"assistant","requestedModel":"sonnet","effort":"medium","message":{"model":"claude-sonnet-5.5","content":[{"type":"text","text":"Writing unit tests."}]}}
+{"type":"assistant","requestedModel":"sonnet","effort":"medium","message":{"model":"claude-sonnet-5.5","content":[{"type":"text","text":"Implementing module."}]}}
+{"type":"assistant","message":{"model":"claude-haiku-5.5","content":[{"type":"text","text":"Summary line."}]}}

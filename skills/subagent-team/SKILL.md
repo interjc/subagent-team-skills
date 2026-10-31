@@ -4,7 +4,7 @@ description: Run multi-file, multi-phase coding work as a small software organis
 license: MIT
 compatibility: The method itself needs nothing but a harness that can spawn subagents. The optional helper scripts need Node.js 18+ (24 recommended) and git; run scripts/env-check.cjs at the start of a session.
 metadata:
-  version: "0.2.0"
+  version: "0.2.1"
 ---
 
 # Subagent Team
@@ -98,6 +98,8 @@ Two principles run through everything:
 
 - The director runs at **high tier, high effort**: the session's own model, never switched. As of 2026-10 that meant Claude Opus 5.5 or GPT-6.1 Sol at `high`.
 - Tier and effort are independent. Mid + high effort suits a precise but fiddly implementation; high + low effort suits a quick architectural sanity check. Effort follows **how much can only be settled by reasoning**, not the size of the change.
+- **Pick before every dispatch and every rework round.** State the role, tier, effort and outsourcing gate result in one line, against the project's role table. Defaults drift: a run that never names them ends up with whatever model was used last.
+- **Risk sets a floor, not just a different model.** A review of money, auth, migrations or irreversible data is a senior review: high or top tier at high effort, on a model other than the author's. A mid-tier reviewer does not meet the floor, even at high effort. When the author is already on the strongest in-house model that fits, use a different top-tier model.
 - External teams have tiers too: one team can fill external-fast with a flash model and external-strong with its strong model. The project's roster records which team and model fills which external tier ([references/external-teams.md](references/external-teams.md)).
 - The project policy decides concrete models; under `auto` you choose and state each pick in one line. Mapping procedure, role table, dated example roster and `scripts/model-roster.mjs`: [references/model-tiers.md](references/model-tiers.md). Use what the harness actually exposes, not names from memory. If the harness cannot set effort per call, choose by tier only and ask for a thorough job in the brief.
 
@@ -125,7 +127,9 @@ Skipped layers can still be summoned when a question needs them. Outside `solo`,
 1. **Fully specified**: what to do and which files are decided; no product or architecture decisions remain.
 2. **No risk**: does not touch business logic in billing, payment or auth, data migrations, concurrency or data-loss paths; a mistake is easy to spot and roll back.
 3. **Objective acceptance**: runnable commands or a checklist anyone can tick (key sets, placeholders, line counts, snapshots).
-4. **Bulk or repetitive**: translations, homogeneous integrations, filling in from a template, snapshot and exhaustive tests, doc syncs, mechanical refactors.
+4. **Bulk or repetitive**: translations, homogeneous integrations, filling in from a template, snapshot and exhaustive tests, doc syncs, mechanical refactors. A small pure module with no billing or auth role, a frozen signature and hand-checkable cases also qualifies.
+
+**Run the gate on every task.** During breakdown, write the gate result on each task's card. In-house is an outcome of the gate, not the default. A long run with external teams on the roster and no external job is a smell: it usually means the gate was never run. Every sensitive design also gets a read-only second opinion from another vendor before it is frozen.
 
 **Exception: read-only second opinions.** A review of a diff or plan by another vendor's model changes nothing, so criterion 4 does not apply; the external verdict is input for the in-house reviewer, never the acceptance itself. Tests and snapshots *for* a sensitive module can be outsourced; the module's business code cannot.
 
@@ -179,7 +183,7 @@ Every escalation carries the question, context with evidence, options with a rec
 
 ## 8. Briefs, verification and review
 
-**Briefs.** A subagent knows only what you write. Every brief is self-contained: goal; background with **verified facts** (marked "verified, do not re-check", with file:line or command) separated from **things to verify yourself** (with "if it differs, stop and report"); the read-only contract; the lease (may edit / must not touch); reference files to imitate; constraints *with reasons*; runnable acceptance commands; deliverables; report format; the card path and escalation target. Standing prohibitions unless the brief says otherwise: no state-changing git operations (read-only `git status` / `git diff` is expected); no starting or restarting dev servers; no editing `.env*` or reading secrets; no repo-wide rewriting commands while others work in parallel; no editing shared files (report new i18n keys or shared-file changes instead). Outsourced briefs paste in every spec they need, use executable paths in acceptance commands, and say: "If anything falls outside this spec, stop and explain it in your final reply; do not decide." Templates (implementer, outsourced, liaison, reviewer, expert) and a pre-dispatch checklist: [references/brief-template.md](references/brief-template.md).
+**Briefs.** A subagent knows only what you write. Every brief is self-contained: goal; background with **verified facts** (marked "verified, do not re-check", with file:line or command) separated from **things to verify yourself** (with "if it differs, stop and report"); the read-only contract; the lease (may edit / must not touch); reference files to imitate; constraints *with reasons*; runnable acceptance commands; deliverables; report format; the card path and escalation target. Standing prohibitions unless the brief says otherwise: no state-changing git operations (read-only `git status` / `git diff` is expected); no starting or restarting dev servers; no editing `.env*` or reading secrets; no repo-wide rewriting commands while others work in parallel; no editing shared files (report new i18n keys or shared-file changes instead). Outsourced briefs paste in every spec they need, use executable paths in acceptance commands, and say: "If anything falls outside this spec, stop and explain it in your final reply; do not decide." Templates (implementer, outsourced, liaison, reviewer, expert) and a pre-dispatch checklist: [references/brief-template.md](references/brief-template.md). Reviewers and implementers must never print a secret: masking fails open, so a broken `sed` prints the value. Compare secrets by hash and refer to them by file name. If one reaches a report anyway, treat that report as exposed, do not quote it, and compare hashes against the deployed config to judge scope.
 
 **Verification.**
 
@@ -187,7 +191,7 @@ Every escalation carries the question, context with evidence, options with a rec
 - **Reviewers work in this order**: (1) audit the tests; (2) execute them and paste real output; (3) only then read code, hunting for risks the brief and tests missed. Test gaps mean NEEDS_CHANGES.
 - Reviewers are read-only, never review their own implementation, and preferably use a different model (ideally a different vendor) from the implementer.
 - **Acceptance**: a subagent's "done" is a claim. Look at the diff, check the lease, run the acceptance commands, verify factual claims in docs. L2 accepts where the flow has it; L1 always runs the integration gate.
-- **Rework**: a small fix may be done by the director outside Strict mode; L2 never edits, it sends the fix back. Anything bigger → send the concrete failure to the *same* agent. External work that fails twice comes back in-house.
+- **Rework**: a small fix may be done by the director outside Strict mode; L2 never edits, it sends the fix back. Anything bigger → send the concrete failure to the *same* agent. External work that fails twice comes back in-house. Continuity does not preserve a wrong tier: if the agent is under-tiered for the task, or the rework adds sensitive content, split that part out to a correctly tiered worker.
 
 Review procedure, working-tree fingerprints, mutation checks, command pitfalls: [references/verification.md](references/verification.md).
 
@@ -210,6 +214,7 @@ What to write where, and when: [references/team-board.md](references/team-board.
 - **Wait for completion notifications**; do not poll logs or intermediate files for reassurance. Liaisons do the waiting for external jobs.
 - **Worktrees** only for genuinely parallel writes to the same area, or to protect unfinished state. Never delete a worktree something still depends on; prefer recoverable cleanup over `rm -rf`.
 - **Only stop processes you started** (by PID or your own port), never by name pattern; never touch the user's dev server.
+- **Audit from the logs, not from memory.** At each milestone, and whenever someone asks whether the process was followed, list what actually ran: each agent's model and effort, and the external jobs. Compare it with the role table and record each deviation with its fix. Mechanics per harness are in the harness references.
 
 ## References
 
@@ -224,6 +229,7 @@ What to write where, and when: [references/team-board.md](references/team-board.
 - [references/verification.md](references/verification.md): review procedure, fingerprints, mutation checks, command pitfalls
 - [references/strict-mode.md](references/strict-mode.md): Strict mode across the layers, edit leases, status messages, final reports
 - [references/harness-claude-code.md](references/harness-claude-code.md): Agent / SendMessage / task list / background agents, effort, known quirks
+- `scripts/audit-dispatch.mjs`: session dispatch audit from harness transcripts (each agent's model and effort, plus external jobs; Claude Code)
 - [references/harness-codex.md](references/harness-codex.md): spawn_agent / followup_task, skill discovery, unverified areas
 - [references/field-notes.md](references/field-notes.md): lessons from real projects
 - [references/reviewer-prompt.md](references/reviewer-prompt.md): reusable read-only reviewer instructions

@@ -152,6 +152,7 @@ Claude Code 插件附带两个审核 agent：
 | `skills/subagent-team/scripts/env-check.cjs` | 会话开始时的环境健康检查，覆盖 Node.js（下限 18、推荐 24）、git、宿主 agent 的初步判断、外包团队（Codex CLI、agy、agy-staff、其他 agent CLI、项目 MCP server）、团队策略和团队看板。用最保守的语法编写，Node 版本过旧时也能运行，并把问题说清楚 |
 | `skills/subagent-team/scripts/team-board.mjs` | 团队看板：`init` 生成 `docs/agent-team/` 骨架（从不覆盖已有文件），`new` 新建任务卡片并登记到索引，`status` 汇总任务状态和待回答的问题，并报告索引、卡片和 `AGENTS.md` 之间的不一致 |
 | `skills/subagent-team/scripts/model-roster.mjs` | 从 OpenRouter 的公开模型列表拉取 Anthropic / OpenAI / Google / DeepSeek 的最新模型，附价格和上下文长度，用来把抽象档位映射到当前型号 |
+| `skills/subagent-team/scripts/audit-dispatch.mjs` | 从宿主会话记录中列出本次会话实际跑了什么：每个 subagent 的模型与 effort，以及外包作业。仅限 Claude Code |
 | `skills/cli-agent-delegation/scripts/codex-run.mjs` | 封装 `codex exec` 和 `exec resume`。必须显式传 effort；拒绝 `ultra` 和 `danger-full-access`；支持超时；日志和最终回复写到文件；输出带 session id 的 JSON 摘要 |
 | `skills/cli-agent-delegation/scripts/agy-run.mjs` | 没装 agy-staff 时直接 headless 调用 `agy`。会校验模型 id；拒绝绕道调用 Claude / GPT 模型；`--write` 对应不受限模式；可以按 conversation id 续做 |
 | `skills/cli-agent-delegation/scripts/doctor.mjs` | 只读的环境报告：CLI 是否安装及版本、Codex 默认 effort 的坑、可用模型、agy-staff 是否已安装 |
