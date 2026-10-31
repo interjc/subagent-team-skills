@@ -5,7 +5,8 @@
 //
 // Checks: skill frontmatter (name, description, version), SKILL.md length,
 // every reference linked from its SKILL.md, no relative links across skills,
-// English-only skill content, README / README_ZH structural parity,
+// English-only skill content, structural parity of every README_<LANG>.md
+// translation with README.md (the source),
 // relative Markdown links, version consistency across manifests, reviewer
 // agent definitions in sync with the shared prompt, and a privacy scan for
 // personal paths, emails and token-like strings. Terms listed one per line in
@@ -175,16 +176,25 @@ export function markdownShape(text) {
   return { headings: headings.join(','), fences, links: links.join(' ') };
 }
 
-// README.md and README_ZH.md must keep the same structure: heading levels, code blocks and link targets.
+// README.md is the source; every translation README_<LANG>.md (e.g. README_ZH.md,
+// README_JA.md) must keep the same structure (heading levels, code blocks, link
+// targets), and README.md's language switcher must link to every translation.
+export function readmeTranslations(root) {
+  return fs.readdirSync(root).filter((f) => /^README_[A-Z]{2}(-[A-Z]{2})?\.md$/.test(f)).sort();
+}
+
 export function checkReadmeParity(root) {
   const en = path.join(root, 'README.md');
-  const zh = path.join(root, 'README_ZH.md');
-  if (!fs.existsSync(en) || !fs.existsSync(zh)) return [];
-  const a = markdownShape(fs.readFileSync(en, 'utf8'));
-  const b = markdownShape(fs.readFileSync(zh, 'utf8'));
+  if (!fs.existsSync(en)) return [];
+  const source = fs.readFileSync(en, 'utf8');
+  const a = markdownShape(source);
   const errors = [];
-  for (const key of ['headings', 'fences', 'links']) {
-    if (a[key] !== b[key]) errors.push(`README.md and README_ZH.md differ in ${key}: "${a[key]}" vs "${b[key]}"`);
+  for (const name of readmeTranslations(root)) {
+    const b = markdownShape(fs.readFileSync(path.join(root, name), 'utf8'));
+    for (const key of ['headings', 'fences', 'links']) {
+      if (a[key] !== b[key]) errors.push(`README.md and ${name} differ in ${key}: "${a[key]}" vs "${b[key]}"`);
+    }
+    if (!source.includes(`](${name})`)) errors.push(`README.md: language switcher does not link to ${name}`);
   }
   return errors;
 }
