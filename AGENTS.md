@@ -23,13 +23,17 @@ scripts/              # repository tooling (check-skills.mjs)
 ## 2. Language
 
 - Skill content (`SKILL.md`, `references/`, agent definitions, script output) is **English**.
-- Human-facing docs are **bilingual**: `README.md` / `README_ZH.md`, each with the language switcher at the top. Write or refine the Chinese version first, confirm it, then sync the English. A change to one must land with its counterpart.
+- Human-facing docs are written in **English first**. `README.md` is the source; translations sit next to it as `README_<LANG>.md` (currently `README_ZH.md` Simplified Chinese and `README_JA.md` Japanese), each with the same language switcher at the top.
+- Workflow: finalize the English version, then translate it into every other language. Translations follow the English; never add content to a translation alone. A change to `README.md` lands in the same commit as its translations.
+- Translations are ordinary, natural translations, not word-for-word. What must be exact is everything a reader acts on: install and update commands, requirements, the first-use steps, script names, paths and links. Prose may be shortened or rephrased.
+- Adding a language: create `README_<LANG>.md` and add it to the switcher in every README. `npm run check` compares each translation's headings, code blocks and link targets with `README.md` and fails if the switcher misses a translation.
 
 ## 3. Tool neutrality
 
-- Skill bodies use abstract roles and tiers (director / manager / staff; top / high / mid / low / external-fast / external-strong). Concrete model names appear only as dated examples ("as of 2026-10").
+- Skill bodies use abstract layers, roles and tiers: layers L1 director / L2 in-house experts / L3 in-house execution / L4 external teams; tiers top / high / mid / low / external-fast / external-strong. A layer is responsibility, a tier is model strength. Concrete model names appear only as dated examples ("as of 2026-10").
 - Harness-specific mechanics go into `references/harness-*.md`. Mark anything not personally verified as *unverified*.
 - Claude Code is the primary target, Codex secondary. Do not claim support for other agents beyond "installs via the Agent Skills format".
+- The same rule applies to external teams: agy and Codex CLI are used in real projects; OpenCode, Pi, Grok and MCP-fronted agents are *not tested*. Host-detection environment variables other than Claude Code's are *unverified* hints; keep `HOST_HINTS` in `env-check.cjs` and `references/host-harness.md` in agreement.
 
 ## 4. Privacy (this repository is public)
 

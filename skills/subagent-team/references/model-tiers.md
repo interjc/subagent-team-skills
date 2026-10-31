@@ -1,6 +1,6 @@
 # Model tiers
 
-The skill never hard-codes a vendor. In-house agents use four tiers, outsourced agents two:
+The skill never hard-codes a vendor. In-house agents (layers L1–L3) use four tiers, external teams (L4) two. A tier is model strength; the layer ([org-layers.md](org-layers.md)) is responsibility, and the two are chosen independently:
 
 | Tier | Position | Default effort |
 |---|---|---|
@@ -15,22 +15,25 @@ The two external tiers decide *how carefully* the work is done, not *whether ris
 
 ## Role → tier → effort
 
-| Task | Role | Tier · effort |
+| Task | Layer · role | Tier · effort |
 |---|---|---|
-| Orchestration, contracts, integration, commit | director | high · high |
-| Routine split, single-module design, acceptance against a precise spec | manager | mid · medium–high |
-| Cross-module split, architecture, phase code review, sensitive-module acceptance | manager | high · medium–high |
-| Quick architectural judgement, second look | manager | high · low–medium |
-| Specified component / API / storage implementation | worker | mid · medium |
-| Detail-heavy UI (responsive, touch interaction) | worker | mid · high |
-| Splitting a large file without behaviour change, cross-module change, hard bug | worker | high · high |
-| Billing / payment / auth logic | director or worker | high · medium–high |
-| Search, collect command output | runner | low · low |
-| The hardest design calls, options that all have flaws | expert | top · high |
-| Translations, bulk copy, mechanical replacements | outsourced | external-fast |
-| Doc syncs that require reading code, test backfills following existing patterns | outsourced | external-strong · high |
-| Large homogeneous implementation from a fixed spec | outsourced | external-strong · medium |
-| Read-only second opinion from another vendor | outsourced | external-strong · medium–high; verdict stays in-house |
+| Orchestration, task breakdown, flows, contracts, integration, commit | L1 director | high · high |
+| Routine split, single-module design, acceptance against a precise spec | L2 designer | mid · medium–high |
+| Cross-module split, architecture, owning a task line | L2 designer / task lead | high · medium–high |
+| Phase code review, sensitive-module acceptance | L2 senior reviewer | high · medium–high |
+| Quick architectural judgement, second look | L2 expert | high · low–medium |
+| The hardest design calls, options that all have flaws | L2 principal expert | top · high |
+| Specified component / API / storage implementation | L3 implementer | mid · medium |
+| Detail-heavy UI (responsive, touch interaction) | L3 implementer | mid · high |
+| Splitting a large file without behaviour change, cross-module change, hard bug | L3 implementer | high · high |
+| Billing / payment / auth logic | L1 or L3 implementer, L2 review | high · medium–high |
+| Routine independent review, running a verification list | L3 reviewer / tester | mid · medium |
+| Search, collect command output | L3 runner | low · low |
+| Tracking an external job, simple answers, mechanical acceptance checks | L3 liaison | low · low (mid if checks need code reading) |
+| Translations, bulk copy, mechanical replacements | L4 | external-fast |
+| Doc syncs that require reading code, test backfills following existing patterns | L4 | external-strong · high |
+| Large homogeneous implementation from a fixed spec | L4 | external-strong · medium |
+| Read-only second opinion from another vendor | L4 | external-strong · medium–high; verdict stays in-house |
 
 Reviewer effort: single file, straightforward logic, clear blast radius → medium; many files, cross-module, irreversible consequences → high or above.
 
@@ -62,13 +65,13 @@ Ranking heuristic: within a vendor, the newest model at the highest price is usu
 
 ## Example roster (as of 2026-10)
 
-An example, not a rule. It shows the shape: a strong director, a few strong managers from *different vendors* (so reviews and second opinions do not share blind spots), and a broad pool of cheaper staff.
+An example, not a rule. It shows the shape: a strong director (L1), a few strong experts from *different vendors* (L2, so reviews and second opinions do not share blind spots), and a broad pool of cheaper in-house and external executors (L3, L4).
 
 | Layer | Models used | Notes |
 |---|---|---|
-| Director | Claude Opus 5.5 (Claude Code) or GPT-6.1 Sol (Codex), effort high | one main session |
-| Managers | GPT-6.1 Sol, Claude Opus 5.5, Claude Fable 5.1 | split, design, review, expert calls |
-| Staff | Claude Sonnet 5.5, Gemini 4, Gemini 3.8 Flash, DeepSeek 4.1 Flash | dozens of tasks over a project |
+| L1 director | Claude Opus 5.5 (Claude Code) or GPT-6.1 Sol (Codex), effort high | one main session |
+| L2 experts | GPT-6.1 Sol, Claude Opus 5.5, Claude Fable 5.1 | split, design, review, expert calls |
+| L3 / L4 executors | Claude Sonnet 5.5, Claude Haiku 5.5 (liaisons, runners), Gemini 4, Gemini 3.8 Flash, DeepSeek 4.1 Flash | dozens of tasks over a project |
 
 Tier mapping that went with it in Claude Code + agy + Codex CLI:
 
@@ -88,3 +91,7 @@ Notes that held at the time:
 - With Codex as the main session, GPT-6.1 Sol at `high` was the director, the in-family `gpt-6-luna` handled simple work, and the expert was the top model Codex offered.
 
 Other harnesses: rank whatever models they expose into the same tiers by capability and price. If effort cannot be set per call, choose by tier only.
+
+## External teams have tiers too
+
+Each external team usually fills both external tiers with different models or effort levels: a flash-class model at medium for external-fast, its strong model at medium–high for external-strong. The project's external roster ([project-setup.md](project-setup.md), [external-teams.md](external-teams.md)) records, per team, which model fills which tier. Rank a new team's models the same way as in-house ones: what the CLI actually lists, then price and recency. Teams that only re-sell your in-house vendor's models do not count as another vendor.

@@ -8,7 +8,8 @@ Asking a model to "read the code and think about what could go wrong" is slow, e
 |---|---|
 | Implementer | Writes unit tests and a runnable verification list; it knows best what changed and where the edges are |
 | Reviewer | Audits those tests first, executes them, then hunts for risks outside them |
-| Director / orchestrator | Accepts: scope check, targeted re-runs, factual checks, fills gaps the brief missed |
+| L2 (where the flow has it) and L1 director | Accept: scope check, targeted re-runs, factual checks, fills gaps the brief missed; L1 always runs the integration gate |
+| Liaison (external jobs) | Runs the acceptance commands and mechanical checks on the job's output; escalates instead of judging |
 | Browser | Last layer, a few targeted checks, never open-ended exploration |
 
 ## What to unit-test
@@ -28,7 +29,7 @@ Ask the implementer to explain why it wrote these tests and not others; that exp
 2. **Execute**: run the tests, every command in the verification list, every browser step that the reviewer can actually perform. Paste real output; do not restate the implementer's output.
 3. **Hunt outside the checklist**: now read code, with specific questions. Would this change affect something neither the brief nor the tests mention? The implementer answers for the brief; the reviewer answers for the result.
 
-Reviewers without browser tools must not be asked to "check in the browser". The orchestrator or director performs browser checks and passes the evidence into the review brief; the final report says which layer did what.
+Reviewers without browser tools must not be asked to "check in the browser". The task lead or director performs browser checks and passes the evidence into the review brief; the final report says which layer did what.
 
 ## Reviewer hygiene
 
@@ -64,7 +65,7 @@ cmp "$BK" src/rule.ts; echo "cmp exit=$?"         # expect: 0
 - Pitfall: `cp a "$TMPDIR/x" || cp a other/x` followed by reading from `other/x` truncated a target to 0 bytes once. One backup variable, `test -s` before overwriting, write the mutant to a temp file first.
 - For data-loss fixes, require each fix to be temporarily reverted to show its test fails; otherwise the test may not lock anything.
 
-## Acceptance by the director / orchestrator
+## Acceptance by the accepting layer (L2 or L1)
 
 - Scoped status and diff: did the change stay inside the lease? Are there user changes mixed in?
 - Did the reviewer run the quality gate itself and paste output? Re-run only if work changed after the review, evidence is stale, or the reviewer skipped something.
@@ -72,8 +73,8 @@ cmp "$BK" src/rule.ts; echo "cmp exit=$?"         # expect: 0
 - All findings closed, or listed as open.
 - New files: `git diff --check` ignores untracked files. Use `git diff --no-index --check /dev/null <file>` and read the output; its exit code is non-zero whenever the file differs from `/dev/null`, with or without warnings.
 - Shared logic: a report saying "all exits use the shared check" is not proof. `git grep` the call sites and compare with the list of exits in the brief; anything in the list and missing from the grep is a leak.
-- When the reviewer followed a brief that had a gap, the orchestrator fills the gap, again with something executable. Example: to prove a set of new URL-blocking rules hits no public page, compile the rules and run them against every public URL you can list.
-- Small rework can be closed by the orchestrator without a new review round only if **all** hold: every change is inside the reviewer's findings; the change is small (wording, a line, a single condition, no new files); each finding can be re-checked executably (grep, diff, a targeted test). The report must say "closed by orchestrator re-check", list the findings, the commands and outputs. Anything outside the findings goes back to a full review.
+- When the reviewer followed a brief that had a gap, the accepting layer fills the gap, again with something executable. Example: to prove a set of new URL-blocking rules hits no public page, compile the rules and run them against every public URL you can list.
+- Small rework can be closed by the accepting layer without a new review round only if **all** hold: every change is inside the reviewer's findings; the change is small (wording, a line, a single condition, no new files); each finding can be re-checked executably (grep, diff, a targeted test). The report must say "closed by acceptance re-check", list the findings, the commands and outputs. Anything outside the findings goes back to a full review.
 
 ## Command pitfalls that make checks pass silently
 

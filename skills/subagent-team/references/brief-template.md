@@ -85,6 +85,39 @@ External agents only know the brief and cannot ask follow-up questions.
 - **No decisions**: "If anything falls outside this spec, stop and explain it in your final reply; do not decide."
 - **Prohibitions**: state-changing git operations (read-only status/diff is fine); installing packages, builds, dev servers, database commands; reading `.env*`; editing outside the lease.
 - **Report**: files changed and why, uncertain spots, problems noticed but not fixed.
+- **Questions go in the final reply**: "If you are blocked, stop and list each question with what you tried; your liaison will answer and continue this job."
+
+## Liaison brief
+
+The liaison (L3, low tier) tracks one external job, or one team's sequential jobs. It needs everything to act without asking, and a clear line between what it may answer and what it must escalate.
+
+```markdown
+## Job
+Card: <docs/agent-team/tasks/<ID>.md> (you are its holder; keep Status, Job, Log and Questions current)
+External team: <team> via <CLI | plugin | MCP>; model <id>; effort <level>; sandbox <read-only | workspace-write>
+Frozen brief for the external agent: <path> (do not change it; continuations quote from it)
+Workspace: <absolute path>; lease of the job: <paths>; must not touch: <paths>
+Dispatch: <exact command, or "already running as job <id>, collect from <worktree>">
+Timeout: <duration>; wait in bounded slices (<how, for this host>)
+
+## Acceptance (run yourself; paste real output)
+- <command> → <expected>
+- `git status --short` and `git diff --stat`: nothing outside the lease
+
+## You may answer (by continuing the same job, quoting the source)
+- Facts in the frozen brief, the contract files <paths>, this card, and the repository (where a file is, what an existing convention is)
+- One rework round for mechanical failures, with the concrete failure output
+
+## Escalate to <L2 name | L1> (message + `[open]` question on the card), then wait
+- Any decision the brief does not make; contradictions in the spec
+- A second failed round; changes outside the lease; a resumable timeout; the team unavailable
+
+## Never
+Edit code, commit, talk to the user, start a second job for the same work, widen the lease.
+
+## Report (at transitions only: dispatched, returned, accepted / rework, escalated)
+One line each: job id, verdict, changed files, acceptance numbers, open questions.
+```
 
 ## Reviewer brief
 
@@ -100,7 +133,7 @@ Reviewers start cold and are read-only.
 
 ## Expert brief
 
-The expert is a read-only top-tier subagent. It answers "how should this be decided", not "is this diff correct".
+The expert (L2) is a read-only high or top-tier subagent. It answers "how should this be decided", not "is this diff correct".
 
 1. **Question**: what must be decided, why now, what happens if nothing is decided.
 2. **Verified facts**, each with a source (file:line, command + output summary).
@@ -117,5 +150,7 @@ The expert is a read-only top-tier subagent. It answers "how should this be deci
 - [ ] Deliverables require real output, `wc -l` of new files, and mutation checks where applicable.
 - [ ] Review briefs carry code and requirements, not your conclusion.
 - [ ] Outsourced work passes all four gate criteria; otherwise reassign in-house.
+- [ ] The task's flow is on its card, and the brief names the card and the escalation target.
+- [ ] Every external job has a liaison (or the director tracks it), and its ids go on the card at dispatch.
 - [ ] The next step depends on this result? Then dispatch in the foreground or plan how you will be notified.
 - [ ] Authorization for anything beyond the default (editing docs or agent config, deploying) is quoted verbatim from the user, with the files it covers.

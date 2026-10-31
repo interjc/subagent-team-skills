@@ -15,7 +15,7 @@ Insert new snapshots at the **top** of the section.
 ```markdown
 - **<TASK-ID> in flight (<YYYY-MM-DD HH:MM>, unfinished, written before session end)**:
   - Branch and base: `<branch>` @ `<short-hash>`; files belonging to this task: `<path>`, `<path>` (other changes are not this task's)
-  - Edit lease: <main checkout, or absolute worktree path>, held by <orchestrator name / agent id>
+  - Edit lease: <main checkout, or absolute worktree path>, held by <task lead name / agent id>
   - Progress: <steps done>; stuck at <step> because <reason>
   - Running: <agent id / name>, or external job `<job-id>` (conversation `<id>`; collect from <worktree> with `wait <job-id>`)
   - Next: <concrete command or file action>
@@ -29,7 +29,7 @@ Once the task is committed, turn this into a normal snapshot or delete it (the l
 Insert directly below the header separator:
 
 ```markdown
-| **<TASK-ID> (<one-line scope>; <reviewer verdict>; <awaiting commit, or committed `<hash>` and <pushed, or local only>>, not merged, not deployed)** | <spec reference / decision #> | `<pending-commit>`, or `<hash>` | Changes: <files and points>. Verified: type check <exit>; tests <files>/<tests>; <task numbers, e.g. "17 mutations all red">; <coverage limits: not deployed / no production curl / browser by orchestrator> |
+| **<TASK-ID> (<one-line scope>; <reviewer verdict>; <awaiting commit, or committed `<hash>` and <pushed, or local only>>, not merged, not deployed)** | <spec reference / decision #> | `<pending-commit>`, or `<hash>` | Changes: <files and points>. Verified: type check <exit>; tests <files>/<tests>; <task numbers, e.g. "17 mutations all red">; <coverage limits: not deployed / no production curl / browser by task lead> |
 ```
 
 ## User decision summary

@@ -61,7 +61,7 @@ describe('codex-run: validation', () => {
   test('ultra is rejected with an explanation', () => {
     const r = run(['exec', '--repo', repo, '--prompt-file', prompt, '--effort', 'ultra']);
     assert.equal(r.status, 1);
-    assert.match(r.stderr, /ultra lets Codex spawn its own sub-agents outside the orchestrator's control/);
+    assert.match(r.stderr, /ultra lets Codex spawn its own sub-agents outside the director's control/);
   });
 
   test('all supported efforts are accepted', () => {

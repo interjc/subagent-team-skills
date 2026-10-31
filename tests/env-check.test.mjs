@@ -34,6 +34,7 @@ function project(name, files = {}, { git = true } = {}) {
 }
 
 const missing = (name) => path.join(tmp, 'nope', name);
+const noOthers = () => ({ OPENCODE_BIN: missing('opencode'), PI_BIN: missing('pi'), GROK_BIN: missing('grok') });
 
 test('checkNode: error below the minimum, warning below recommended, ok at recommended', () => {
   const { MIN_NODE_MAJOR, RECOMMENDED_NODE_MAJOR, checkNode } = envCheck;
@@ -52,24 +53,29 @@ test('checkNode: error below the minimum, warning below recommended, ok at recom
 
 test('findPolicy detects the Subagent team section and its model policy', () => {
   const withPolicy = project('p1', { 'AGENTS.md': '# Rules\n\n## Subagent team\n- Model policy: hybrid\n' }, { git: false });
-  assert.deepEqual(envCheck.findPolicy(withPolicy), { found: true, file: 'AGENTS.md', modelPolicy: 'hybrid' });
+  assert.deepEqual(envCheck.findPolicy(withPolicy), { found: true, file: 'AGENTS.md', modelPolicy: 'hybrid', hostHarness: null, teamBoard: null });
   const claudeOnly = project('p2', { 'CLAUDE.md': '## Subagent team\nsee docs\n' }, { git: false });
-  assert.deepEqual(envCheck.findPolicy(claudeOnly), { found: true, file: 'CLAUDE.md', modelPolicy: null });
+  assert.deepEqual(envCheck.findPolicy(claudeOnly), { found: true, file: 'CLAUDE.md', modelPolicy: null, hostHarness: null, teamBoard: null });
+  const full = project('p4', { 'AGENTS.md': '## Subagent team\n- Model policy: auto\n- Host harness: Claude Code   <!-- confirmed -->\n- Team board: docs/team/README.md + native task list\n' }, { git: false });
+  const fp = envCheck.findPolicy(full);
+  assert.equal(fp.hostHarness, 'Claude Code');
+  assert.equal(fp.teamBoard, 'docs/team/README.md + native task list');
   const none = project('p3', { 'AGENTS.md': '## Something else\n' }, { git: false });
   assert.equal(envCheck.findPolicy(none).found, false);
 });
 
 test('runChecks: ready with optional tools present and a policy in the repo root', () => {
-  const dir = project('ready', { 'AGENTS.md': '## Subagent team\n- Model policy: auto\n' });
+  const dir = project('ready', { 'AGENTS.md': '## Subagent team\n- Model policy: auto\n- Host harness: Claude Code\n- Team board: native\n' });
   fs.mkdirSync(path.join(dir, 'sub'));
   const r = envCheck.runChecks({ root: path.join(dir, 'sub') },
-    { CODEX_BIN: fakeCodex, AGY_BIN: fakeAgy, HOME: tmp, CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg') }, 'v24.1.0');
+    { ...noOthers(), CODEX_BIN: fakeCodex, AGY_BIN: fakeAgy, HOME: tmp, CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg') }, 'v24.1.0');
   assert.equal(r.status, 'ready');
   assert.equal(fs.realpathSync(r.projectRoot), fs.realpathSync(dir), 'policy is looked up at the git top level');
   assert.equal(r.policy.modelPolicy, 'auto');
   assert.deepEqual(r.checks.map((c) => [c.id, c.status]), [
-    ['node', 'ok'], ['git', 'ok'], ['git-repo', 'ok'], ['codex', 'ok'], ['agy', 'ok'], ['agy-staff', 'info'],
+    ['node', 'ok'], ['git', 'ok'], ['git-repo', 'ok'], ['host', 'info'], ['codex', 'ok'], ['agy', 'ok'], ['agy-staff', 'info'],
   ]);
+  assert.equal(r.host.id, 'unknown');
   assert.deepEqual(r.next, ['Environment ready and policy found: proceed.']);
 });
 
@@ -91,6 +97,49 @@ test('runChecks: warns outside a git repository and on a non-recommended Node', 
   const r = envCheck.runChecks({ root: dir }, { CODEX_BIN: missing('codex'), AGY_BIN: missing('agy'), HOME: tmp }, 'v20.1.0');
   assert.equal(r.status, 'ready-with-warnings');
   assert.deepEqual(r.checks.filter((c) => c.status === 'warn').map((c) => c.id).sort(), ['git-repo', 'node']);
+});
+
+test('detectHost reads harness environment variables as hints', () => {
+  const cc = envCheck.detectHost({ CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'cli' });
+  assert.equal(cc.id, 'claude-code');
+  assert.equal(cc.verified, true);
+  assert.deepEqual(cc.evidence, ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT']);
+  const codex = envCheck.detectHost({ CODEX_SANDBOX: 'seatbelt' });
+  assert.equal(codex.id, 'codex');
+  assert.equal(codex.verified, false);
+  assert.equal(envCheck.detectHost({ AI_AGENT: 'someagent_1_2' }).name, 'someagent');
+  assert.equal(envCheck.detectHost({}).id, 'unknown');
+  const both = envCheck.detectHost({ CLAUDECODE: '1', OPENCODE: '1' });
+  assert.deepEqual(both.candidates, ['opencode']);
+});
+
+test('runChecks: other agent CLIs, MCP servers, board and policy hints', () => {
+  const dir = project('others', {
+    'AGENTS.md': '## Subagent team\n- Model policy: auto\n',
+    '.mcp.json': '{"mcpServers":{"codex":{},"docs":{}}}',
+  });
+  const env = { CODEX_BIN: missing('codex'), AGY_BIN: missing('agy'), OPENCODE_BIN: fakeAgy, PI_BIN: missing('pi'), GROK_BIN: missing('grok'), HOME: tmp, CLAUDECODE: '1' };
+  const r = envCheck.runChecks({ root: dir }, env, 'v24.1.0');
+  const byId = Object.fromEntries(r.checks.map((c) => [c.id, c]));
+  assert.equal(byId.opencode.status, 'ok');
+  assert.match(byId.opencode.detail, /confirm it is the agent you mean/);
+  assert.equal(byId.pi, undefined, 'absent optional agents are not listed');
+  assert.match(byId.mcp.detail, /codex, docs/);
+  assert.match(byId.host.detail, /Claude Code \(CLAUDECODE\)/);
+  assert.equal(r.board.found, false);
+  assert.ok(r.next.some((n) => /no "Host harness:" line: confirm the host \(detected: Claude Code\)/.test(n)));
+  assert.ok(r.next.some((n) => /No team board yet/.test(n)));
+  fs.mkdirSync(path.join(dir, 'docs', 'agent-team'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'docs', 'agent-team', 'README.md'), '# board\n');
+  const r2 = envCheck.runChecks({ root: dir }, env, 'v24.1.0');
+  assert.deepEqual(r2.board, { found: true, path: 'docs/agent-team/README.md' });
+  assert.ok(!r2.next.some((n) => /No team board yet/.test(n)));
+  assert.match(envCheck.formatReport(r2), /Team board: docs\/agent-team\/README\.md/);
+  fs.mkdirSync(path.join(dir, 'docs', 'team'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'docs', 'team', 'README.md'), '# board\n');
+  assert.equal(envCheck.findBoard(dir, { teamBoard: '[board](docs/team/README.md) + native' }).path, 'docs/team/README.md');
+  assert.equal(envCheck.findBoard(dir, { teamBoard: '`docs/team`' }).path, 'docs/team/README.md');
+  assert.equal(envCheck.findBoard(dir, { teamBoard: 'native' }).path, 'docs/agent-team/README.md');
 });
 
 test('agy-staff plugin detection reads the Claude config dir', () => {

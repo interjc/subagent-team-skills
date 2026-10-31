@@ -141,7 +141,7 @@ export function parseArgs(argv) {
 export function validateEffort(effort) {
   if (!effort) throw new UsageError(`--effort is required (${EFFORTS.join('|')}); without it codex silently inherits model_reasoning_effort from ~/.codex/config.toml`);
   const e = String(effort).toLowerCase();
-  if (e === 'ultra') throw new UsageError('--effort ultra is refused: ultra lets Codex spawn its own sub-agents outside the orchestrator\'s control. Use max at most.');
+  if (e === 'ultra') throw new UsageError('--effort ultra is refused: ultra lets Codex spawn its own sub-agents outside the director\'s control. Use max at most.');
   if (!EFFORTS.includes(e)) throw new UsageError(`unknown --effort "${effort}" (use ${EFFORTS.join('|')})`);
   return e;
 }

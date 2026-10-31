@@ -103,15 +103,20 @@ test('checkEnglish rejects CJK text in skills and agents only', () => {
   ]);
 });
 
-test('checkReadmeParity compares headings, code blocks and link targets', () => {
-  const en = '# T\n## A\n[x](a.md)\n```\ncode\n```\n';
-  const same = tmpRepo({ 'README.md': en, 'README_ZH.md': '# \u6807\u9898\n## \u7532\n[\u6587](a.md)\n```\n\u4ee3\u7801\n```\n' });
-  assert.deepEqual(checkReadmeParity(same), []);
-  const diff = tmpRepo({ 'README.md': en, 'README_ZH.md': '# T\n[x](b.md)\n' });
+test('checkReadmeParity compares every translation with README.md and checks the switcher', () => {
+  const sw = '[English](README.md) | [\u4e2d\u6587](README_ZH.md) | [\u65e5\u672c\u8a9e](README_JA.md)\n';
+  const en = `${sw}# T\n## A\n[x](a.md)\n\`\`\`\ncode\n\`\`\`\n`;
+  const zh = `${sw}# \u6807\u9898\n## \u7532\n[\u6587](a.md)\n\`\`\`\n\u4ee3\u7801\n\`\`\`\n`;
+  const ja = `${sw}# \u984c\n## \u7532\n[\u6587](a.md)\n\`\`\`\n\u30b3\u30fc\u30c9\n\`\`\`\n`;
+  assert.deepEqual(checkReadmeParity(tmpRepo({ 'README.md': en, 'README_ZH.md': zh, 'README_JA.md': ja })), []);
+  const diff = tmpRepo({ 'README.md': en, 'README_ZH.md': zh, 'README_JA.md': '# T\n[x](b.md)\n' });
   const errors = checkReadmeParity(diff).join('\n');
-  assert.match(errors, /headings/);
-  assert.match(errors, /fences/);
-  assert.match(errors, /links/);
+  assert.match(errors, /README\.md and README_JA\.md differ in headings/);
+  assert.match(errors, /README_JA\.md differ in fences/);
+  assert.match(errors, /README_JA\.md differ in links/);
+  assert.doesNotMatch(errors, /README\.md and README_ZH\.md/);
+  const noSwitch = tmpRepo({ 'README.md': '# T\n', 'README_KO.md': '# T\n' });
+  assert.match(checkReadmeParity(noSwitch).join('\n'), /language switcher does not link to README_KO\.md/);
 });
 
 test('checkNodeVersions keeps minimum and recommended versions in agreement', () => {

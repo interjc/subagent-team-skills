@@ -1,15 +1,15 @@
 ---
 name: cli-agent-delegation
-description: Outsource well-specified bulk coding work to another vendor's agent through its CLI. Covers Google Antigravity (agy), with or without the agy-staff plugin, and OpenAI Codex CLI (codex exec), driven from Claude Code, Codex or any harness that can run shell commands. Use this when handing translations, mechanical refactors, test or snapshot backfills, doc syncs or a second-opinion review to agy or Codex; when running agy or codex headless; when choosing between them; when tracking, resuming or accepting their jobs; or when a dispatch plugin for them is missing or broken.
+description: Outsource well-specified bulk coding work to another vendor's agent through its CLI, a plugin or an MCP server. Covers Google Antigravity (agy), with or without the agy-staff plugin, and OpenAI Codex CLI (codex exec) in depth, plus how to adapt other agent CLIs such as OpenCode, Pi or Grok, driven from Claude Code, Codex or any harness that can run shell commands. Use this when handing translations, mechanical refactors, test or snapshot backfills, doc syncs or a second-opinion review to an external agent; when running agy, codex or another agent headless; when choosing between them; when a liaison subagent dispatches, waits on, resumes or accepts their jobs; or when a dispatch plugin for them is missing or broken.
 license: MIT
 compatibility: Needs a shell. The helper scripts need Node.js 18+ (24 recommended); external agents need their own CLIs and accounts (Codex CLI, agy). Run scripts/doctor.mjs first.
 metadata:
-  version: "0.1.1"
+  version: "0.2.0"
 ---
 
 # CLI Agent Delegation
 
-Outsourced staff are other vendors' agents run headless through their CLIs. They are cheap or strong, they never get tired of bulk work, and a different model family catches different mistakes. But they cannot ask questions, they do not share your context, and each job carries a fixed start-up cost. This skill covers how to use them well. It is the outsourcing arm of the `subagent-team` skill. Without that skill, still apply its gate (below).
+Outsourced staff are other vendors' agents run headless through their CLIs. They are cheap or strong, they never get tired of bulk work, and a different model family catches different mistakes. But they cannot ask questions, they do not share your context, and each job carries a fixed start-up cost. This skill covers how to use them well. It is the outsourcing arm of the `subagent-team` skill, where external agents form the fourth layer (external teams) and each job is tracked by a low-tier in-house *liaison* subagent. Without that skill, still apply its gate (below).
 
 Tested with **Claude Code** as the host (background `Bash` plus completion notifications). Works from Codex and other hosts that can run shell commands. See the host notes at the end.
 
@@ -130,7 +130,7 @@ The brief travels as a command-line argument, so keep it under 100 KB (the wrapp
 
 ## 6. Acceptance after the job returns
 
-The job's report is a claim. Acceptance is yours:
+The job's report is a claim. Acceptance is yours (or your liaison's, for the mechanical steps):
 
 1. `git status --short` and `git diff --stat`: did it stay inside the lease?
 2. Run the acceptance commands yourself.
@@ -139,10 +139,38 @@ The job's report is a claim. Acceptance is yours:
 5. Small issues: fix them yourself. Larger ones: continue the same job with the concrete failure. **Two failed rounds → take it back in-house.**
 6. Commit only after acceptance, and only by the director.
 
-## 7. Host notes
+## 7. Tracking jobs through a liaison
 
-- **Claude Code**: run wrappers through `Bash` with `run_in_background: true` and react to the completion notification. Don't use foreground `sleep`, and don't poll.
+When the host can run subagents with shell access, give each external job (or each team's sequence of jobs) to a cheap in-house liaison instead of waiting in the main session:
+
+- The liaison dispatches with the exact command from its brief, writes the job and conversation ids where the team tracks state (a task card, a progress record), and never starts a duplicate.
+- **Wait in bounded slices**, not on notifications: subagent background notifications may go to the root session instead. Start the wrapper detached with an explicit `--out-dir`, then wait for its `summary.json` with an `until` loop whose upper bound stays below the host's shell-tool time limit; repeat while the job runs. With agy-staff, repeat `wait <job-id> --timeout <below the limit>` while it exits `2`.
+
+  ```bash
+  OUT=/scratch/jobs/T3a-r1; mkdir -p "$OUT"        # a fresh --out-dir per round (r2, r3, ...)
+  nohup node scripts/codex-run.mjs exec --repo /abs/repo --prompt-file /scratch/T3a.md \
+    --model <id> --effort medium --sandbox workspace-write --timeout 30m --out-dir "$OUT" > "$OUT/stdout.json" 2>&1 &
+  # each later call: wait at most ~9 minutes, then report "still running" and call again
+  i=0; until [ -f "$OUT/summary.json" ] || [ $i -ge 54 ]; do sleep 10; i=$((i+1)); done; ls "$OUT"
+  ```
+
+- Use a **fresh `--out-dir` for every round** (first run, each rework, each resume): the wrappers write `summary.json` only at the end, so a reused directory would end the wait at once.
+- It runs steps 1, 2 and the mechanical part of 3 in section 6, and sends one rework round with the concrete failure. Blockers the external agent reported in its final reply are answered only when the answer is already in the brief or the repository; everything else, and any second failure, goes back to whoever assigned the job.
+
+## 8. Other agents and channels (not tested here)
+
+OpenCode, Pi, Grok CLI and other agent CLIs, and agents exposed through an MCP server, follow the same pattern. Before the first real job, find out and write down once: the headless invocation (prompt from a file or stdin, working directory, model and effort flags); how to allow edits inside the workspace only, and how to run read-only; where the final reply goes and whether there is a machine-readable result; how to continue a job by session or conversation id; and how it behaves without network, at timeout and when it wants approval (a headless run must never wait for approval). Then run one tiny read-only job and check all of that before trusting it with edits.
+
+- Check presence and versions with `<cli> --version`; a binary with the expected name can belong to another program.
+- Pin model and effort on every call; do not inherit the tool's personal defaults.
+- Bound every job with the shell's `timeout` (or the tool's own) and kill the whole process group on expiry.
+- Prefer models from another vendor than your in-house team; a tool that routes back to your own vendor's models adds cost, not perspective.
+- MCP calls are synchronous for the agent making them: keep long jobs on the CLI channel, or give them to a liaison, never to the main session.
+
+## 9. Host notes
+
+- **Claude Code**: in the main session, run wrappers through `Bash` with `run_in_background: true` and react to the completion notification. Don't use foreground `sleep`, and don't poll. A liaison subagent is the exception: it waits in bounded slices as in section 7, because background notifications may not reach it.
 - **Codex as host**: request escalated execution when the sandbox blocks agy or the network. Codex hosts poll background work and each wake-up carries their full context, so prefer fewer, larger jobs.
-- **Other hosts / other CLIs** (OpenCode, Pi, DeepSeek-backed agents and others): not tested here. The principles carry over, but adapt the mechanics yourself. For a new worker CLI, agy-staff's [DESIGN.md](https://github.com/keli-wen/agy-staff/blob/master/docs/DESIGN.md) is a good blueprint. It covers headless mode, a prompt file, one background wait per job, continuation by conversation id, and results written to files.
+- **Other hosts / other CLIs** (OpenCode, Pi, Grok, DeepSeek-backed agents and others): not tested here. The principles carry over (section 8), but adapt the mechanics yourself. For a new worker CLI, agy-staff's [DESIGN.md](https://github.com/keli-wen/agy-staff/blob/master/docs/DESIGN.md) is a good blueprint. It covers headless mode, a prompt file, one background wait per job, continuation by conversation id, and results written to files.
 
 Measured runs and their lessons: [references/field-data.md](references/field-data.md).
