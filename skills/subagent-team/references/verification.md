@@ -109,6 +109,7 @@ git diff --no-index --check /dev/null "$TMPDIR/ws-probe.md"; echo "exit=$?"
 
 - Stop only what you started: by the PID you recorded (`$!`) or the listener on your own port, after checking it with `lsof -nP -iTCP:<port> -sTCP:LISTEN`.
 - Never kill by name pattern (`pkill -f next`, `pkill node`); one such command once took down the user's dev server.
+- Test runners leave orphans. A runner that times out, or an infinite-loop mutant, can leave its server process at 100% CPU for hours under PID 1, and other agents then misread the load as flaky tests or false kills. Before a long test or mutation run and again at each milestone, list processes with parent PID 1 and check each one's working directory (`lsof -a -p <pid> -d cwd`). End only those inside your own scratch folder, by PID; report any others. Briefs for agents that run tests say to end what they start.
 - Use your own ports for measurements; leave the user's port alone.
 - After a large refactor, a dev server can hold a stale module graph (errors about constants that no longer exist). A restart fixes it; it is not a code bug. Ask the user to restart their server.
 
