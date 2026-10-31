@@ -1,9 +1,9 @@
 ---
 name: agent-handover
-description: Keep multi-agent coding work resumable at any moment. Record progress, in-flight agents and jobs, decisions, user preferences and open questions in the repository, not in chat or local agent memory, so another agent or tool can take over in minutes. Use this after a delegated task is accepted or committed, before a session may be interrupted or context compacted, when handing work to another agent or another tool (Claude Code ↔ Codex), when taking over someone else's half-finished work or starting cold, and whenever the user states a decision or preference that should outlive this session.
+description: Keep multi-agent coding work resumable at any moment. Record progress, in-flight agents and jobs, task cards, decisions, user preferences, lessons and open questions in the repository, not in chat or local agent memory, so another agent or tool can take over in minutes. Use this after a delegated task is accepted or committed, before a session may be interrupted or context compacted, when handing work to another agent or another tool (Claude Code ↔ Codex), when taking over someone else's half-finished work or starting cold, and whenever the user states a decision or preference that should outlive this session.
 license: MIT
 metadata:
-  version: "0.1.1"
+  version: "0.2.0"
 ---
 
 # Agent Handover
@@ -18,17 +18,21 @@ Pairs with `subagent-team`. That skill decides *when* a unit of work is done; th
 - An agent's local memory (for example Claude Code's per-project memory, or Codex's) may hold only **pointers**, such as "process rules: see `docs/progress.md` §4". It must never be the only copy. Memory does not survive a new machine, a new tool or a new agent.
 - If memory holds a rule the repository lacks, write it into the repository first, then shrink the memory entry to a pointer. When memory and repository disagree, the repository wins; tell the director.
 - Each rule has **one** authoritative home. Everywhere else links to it instead of restating it, so copies cannot drift.
+- `AGENTS.md` links to the entry index, and the entry index links back to `AGENTS.md`. Both Claude Code and Codex load `AGENTS.md` / `CLAUDE.md` every session, so that link is how a cold agent finds the state.
+- When the user adjusts the process ("stop outsourcing auth tests"), write it down **immediately**: a dated lessons entry with their words, and the rule in `AGENTS.md` if it applies project-wide.
 
 ## 2. File map
 
-Adapt the names to the project; the separation is what matters:
+Adapt the names to the project; the separation is what matters. Projects that use the `subagent-team` skill's team board keep these files in `docs/agent-team/` (index `README.md`, `progress.md`, `decisions.md`, `lessons.md`, one card per task under `tasks/`); use that layout when it exists.
 
 | File | Holds | Does not hold |
 |---|---|---|
 | Entry index (e.g. `docs/<program>/index.md`) | Reading order, track status, priorities, decisions-to-be-made list, decision index, hard cross-track constraints | Detailed acceptance numbers |
 | Progress record (e.g. `docs/<program>/progress.md`) | Status snapshot, completed log, next-up queue, user decisions summary, open questions, pitfalls, handover protocol | Decision bodies |
 | Decision log | Numbered decisions with motivation, rejected options, overturn conditions | Progress |
-| `AGENTS.md` | Project-wide hard rules, an index of skills | Progress |
+| Task cards (e.g. `docs/agent-team/tasks/<id>.md`) | One task or external job: flow, holder (its only writer), lease, job ids, log, open questions, result | Acceptance numbers (they go to the completed log) |
+| Lessons (e.g. `docs/agent-team/lessons.md`) | User adjustments to the process and lessons learned, dated, user's words verbatim, with a link to the rule if one was promoted | The rule itself, once promoted (it lives in `AGENTS.md`) |
+| `AGENTS.md` | Project-wide hard rules, an index of skills, a link to the entry index | Progress |
 | Skills | Reusable methods and process rules | Project state |
 | Local agent memory | Pointers only | Any rule, decision or constraint |
 
@@ -83,9 +87,9 @@ Lesson: backfill with a grep over all docs, not just the log table. A placeholde
 For when a session may end, context is nearly full, or you hand over deliberately. File changes still go through the normal task chain where one exists.
 
 1. Capture the scene (read-only): `git rev-parse --short HEAD; git status --short`.
-2. List running work: agent names or ids (Claude Code `ListAgents`), external job ids and conversation ids. **Do not cancel running work just to tidy up.**
+2. List running work: agent names or ids (Claude Code `ListAgents`), external job ids and conversation ids, and which liaison tracks each job. **Do not cancel running work just to tidy up.**
 3. Write an in-flight record into the status snapshot. Include: task id, branch and HEAD, files in the working tree that belong to the task, the step it is stuck on, running agents and jobs, who holds the edit lease, the next concrete action, and anything awaiting the user.
-4. Write unrecorded user decisions to the decision log or summary, and unanswered questions to open questions.
+4. Write unrecorded user decisions to the decision log or summary, and unanswered questions to open questions. Bring every task card's status, job ids and `[open]` questions up to date (holders do their own cards).
 5. Move rules that exist only in local memory into the repository.
 6. Add new pitfalls.
 7. For committed but unsynced tasks, update the log and queue, and backfill placeholders.
@@ -101,8 +105,8 @@ For a new agent, a cold start, or after context compaction.
 2. Read in order: the entry index, the progress record's snapshot, `AGENTS.md`, the relevant track docs, the relevant decisions.
 3. Reconcile: the newest snapshot's commit must appear in `git log`. Placeholders whose commits exist get noted for backfill.
 4. If there are uncommitted changes, find the matching in-flight record. If none matches, do not investigate or revert; ask whoever owns the work.
-5. Check running work (`ListAgents`; the external tool's job status, run **from the same worktree**, since job state is per worktree). Never start a duplicate of something already running.
-6. Read the next-up queue, open questions and pitfalls relevant to the task.
+5. Check running work (`ListAgents`; the external tool's job status, run **from the same worktree**, since job state is per worktree). Never start a duplicate of something already running. With a team board, list cards and open escalations (`team-board.mjs status` from the `subagent-team` skill, or read the cards).
+6. Read the next-up queue, open questions, pitfalls and lessons relevant to the task.
 7. Treat local memory as leads only and check it against the repository.
 8. Before acting, reply with a short recovery summary: HEAD, in-flight tasks, next step, and what awaits the user.
 

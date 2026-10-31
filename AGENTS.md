@@ -27,9 +27,10 @@ scripts/              # repository tooling (check-skills.mjs)
 
 ## 3. Tool neutrality
 
-- Skill bodies use abstract roles and tiers (director / manager / staff; top / high / mid / low / external-fast / external-strong). Concrete model names appear only as dated examples ("as of 2026-10").
+- Skill bodies use abstract layers, roles and tiers: layers L1 director / L2 in-house experts / L3 in-house execution / L4 external teams; tiers top / high / mid / low / external-fast / external-strong. A layer is responsibility, a tier is model strength. Concrete model names appear only as dated examples ("as of 2026-10").
 - Harness-specific mechanics go into `references/harness-*.md`. Mark anything not personally verified as *unverified*.
 - Claude Code is the primary target, Codex secondary. Do not claim support for other agents beyond "installs via the Agent Skills format".
+- The same rule applies to external teams: agy and Codex CLI are used in real projects; OpenCode, Pi, Grok and MCP-fronted agents are *not tested*. Host-detection environment variables other than Claude Code's are *unverified* hints; keep `HOST_HINTS` in `env-check.cjs` and `references/host-harness.md` in agreement.
 
 ## 4. Privacy (this repository is public)
 

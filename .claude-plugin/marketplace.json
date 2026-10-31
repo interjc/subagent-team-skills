@@ -9,7 +9,7 @@
     {
       "name": "subagent-team",
       "source": "./",
-      "description": "Director / managers / staff orchestration, outsourcing to agy and Codex CLI, read-only reviewer agents, and agent handover.",
+      "description": "Four-layer orchestration (director, in-house experts, in-house execution, external teams), outsourcing to agy, Codex CLI and other agents via liaisons, a persistent team board, read-only reviewer agents, and agent handover.",
       "tags": ["subagents", "orchestration", "delegation", "code-review"]
     }
   ]

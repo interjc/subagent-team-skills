@@ -1,7 +1,7 @@
 {
   "name": "subagent-team",
-  "version": "0.1.1",
-  "description": "Run coding work as a team: a director session, manager and worker subagents, outsourced CLI agents (agy, Codex CLI), independent read-only reviewers, and resumable handover.",
+  "version": "0.2.0",
+  "description": "Run coding work as a four-layer team: a director session, in-house expert and execution subagents, external agent teams (agy, Codex CLI and others) tracked by liaisons, independent read-only reviewers, a persistent team board, and resumable handover.",
   "author": {
     "name": "Justin Chen",
     "url": "https://github.com/interjc"
