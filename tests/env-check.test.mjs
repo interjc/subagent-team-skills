@@ -34,7 +34,7 @@ function project(name, files = {}, { git = true } = {}) {
 }
 
 const missing = (name) => path.join(tmp, 'nope', name);
-const noOthers = { OPENCODE_BIN: missing('opencode'), PI_BIN: missing('pi'), GROK_BIN: missing('grok') };
+const noOthers = () => ({ OPENCODE_BIN: missing('opencode'), PI_BIN: missing('pi'), GROK_BIN: missing('grok') });
 
 test('checkNode: error below the minimum, warning below recommended, ok at recommended', () => {
   const { MIN_NODE_MAJOR, RECOMMENDED_NODE_MAJOR, checkNode } = envCheck;
@@ -68,7 +68,7 @@ test('runChecks: ready with optional tools present and a policy in the repo root
   const dir = project('ready', { 'AGENTS.md': '## Subagent team\n- Model policy: auto\n- Host harness: Claude Code\n- Team board: native\n' });
   fs.mkdirSync(path.join(dir, 'sub'));
   const r = envCheck.runChecks({ root: path.join(dir, 'sub') },
-    { ...noOthers, CODEX_BIN: fakeCodex, AGY_BIN: fakeAgy, HOME: tmp, CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg') }, 'v24.1.0');
+    { ...noOthers(), CODEX_BIN: fakeCodex, AGY_BIN: fakeAgy, HOME: tmp, CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg') }, 'v24.1.0');
   assert.equal(r.status, 'ready');
   assert.equal(fs.realpathSync(r.projectRoot), fs.realpathSync(dir), 'policy is looked up at the git top level');
   assert.equal(r.policy.modelPolicy, 'auto');
