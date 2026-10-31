@@ -6,7 +6,7 @@ The first time this skill is used in a project, agree with the user on **which h
 
 A `## Subagent team` section in the project's `AGENTS.md`. If the project has no `AGENTS.md` and uses only `CLAUDE.md`, put the section in `CLAUDE.md`. Both Claude Code (through `CLAUDE.md`) and Codex load these files into every session, so the policy is in context before any skill loads, and it travels with git to every machine and tool.
 
-If the user prefers a separate file, write it (e.g. `docs/agents/subagent-team.md`) and leave a one-line pointer section in `AGENTS.md`, so it can still be found.
+If the user prefers a separate file, write it (e.g. `docs/agents/subagent-team.md`) and leave a short pointer section in `AGENTS.md` that keeps the `Model policy:`, `Host harness:` and `Team board:` lines and links to the file, so both people and the helper scripts still find them.
 
 ## When to run setup
 

@@ -249,7 +249,9 @@ function findPolicy(root) {
 function findBoard(root, policy) {
   var candidates = [];
   if (policy.teamBoard) {
-    var first = policy.teamBoard.split(/[\s(]/)[0];
+    var value = policy.teamBoard.replace(/`/g, '');
+    var link = /\[[^\]]*\]\(([^)\s]+)\)/.exec(value);
+    var first = link ? link[1] : value.split(/[\s(]/)[0];
     if (first && !/^(native|none)$/i.test(first)) candidates.push(first);
   }
   candidates.push('docs/agent-team/README.md');

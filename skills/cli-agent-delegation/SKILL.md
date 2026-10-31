@@ -147,13 +147,14 @@ When the host can run subagents with shell access, give each external job (or ea
 - **Wait in bounded slices**, not on notifications: subagent background notifications may go to the root session instead. Start the wrapper detached with an explicit `--out-dir`, then wait for its `summary.json` with an `until` loop whose upper bound stays below the host's shell-tool time limit; repeat while the job runs. With agy-staff, repeat `wait <job-id> --timeout <below the limit>` while it exits `2`.
 
   ```bash
-  OUT=/scratch/jobs/T3a; mkdir -p "$OUT"
+  OUT=/scratch/jobs/T3a-r1; mkdir -p "$OUT"        # a fresh --out-dir per round (r2, r3, ...)
   nohup node scripts/codex-run.mjs exec --repo /abs/repo --prompt-file /scratch/T3a.md \
     --model <id> --effort medium --sandbox workspace-write --timeout 30m --out-dir "$OUT" > "$OUT/stdout.json" 2>&1 &
   # each later call: wait at most ~9 minutes, then report "still running" and call again
   i=0; until [ -f "$OUT/summary.json" ] || [ $i -ge 54 ]; do sleep 10; i=$((i+1)); done; ls "$OUT"
   ```
 
+- Use a **fresh `--out-dir` for every round** (first run, each rework, each resume): the wrappers write `summary.json` only at the end, so a reused directory would end the wait at once.
 - It runs steps 1, 2 and the mechanical part of 3 in section 6, and sends one rework round with the concrete failure. Blockers the external agent reported in its final reply are answered only when the answer is already in the brief or the repository; everything else, and any second failure, goes back to whoever assigned the job.
 
 ## 8. Other agents and channels (not tested here)
@@ -168,7 +169,7 @@ OpenCode, Pi, Grok CLI and other agent CLIs, and agents exposed through an MCP s
 
 ## 9. Host notes
 
-- **Claude Code**: run wrappers through `Bash` with `run_in_background: true` and react to the completion notification. Don't use foreground `sleep`, and don't poll.
+- **Claude Code**: in the main session, run wrappers through `Bash` with `run_in_background: true` and react to the completion notification. Don't use foreground `sleep`, and don't poll. A liaison subagent is the exception: it waits in bounded slices as in section 7, because background notifications may not reach it.
 - **Codex as host**: request escalated execution when the sandbox blocks agy or the network. Codex hosts poll background work and each wake-up carries their full context, so prefer fewer, larger jobs.
 - **Other hosts / other CLIs** (OpenCode, Pi, Grok, DeepSeek-backed agents and others): not tested here. The principles carry over (section 8), but adapt the mechanics yourself. For a new worker CLI, agy-staff's [DESIGN.md](https://github.com/keli-wen/agy-staff/blob/master/docs/DESIGN.md) is a good blueprint. It covers headless mode, a prompt file, one background wait per job, continuation by conversation id, and results written to files.
 

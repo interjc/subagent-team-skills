@@ -30,6 +30,10 @@ test('parseArgs validates commands, ids and the board directory', () => {
   assert.throws(() => parseArgs(['new', '--id', 'T1']), /--title is required/);
   assert.throws(() => parseArgs(['status', '--dir', '../elsewhere']), /inside the root/);
   assert.throws(() => parseArgs(['status', '--root']), /needs a value/);
+  assert.throws(() => parseArgs(['init', '--dir', '.']), /not the project root/);
+  assert.throws(() => parseArgs(['init', '--dir', 'docs/..']), /inside the root/);
+  assert.throws(() => parseArgs(['new', '--id', 'readme', '--title', 'x']), /reserved/);
+  assert.equal(parseArgs(['status', '--dir', './docs/agent-team/']).dir, 'docs/agent-team');
   const o = parseArgs(['new', '--id', 'T3.a', '--title', 'Translate', '--flow', 'outsource', '--no-index', '--dry-run']);
   assert.equal(o.id, 'T3.a');
   assert.equal(o.index, false);
@@ -84,10 +88,18 @@ test('parseIndex reads task rows and their last cell as status', () => {
   assert.deepEqual(rows, [{ id: 'T1', file: 'tasks/T1.md', status: 'in-review' }]);
 });
 
-test('policyFile prefers AGENTS.md, then CLAUDE.md', () => {
+test('policyFile prefers the file with the policy section, then AGENTS.md, then CLAUDE.md', () => {
   assert.equal(policyFile(project('pf1', { 'CLAUDE.md': '' })), 'CLAUDE.md');
   assert.equal(policyFile(project('pf2', { 'CLAUDE.md': '', 'AGENTS.md': '' })), 'AGENTS.md');
   assert.equal(policyFile(project('pf3')), 'AGENTS.md');
+  assert.equal(policyFile(project('pf4', { 'AGENTS.md': '# Rules\n', 'CLAUDE.md': '## Subagent team\n' })), 'CLAUDE.md');
+});
+
+test('parseCard handles CRLF line endings', () => {
+  const card = parseCard('# T1: x\r\n\r\n- Status: planned\r\n- Holder: director\r\n\r\n## Questions\r\n- [open] Q1 (to: L1): y\r\n');
+  assert.equal(card.status, 'planned');
+  assert.equal(card.holder, 'director');
+  assert.equal(card.openQuestions.length, 1);
 });
 
 test('CLI: init, new and status work together and report drift', () => {
@@ -130,6 +142,29 @@ test('CLI: init, new and status work together and report drift', () => {
   fs.appendFileSync(path.join(dir, 'AGENTS.md'), '- Team board: docs/agent-team/README.md\n');
   const st2 = runScript(SCRIPT, ['status', '--root', dir]);
   assert.ok(!st2.json.warnings.some((x) => /does not mention/.test(x)));
+
+  const sub = path.join(dir, 'docs/agent-team/tasks/T1.a.md');
+  fs.writeFileSync(sub, read(sub).replace(/^- Holder: .*\n/m, '').replace('- Status: planned', '- Status: done-ish'));
+  fs.appendFileSync(path.join(dir, 'docs/agent-team/README.md'), '| [T9](tasks/T9.md) | ghost | direct | director | planned |\n');
+  const w3 = runScript(SCRIPT, ['status', '--root', dir]).json.warnings.join('\n');
+  assert.match(w3, /tasks\/T1\.a\.md: no "Holder:" line/);
+  assert.match(w3, /tasks\/T1\.a\.md: unknown status "done-ish"/);
+  assert.match(w3, /README\.md lists tasks\/T9\.md, which does not exist/);
+});
+
+test('CLI: new --dry-run writes nothing; file system errors exit 4 with JSON', () => {
+  const dir = project('dry', { 'AGENTS.md': '## Subagent team\n' });
+  runScript(SCRIPT, ['init', '--root', dir]);
+  const before = read(dir, 'docs/agent-team/README.md');
+  const dry = runScript(SCRIPT, ['new', '--root', dir, '--id', 'T1', '--title', 'x', '--dry-run']);
+  assert.equal(dry.status, 0);
+  assert.equal(dry.json.indexed, true);
+  assert.equal(fs.existsSync(path.join(dir, 'docs/agent-team/tasks/T1.md')), false);
+  assert.equal(read(dir, 'docs/agent-team/README.md'), before);
+  const bad = project('bad', { docs: 'a file, not a directory' });
+  const r = runScript(SCRIPT, ['init', '--root', bad]);
+  assert.equal(r.status, 4);
+  assert.equal(r.json.ok, false);
 });
 
 test('CLI: missing board, dry runs, custom dir and usage errors', () => {

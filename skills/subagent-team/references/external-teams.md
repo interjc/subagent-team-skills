@@ -69,7 +69,7 @@ The liaison never decides product or architecture, never edits code itself (only
 
 ### Waiting without burning the host
 
-- **Claude Code**: dispatch the liaison as a background subagent. Inside it, start the wrapper detached with an `--out-dir`, then wait in the foreground in bounded slices: an `until` loop on the result file (`summary.json` for the wrappers in `cli-agent-delegation`) with an upper bound below the shell tool's time limit, or the agy-staff plugin's `wait <job> --timeout <below the tool limit>` repeated while it returns "still running". Nested background notifications go to the root, not reliably to the liaison ([harness-claude-code.md](harness-claude-code.md)), so the liaison must not rely on them.
+- **Claude Code**: dispatch the liaison as a background subagent. Inside it, start the wrapper detached with an `--out-dir`, then wait in the foreground in bounded slices: an `until` loop on the result file (`summary.json` for the wrappers in `cli-agent-delegation`; a fresh `--out-dir` per round, since it is written only at the end) with an upper bound below the shell tool's time limit, or the agy-staff plugin's `wait <job> --timeout <below the tool limit>` repeated while it returns "still running". Nested background notifications go to the root, not reliably to the liaison ([harness-claude-code.md](harness-claude-code.md)), so the liaison must not rely on them.
 - **Codex as host**: each wake-up carries full context, so give the liaison few, long jobs and long wait slices (*unverified* how subagent waits behave; record what you observe).
 - **No subagents, or subagents without a shell**: there is no liaison. The director runs the job in the background and reacts to the completion notification, as in `cli-agent-delegation`.
 

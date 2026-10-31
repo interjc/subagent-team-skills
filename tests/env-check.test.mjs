@@ -135,6 +135,11 @@ test('runChecks: other agent CLIs, MCP servers, board and policy hints', () => {
   assert.deepEqual(r2.board, { found: true, path: 'docs/agent-team/README.md' });
   assert.ok(!r2.next.some((n) => /No team board yet/.test(n)));
   assert.match(envCheck.formatReport(r2), /Team board: docs\/agent-team\/README\.md/);
+  fs.mkdirSync(path.join(dir, 'docs', 'team'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'docs', 'team', 'README.md'), '# board\n');
+  assert.equal(envCheck.findBoard(dir, { teamBoard: '[board](docs/team/README.md) + native' }).path, 'docs/team/README.md');
+  assert.equal(envCheck.findBoard(dir, { teamBoard: '`docs/team`' }).path, 'docs/team/README.md');
+  assert.equal(envCheck.findBoard(dir, { teamBoard: 'native' }).path, 'docs/agent-team/README.md');
 });
 
 test('agy-staff plugin detection reads the Claude config dir', () => {

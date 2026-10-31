@@ -33,7 +33,7 @@ docs/agent-team/
 
 `progress.md`, `decisions.md` and the conventions for writing them (absolute dates, separate committed / pushed / deployed facts, the `<pending-commit>` placeholder, never-rewritten decisions) follow skill `agent-handover`. If a project already keeps these elsewhere (for example `docs/<program>/progress.md`), point the board index at them instead of creating duplicates: one authoritative home per kind of record.
 
-Create the skeleton with the helper (never overwrites):
+Create the skeleton with the helper (never overwrites; the board must be a subdirectory, never the project root):
 
 ```bash
 node <this skill's directory>/scripts/team-board.mjs init --root <project root>
@@ -41,7 +41,34 @@ node <this skill's directory>/scripts/team-board.mjs new --root <project root> -
 node <this skill's directory>/scripts/team-board.mjs status --root <project root>
 ```
 
-`status` prints one JSON object: task counts by status, every `[open]` question with its target (and how many wait for the human), and warnings for drift: a card missing from the index, an index status that disagrees with the card, a card without a holder, an unknown status, or `AGENTS.md` not linking to the board. Exit codes: `0` ok (warnings allowed), `1` usage, `2` no board, `3` card already exists. Without Node.js, create the same files by hand from the templates below.
+`status` prints one JSON object: task counts by status, every `[open]` question with its target (and how many wait for the human), and warnings for drift: a card missing from the index, an index status that disagrees with the card, a card without a holder, an unknown status, or `AGENTS.md` not linking to the board. Exit codes: `0` ok (warnings allowed), `1` usage, `2` no board, `3` card already exists, `4` file system error. Without Node.js, create the same files by hand from the templates below; `progress.md` and `decisions.md` follow skill `agent-handover` (its entry templates).
+
+## Index and lessons templates
+
+```markdown
+# Agent team board
+
+Rules and the team policy: [AGENTS.md](../../AGENTS.md), section `## Subagent team`. This directory links to them and never restates them. The director maintains this file; each card has one writer, its holder.
+
+## Reading order (take-over)
+1. This file  2. [progress.md](progress.md)  3. [decisions.md](decisions.md), [lessons.md](lessons.md)  4. the cards you take over
+
+## Tasks
+| Task | Title | Flow | Holder | Status |
+|---|---|---|---|---|
+| [T3](tasks/T3.md) | Settings page | designed | lead-T3 | in-progress |
+```
+
+```markdown
+# Lessons and user adjustments
+
+Newest first. A row that became a project-wide rule links to it; the rule lives in AGENTS.md only.
+
+| Date | Source | Lesson or adjustment | Promoted to |
+|---|---|---|---|
+| 2026-10-31 | user: "<verbatim words>" | <what changes in the process> | AGENTS.md, `## Subagent team` |
+| 2026-10-30 | escalation T3.a Q1 | <the brief lacked X; template now asks for it> | brief template |
+```
 
 ## Task card
 
@@ -78,7 +105,7 @@ Card rules:
 - **One holder, one writer.** The holder is the layer leading that unit: the director, an L2 lead, or the L3 liaison for an external job. Everyone else sends the holder a message; the holder writes. A change of holder is a log line.
 - Status words are exactly the list above, so `status` can count them.
 - Questions use `[open]` and `[answered <date> by <who>]`, with `to: <L2 | L1 | human>`. Never delete one.
-- The index row (`README.md` "Tasks") mirrors the card's status; the director updates it at transitions. `status` reports when they disagree.
+- The index row (`README.md` "Tasks") mirrors the card's status; the director updates it at transitions. In Strict mode the board files are the director's coordination files, the one exception to "the director never edits" ([strict-mode.md](strict-mode.md)). `status` reports when they disagree.
 - Acceptance numbers go to the completed log once; the card's Result points there.
 - External agents read their brief, not the card. If a brief is longer than a command-line argument allows, keep it in the repository (for example `docs/agent-team/briefs/<id>.md`) and add it to the lease as read-only.
 

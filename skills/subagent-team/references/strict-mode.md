@@ -6,12 +6,14 @@ Use Strict mode for long programs with several concurrent task lines, high-risk 
 
 | Layer | Role in Strict mode | Does | Never does |
 |---|---|---|---|
-| L1 | **Director (root)** | priorities, splitting into task lines, cross-task decisions, user communication, granting edit leases, monitoring task leads, integration gate, staging and commit, pushing to an allowed branch | edit project files (code, tests, config, docs, decision records, skills), wait directly on implementers |
+| L1 | **Director (root)** | priorities, splitting into task lines, cross-task decisions, user communication, granting edit leases, monitoring task leads, integration gate, staging and commit, pushing to an allowed branch; writes the coordination files (below) | edit project files (code, tests, config, docs, decision records, skills), wait directly on implementers |
 | L2 | **Task lead** (one per task line, reused) | turn the task package into implementer and liaison briefs, dispatch and continue them, wait for results, organise independent review, task-level acceptance, hold the task's card, report to the director | write implementation, act as the independent reviewer, commit, push |
 | L3 | **Implementer** | implement per brief, run the quality gate, hand in evidence | review itself, commit |
 | L3 | **Reviewer** | independent read-only review (tests first, then execution, then risks); an L2 senior reviewer for the riskiest changes | edit anything, implement |
 | L3 | **Liaison** | track an external job for the task lead (section 5 of SKILL.md) | decide, edit code, commit |
 | L4 | **External team** | mechanical work that passed the gate, through its liaison | anything else |
+
+**Coordination files are the exception.** The director keeps writing the board (`docs/agent-team/**`: index, progress record, decisions, lessons, the cards it holds) and the `## Subagent team` section of `AGENTS.md`, because recording the user's decisions and adjustments immediately is its job and must not wait for a task chain. Task leads write only the cards they hold. Every other file, including the rest of `docs/` and `AGENTS.md`, goes through a task.
 
 Every code task follows `designed` or `designed+outsource`. Any file change, even a one-character fix found during acceptance, goes back down the same chain. "Reviewer and implementer are separate agents" is a hard rule; never merge them to save a slot.
 

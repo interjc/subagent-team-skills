@@ -187,7 +187,7 @@ Every escalation carries the question, context with evidence, options with a rec
 - **Reviewers work in this order**: (1) audit the tests; (2) execute them and paste real output; (3) only then read code, hunting for risks the brief and tests missed. Test gaps mean NEEDS_CHANGES.
 - Reviewers are read-only, never review their own implementation, and preferably use a different model (ideally a different vendor) from the implementer.
 - **Acceptance**: a subagent's "done" is a claim. Look at the diff, check the lease, run the acceptance commands, verify factual claims in docs. L2 accepts where the flow has it; L1 always runs the integration gate.
-- **Rework**: small fix → the accepting layer does it or sends it back; bigger → send the concrete failure to the *same* agent. External work that fails twice comes back in-house.
+- **Rework**: a small fix may be done by the director outside Strict mode; L2 never edits, it sends the fix back. Anything bigger → send the concrete failure to the *same* agent. External work that fails twice comes back in-house.
 
 Review procedure, working-tree fingerprints, mutation checks, command pitfalls: [references/verification.md](references/verification.md).
 

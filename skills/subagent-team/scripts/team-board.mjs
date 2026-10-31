@@ -60,7 +60,8 @@ init never overwrites existing files. It does not edit AGENTS.md: add the
 "Team board:" line to the "## Subagent team" section yourself.
 
 Output: one JSON object on stdout; hints on stderr.
-Exit codes: 0 ok (warnings allowed); 1 usage error; 2 board not found; 3 card already exists.
+Exit codes: 0 ok (warnings allowed); 1 usage error; 2 board not found; 3 card already exists;
+4 file system error (for example the board path is a file).
 `;
 
 export class UsageError extends Error {}
@@ -85,8 +86,11 @@ export function parseArgs(argv) {
   }
   opts.root = path.resolve(opts.root);
   if (path.isAbsolute(opts.dir) || opts.dir.split(/[\\/]/).includes('..')) throw new UsageError('--dir must be a path inside the root');
+  opts.dir = path.posix.normalize(opts.dir.replace(/\\/g, '/')).replace(/\/+$/, '');
+  if (opts.dir === '.' || opts.dir === '') throw new UsageError('--dir must be a subdirectory, not the project root (the board would write into the project\'s own README.md)');
   if (command === 'new') {
     if (!opts.id || !ID_RE.test(opts.id)) throw new UsageError('--id is required: letters, digits, ".", "_" or "-", starting with a letter');
+    if (/^readme$/i.test(opts.id)) throw new UsageError('--id README is reserved');
     if (!opts.title || !opts.title.trim()) throw new UsageError('--title is required');
     if (opts.parent && !ID_RE.test(opts.parent)) throw new UsageError('--parent must be a task id');
   }
@@ -95,9 +99,18 @@ export function parseArgs(argv) {
 
 const toPosix = (p) => p.split(path.sep).join('/');
 
-// The policy file the board links back to: AGENTS.md, else CLAUDE.md, else AGENTS.md (to be created).
+// The policy file the board links back to: the one holding "## Subagent team"
+// (AGENTS.md first), else whichever of AGENTS.md / CLAUDE.md exists, else AGENTS.md.
 export function policyFile(root) {
-  for (const name of ['AGENTS.md', 'CLAUDE.md']) if (fs.existsSync(path.join(root, name))) return name;
+  const names = ['AGENTS.md', 'CLAUDE.md'];
+  for (const name of names) {
+    try {
+      if (/^##\s+Subagent team\b/m.test(fs.readFileSync(path.join(root, name), 'utf8'))) return name;
+    } catch {
+      // not there
+    }
+  }
+  for (const name of names) if (fs.existsSync(path.join(root, name))) return name;
   return 'AGENTS.md';
 }
 
@@ -414,12 +427,17 @@ function main(argv) {
     return 0;
   }
   let out;
-  if (opts.command === 'init') {
-    const result = initBoard(opts);
-    if (!result.policyLinked) console.error(`hint: add this line to the "## Subagent team" section of ${result.policyFile}:\n  ${result.pointer}`);
-    out = { exit: 0, result };
-  } else if (opts.command === 'new') out = newCard(opts);
-  else out = boardStatus(opts);
+  try {
+    if (opts.command === 'init') {
+      const result = initBoard(opts);
+      if (!result.policyLinked) console.error(`hint: add this line to the "## Subagent team" section of ${result.policyFile}:\n  ${result.pointer}`);
+      out = { exit: 0, result };
+    } else if (opts.command === 'new') out = newCard(opts);
+    else out = boardStatus(opts);
+  } catch (err) {
+    if (!err || !err.code) throw err;
+    out = { exit: 4, result: { ok: false, error: `${err.code}: ${err.message}` } };
+  }
   for (const w of out.result.warnings || []) console.error(`warning: ${w}`);
   if (out.result.error) console.error(`team-board.mjs: ${out.result.error}`);
   process.stdout.write(`${JSON.stringify(out.result, null, 2)}\n`);

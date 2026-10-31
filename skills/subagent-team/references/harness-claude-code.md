@@ -33,7 +33,7 @@ How the method maps onto Claude Code, and the behaviour observed in real session
 ## Background agents (observed)
 
 - `Agent` runs in the background by default. If your very next step depends on the result, dispatch with `run_in_background: false` where the parameter exists; where it does not (agents always run in the background), wait for the completion notification before that step.
-- **Nested background agents report to the root.** When an L2 task lead (task lead) subagent dispatches background implementers or reviewers, they appear next to it in the root's `ListAgents`, and their completion reports are delivered to the root, not reliably to the task lead.
+- **Nested background agents report to the root.** When an L2 task lead subagent dispatches background implementers or reviewers, they appear next to it in the root's `ListAgents`, and their completion reports are delivered to the root, not reliably to the task lead.
 - **Task leads get their turn ended while waiting.** A task lead waiting on a background child was repeatedly forced to hand back an "unfinished" report, three or four times in one slice.
 
 What worked:
