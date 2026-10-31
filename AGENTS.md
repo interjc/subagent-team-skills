@@ -25,6 +25,7 @@ scripts/              # repository tooling (check-skills.mjs)
 - Skill content (`SKILL.md`, `references/`, agent definitions, script output) is **English**.
 - Human-facing docs are written in **English first**. `README.md` is the source; translations sit next to it as `README_<LANG>.md` (currently `README_ZH.md` Simplified Chinese and `README_JA.md` Japanese), each with the same language switcher at the top.
 - Workflow: finalize the English version, then translate it into every other language. Translations follow the English; never add content to a translation alone. A change to `README.md` lands in the same commit as its translations.
+- Translations are ordinary, natural translations, not word-for-word. What must be exact is everything a reader acts on: install and update commands, requirements, the first-use steps, script names, paths and links. Prose may be shortened or rephrased.
 - Adding a language: create `README_<LANG>.md` and add it to the switcher in every README. `npm run check` compares each translation's headings, code blocks and link targets with `README.md` and fails if the switcher misses a translation.
 
 ## 3. Tool neutrality
