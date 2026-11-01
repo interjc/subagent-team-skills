@@ -62,6 +62,7 @@ cmp "$BK" src/rule.ts; echo "cmp exit=$?"         # expect: 0
 
 - Only an agent holding the edit lease mutates files; reviewers audit the mutation evidence.
 - Put the list of rules to mutate in the brief's deliverables; require "break → red → restore → cmp 0 → green" output per item.
+- A mutation run needs a control: run the unmutated code through the same script first and require it to pass. Count a suite that fails to load as a failure, because a runner that reads only failed-test totals reports a broken mutant, or a broken script, as a survivor or a kill that never happened.
 - Pitfall: `cp a "$TMPDIR/x" || cp a other/x` followed by reading from `other/x` truncated a target to 0 bytes once. One backup variable, `test -s` before overwriting, write the mutant to a temp file first.
 - For data-loss fixes, require each fix to be temporarily reverted to show its test fails; otherwise the test may not lock anything.
 
@@ -74,6 +75,7 @@ cmp "$BK" src/rule.ts; echo "cmp exit=$?"         # expect: 0
 - New files: `git diff --check` ignores untracked files. Use `git diff --no-index --check /dev/null <file>` and read the output; its exit code is non-zero whenever the file differs from `/dev/null`, with or without warnings.
 - Shared logic: a report saying "all exits use the shared check" is not proof. `git grep` the call sites and compare with the list of exits in the brief; anything in the list and missing from the grep is a leak.
 - When the reviewer followed a brief that had a gap, the accepting layer fills the gap, again with something executable. Example: to prove a set of new URL-blocking rules hits no public page, compile the rules and run them against every public URL you can list.
+- After a rework round, compare the test names against the previous version (`grep -E "^\s*(it|test)\("` on both, then `diff`). Every removed name needs a reason. A worker's scripted edit can delete unrelated tests, and the suite stays green.
 - Small rework can be closed by the accepting layer without a new review round only if **all** hold: every change is inside the reviewer's findings; the change is small (wording, a line, a single condition, no new files); each finding can be re-checked executably (grep, diff, a targeted test). The report must say "closed by acceptance re-check", list the findings, the commands and outputs. Anything outside the findings goes back to a full review.
 
 ## Command pitfalls that make checks pass silently
