@@ -7,7 +7,7 @@
 // (hard minimum and recommended version), git, which host harness this
 // session probably runs in (a hint to confirm with the user), the optional
 // external teams (Codex CLI and its Claude Code plugin, agy, the agy-staff
-// plugin, OpenCode, Pi, Grok CLIs, project MCP servers), whether the project
+// plugin, OpenCode, Pi, Grok Build CLIs, project MCP servers), whether the project
 // already has a "## Subagent team" policy section (and its "External
 // delegation:" choice), and whether it has a team board.
 // Prints blockers, warnings and the exact fix for each; never installs or
@@ -38,7 +38,7 @@ var USAGE = [
   '  --json        print one JSON object instead of the report',
   '',
   'Requirements: Node.js >= ' + MIN_NODE_MAJOR + ' (hard minimum), ' + RECOMMENDED_NODE_MAJOR + ' recommended; git.',
-  'Optional external teams: Codex CLI, Codex plugin, agy, agy-staff plugin, OpenCode (ACP), Pi, Grok CLI, project MCP servers.',
+  'Optional external teams: Codex CLI, Codex plugin, agy, agy-staff plugin, OpenCode (ACP), Pi, Grok Build, project MCP servers.',
   'The host harness is detected from environment variables: a hint, confirm it with the user.',
   'Env overrides: GIT_BIN, CODEX_BIN, AGY_BIN, OPENCODE_BIN, PI_BIN, GROK_BIN, CLAUDE_CONFIG_DIR, HOME.',
   'Exit codes: 0 ready (warnings allowed), 1 usage error, 2 blocked.'
@@ -72,7 +72,7 @@ function checkNode(version) {
   if (major < MIN_NODE_MAJOR) {
     return {
       id: 'node', status: 'error', detail: 'Node.js ' + version + ' is below the minimum ' + MIN_NODE_MAJOR + '; the helper scripts will not work.',
-      fix: install + '. Until then, use the fallbacks in SKILL.md (the method itself needs no scripts).'
+      fix: install + '. Until then, use the fallbacks in references/environment-check.md (the method itself needs no scripts).'
     };
   }
   if (major < RECOMMENDED_NODE_MAJOR) {
@@ -195,7 +195,7 @@ function findMcpServers(root) {
 var OTHER_AGENTS = [
   { id: 'opencode', label: 'OpenCode CLI', envBin: 'OPENCODE_BIN', bin: 'opencode' },
   { id: 'pi', label: 'Pi coding agent CLI', envBin: 'PI_BIN', bin: 'pi' },
-  { id: 'grok', label: 'Grok CLI', envBin: 'GROK_BIN', bin: 'grok' }
+  { id: 'grok', label: 'Grok Build', envBin: 'GROK_BIN', bin: 'grok' }
 ];
 
 function checkOtherAgents(env, root) {
@@ -302,7 +302,7 @@ function runChecks(opts, env, nodeVersion) {
   var warned = checks.some(function (c) { return c.status === 'warn'; });
   var status = blocked ? 'blocked' : warned ? 'ready-with-warnings' : 'ready';
   var next = [];
-  if (blocked) next.push('Tell the user what is missing and the fix; install only with their consent, then re-run this check. If they decline, continue with the fallbacks in SKILL.md.');
+  if (blocked) next.push('Tell the user what is missing and the fix; install only with their consent, then re-run this check. If they decline, continue with the fallbacks in references/environment-check.md.');
   if (!policy.found) next.push('No "## Subagent team" policy yet: run the first-use setup (references/project-setup.md).');
   else if (!policy.modelPolicy) next.push('The policy section in ' + policy.file + ' has no "Model policy:" line: complete it with the user.');
   if (policy.found && !policy.hostHarness) next.push('The policy has no "Host harness:" line: confirm the host' + (host.id === 'unknown' ? '' : ' (detected: ' + host.name + ')') + ' with the user and record it.');
@@ -312,7 +312,7 @@ function runChecks(opts, env, nodeVersion) {
   if (checks.some(function (c) { return c.id === 'mcp'; })) teams.push('MCP servers');
   var choice = policy.externalDelegation;
   if (policy.found && teams.length && choice !== 'roster' && choice !== 'none') {
-    next.push('External teams available (' + teams.join(', ') + '): ask the user which may take work this session, pre-selecting the policy roster (SKILL.md "Start", step 5). Policy "External delegation: roster" or "none" skips this question.');
+    next.push('External teams available (' + teams.join(', ') + '): ask the user which may take work this session, pre-selecting the policy roster (references/environment-check.md, step 5). Policy "External delegation: roster" or "none" skips this question.');
   } else if (choice === 'roster' || choice === 'none') {
     next.push('External delegation: ' + choice + ' (from the policy): ' + (choice === 'none' ? 'keep all work in-house' : 'use the roster as recorded') + ' and say so in one line; re-check only when the user asks.');
   }

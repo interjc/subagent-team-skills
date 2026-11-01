@@ -10,7 +10,7 @@ Use Strict mode for long programs with several concurrent task lines, high-risk 
 | L2 | **Task lead** (one per task line, reused) | turn the task package into implementer and liaison briefs, dispatch and continue them, wait for results, organise independent review, task-level acceptance, hold the task's card, report to the director | write implementation, act as the independent reviewer, commit, push |
 | L3 | **Implementer** | implement per brief, run the quality gate, hand in evidence | review itself, commit |
 | L3 | **Reviewer** | independent read-only review (tests first, then execution, then risks); an L2 senior reviewer for the riskiest changes | edit anything, implement |
-| L3 | **Liaison** | track an external job for the task lead (section 5 of SKILL.md) | decide, edit code, commit |
+| L3 | **Liaison** | track an external job for the task lead ([external-teams.md](external-teams.md), "The liaison") | decide, edit code, commit |
 | L4 | **External team** | mechanical work that passed the gate, through its liaison | anything else |
 
 **Coordination files are the exception.** The director keeps writing the board (`docs/agent-team/**`: index, progress record, decisions, lessons, the cards it holds) and the `## Subagent team` section of `AGENTS.md`, because recording the user's decisions and adjustments immediately is its job and must not wait for a task chain. Task leads write only the cards they hold. Every other file, including the rest of `docs/` and `AGENTS.md`, goes through a task.

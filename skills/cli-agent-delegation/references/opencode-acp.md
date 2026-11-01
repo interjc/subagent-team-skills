@@ -76,6 +76,9 @@ node scripts/opencode-acp-run.mjs run --repo /abs/repo --session ses_... --promp
 - **Exit codes**: `0` finished (a length limit with a partial reply also exits 0 with `partial: true`), `1` usage, `2` agent error (refusal, auth required, no reply), `3` launch, protocol or setup failure (model, effort or agent not offered), `5` timeout (resumable with `--session`).
 - **Warnings are not failures.** Failed tool calls and rejected permission requests mean the agent may describe work it could not do; check the diff.
 - **Switching a resumed session from read-only to `--write`** works, but the model may still believe from its history that it cannot edit. Say so in the follow-up brief ("you now have edit permission").
+- **A session belongs to the directory it started in**: `--session` with a different `--repo` fails with "does not belong to cwd". Rework uses the first run's `--repo`.
+- **The allow-list matches the whole command line**, so `cd x && tsc ...` is refused even when `tsc ...` is listed, and `tsc ... | head` was refused too. In the brief, say the job already runs in `--repo`, give acceptance commands as single commands with no `cd` and no pipe, and repeat the same `--allow-shell` patterns on a rework run.
+- When a prompt needs sign-in the summary has `authRequired: true`: ask the user to run `opencode auth login`.
 - Sessions persist in OpenCode's normal session list (the probe deletes its own). One session runs one prompt at a time, so never send two jobs to the same session at once.
 
 ## Facts that matter

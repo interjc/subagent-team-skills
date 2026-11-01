@@ -17,7 +17,7 @@ Insert new snapshots at the **top** of the section.
   - Branch and base: `<branch>` @ `<short-hash>`; files belonging to this task: `<path>`, `<path>` (other changes are not this task's)
   - Edit lease: <main checkout, or absolute worktree path>, held by <task lead name / agent id>
   - Progress: <steps done>; stuck at <step> because <reason>
-  - Running: <agent id / name>, or external job `<job-id>` (conversation `<id>`; collect from <worktree> with `wait <job-id>`)
+  - Running: <agent id / name>, or external job `<job-id>` (conversation `<id>`; collect from <worktree> with `wait <job-id>`), or wrapper job: `<team> · <model> · <effort> · <sandbox>`, out-dir `<path>` (done when `summary.json` exists), PID `<pid>`, session `<id or "in log.txt">`, detached: <yes/no>
   - Next: <concrete command or file action>
   - Needs the user: <nothing, or open question #N>
 ```

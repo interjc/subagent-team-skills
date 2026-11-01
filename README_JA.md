@@ -56,7 +56,8 @@ L4  外部チーム        翻訳、一括編集、テストの補充、セカ�
 | **agy**（Google Antigravity） | CLI、または [agy-staff](https://github.com/keli-wen/agy-staff) プラグイン | 実プロジェクトで使用。ラッパースクリプト同梱 |
 | **Codex CLI** | CLI（`codex exec`）、または OpenAI による Claude Code 向け [Codex プラグイン](https://github.com/openai/codex-plugin-cc) | CLI は実プロジェクトで使用。ラッパースクリプト同梱。プラグインはドキュメントとソースに基づき、レビュー用と第二の経路として扱います |
 | **OpenCode** | [ACP](https://opencode.ai/v2/docs/cli/acp/)（`opencode acp`） | ラッパースクリプト同梱：モデルと effort の固定、既定ですべて拒否する権限セット、タイムアウト、再開。OpenCode 2.2.5 で小さなジョブにより確認済み。実プロジェクトではまだ未使用 |
-| Pi、Grok CLI、その他の ACP agent、MCP 経由で公開された agent | CLI / ACP / MCP | 未テスト。新しい CLI をつなぐためのチェックリストがあり、まず小さな読み取り専用ジョブで検証してから使います |
+| Grok Build、Cursor、Pi、そのほか [ACP Registry](https://agentclientprotocol.com/get-started/registry) の agent | ACP | 実作業では未テスト。セッション確立は Grok Build と Cursor で確認済み。Gemini CLI は agy に統合されたため非推奨で、agy を使います。[導入ガイド](skills/cli-agent-delegation/references/acp-agents.md)は [T3 Code](https://github.com/pingdotgg/t3code) が多数の agent に対応する方法を参考に、受け入れチェック、権限ポリシー、よくある落とし穴をまとめています |
+| その他の CLI、MCP 経由で公開された agent | CLI / MCP | 未テスト。新しい CLI をつなぐためのチェックリストがあり、まず小さな読み取り専用ジョブで検証してから使います |
 
 セッション開始時、agent は検出した外部チームのうちどれに仕事を任せてよいかを尋ねます（プロジェクトのポリシーに選択があればそれを使います）。その後も頼めばいつでも（「Codex にレビューさせられる？」「OpenCode を追加して」「agy はもう使わないで」）再確認して調整します。どのチームにもフォールバックの順序があります：同じチームの別経路、次に同じティアの別チーム、最後に社内です。
 
@@ -136,7 +137,7 @@ docs/agent-team/
 | Skill | 内容 | 読み込まれる場面 |
 |---|---|---|
 | [`subagent-team`](skills/subagent-team/SKILL.md)（コア） | ホスト agent の検出と確認、初回のチームポリシー、4 層と層 / ティアの区別、タスク分割とタスクごとのフロー、外注の基準と窓口役、チームボードと `AGENTS.md` / `docs/` の相互参照、モード（solo / standard / strict）、指示書テンプレート、実行可能な検証と 3 段階のレビュー、層ごとのエスカレーション、agent の再利用とスロット制限、Claude Code と Codex の違い | タスクが複数のファイルや段階にまたがるとき。作業の分割、フローの選択、委任、モデルや effort の選択、指示書の作成、外部作業の追跡、委任結果のレビュー、教訓の記録、ユーザーに聞くべきか迷うとき |
-| [`cli-agent-delegation`](skills/cli-agent-delegation/SKILL.md) | OpenAI Codex CLI（ラッパー、または OpenAI の Codex プラグイン）、Google Antigravity（`agy`。[agy-staff](https://github.com/keli-wen/agy-staff) の有無は問わない）、ACP 経由の OpenCode への外注：使うチームをユーザーと決め、求めに応じて再確認すること、どの作業をどのチームに渡すか、安全なラッパー、フォールバックの順序、追跡、再開、受け入れ、実測データ。窓口役による上限付きの待機。Pi、Grok などの CLI、ACP agent、MCP をつなぐためのチェックリスト | 仕様が固まった大量作業を他社の agent に渡すとき、または使える外部 agent を確かめたいとき |
+| [`cli-agent-delegation`](skills/cli-agent-delegation/SKILL.md) | OpenAI Codex CLI（ラッパー、または OpenAI の Codex プラグイン）、Google Antigravity（`agy`。[agy-staff](https://github.com/keli-wen/agy-staff) の有無は問わない）、ACP 経由の OpenCode への外注：使うチームをユーザーと決め、求めに応じて再確認すること、どの作業をどのチームに渡すか、安全なラッパー、フォールバックの順序、追跡、再開、受け入れ、実測データ。窓口役による上限付きの待機。ACP Registry のほかの ACP agent を導入するためのガイド、その他の CLI や MCP をつなぐためのチェックリスト | 仕様が固まった大量作業を他社の agent に渡すとき、または使える外部 agent を確かめたいとき |
 | [`agent-handover`](skills/agent-handover/SKILL.md) | 進捗記録、タスクカードと教訓、ローカルメモリではなくリポジトリに置くルール、コミットハッシュのプレースホルダー、決定記録、引き渡しと引き継ぎのチェックリスト | 作業を受け入れた後、セッションが終わりそうなとき、agent やツールを切り替えるとき、他人の作業を引き継ぐとき |
 
 Claude Code プラグインに同梱される agent：`team-reviewer`（通常の変更、medium effort）と `team-reviewer-deep`（リスクの高い変更や複数モジュールにまたがる変更、high effort）。どちらも指示によって読み取り専用とされ、編集や書き込みのツールを持ちません。ただしテストを実行するために Bash は残しており、Bash でもファイルは書けるので、必要に応じて作業ツリーのフィンガープリントを照合してください（`verification.md` を参照）。

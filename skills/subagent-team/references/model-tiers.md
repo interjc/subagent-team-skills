@@ -11,7 +11,7 @@ The skill never hard-codes a vendor. In-house agents (layers L1–L3) use four t
 | external-fast | another vendor's cheap fast model; translations, bulk copy, mechanical replacements | vendor's medium/high |
 | external-strong | another vendor's strong model; code-reading syncs, large homogeneous implementation, read-only second opinions | vendor's medium/high |
 
-The two external tiers decide *how carefully* the work is done, not *whether risky work may be outsourced*: both only accept work that passes the outsourcing gate (SKILL.md section 3), with one exception: read-only second opinions, whose verdict stays in-house.
+The two external tiers decide *how carefully* the work is done, not *whether risky work may be outsourced*: both only accept work that passes the outsourcing gate ([SKILL.md](../SKILL.md), "Breakdown, flows and the outsourcing gate"), with one exception: read-only second opinions, whose verdict stays in-house.
 
 ## Role → tier → effort
 
@@ -36,6 +36,14 @@ The two external tiers decide *how carefully* the work is done, not *whether ris
 | Read-only second opinion from another vendor | L4 | external-strong · medium–high; verdict stays in-house |
 
 Reviewer effort: single file, straightforward logic, clear blast radius → medium; many files, cross-module, irreversible consequences → high or above.
+
+## Rules for every pick
+
+- The director runs at **high tier, high effort**: the session's own model, never switched. As of 2026-10 that meant Claude Opus 5.5 or GPT-6.1 Sol at `high`.
+- **Tier and effort are independent.** Mid + high effort suits a precise but fiddly implementation; high + low effort suits a quick architectural sanity check. Effort follows **how much can only be settled by reasoning**, not the size of the change.
+- **Pick before every dispatch and every rework round.** State the role, tier, effort and outsourcing gate result in one line, against the project's role table. Defaults drift: a run that never names them ends up with whatever model was used last.
+- **Risk sets a floor, not just a different model.** A review of money, auth, migrations or irreversible data is a senior review: high or top tier at high effort, on a model other than the author's. A mid-tier reviewer does not meet the floor, even at high effort. When the author is already on the strongest in-house model that fits, use a different top-tier model.
+- Use what the harness actually exposes, not names from memory. If the harness cannot set effort per call, choose by tier only and ask for a thorough job in the brief.
 
 ## Deciding the mapping
 

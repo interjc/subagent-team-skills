@@ -11,7 +11,7 @@ If the user prefers a separate file, write it (e.g. `docs/agents/subagent-team.m
 ## When to run setup
 
 1. Look for the `## Subagent team` section (or the pointer to it). If it has a `Model policy:` line, **use it and do not ask**. If something it names is unavailable (a model was retired, a CLI is not installed), fall back as in the "auto" rules below and tell the user in one line. If it lacks a line that newer versions of this skill add (`Host harness:`, `Team board:`, `External delegation:`, the external-team table), ask only for the missing items, pre-filled.
-2. No section: run the questionnaire before dispatching the first subagent. Solo-mode work (section 0 of SKILL.md) does not need it.
+2. No section: run the questionnaire before dispatching the first subagent. Solo-mode work ("Start" in [SKILL.md](../SKILL.md)) does not need it.
 3. The user cannot be asked right now (non-interactive run, or they said "don't ask, just go"): write the section with `Model policy: auto` and `Decided: default, not confirmed`, continue, and include the policy in the end-of-task grill-me list.
 4. The user later changes their mind ("use another vendor's model for reviews"): update the section in place, with the date, and add a row to the board's `lessons.md` with the user's words.
 

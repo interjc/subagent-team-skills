@@ -153,4 +153,5 @@ The expert (L2) is a read-only high or top-tier subagent. It answers "how should
 - [ ] The task's flow is on its card, and the brief names the card and the escalation target.
 - [ ] Every external job has a liaison (or the director tracks it), and its ids go on the card at dispatch.
 - [ ] The next step depends on this result? Then dispatch in the foreground or plan how you will be notified.
+- [ ] No secret can reach a report: secrets are compared by hash and named by file. If one reaches a report anyway, treat that report as exposed, do not quote it, and compare hashes against the deployed config to judge scope.
 - [ ] Authorization for anything beyond the default (editing docs or agent config, deploying) is quoted verbatim from the user, with the files it covers.
