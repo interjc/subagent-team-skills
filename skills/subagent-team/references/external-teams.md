@@ -26,6 +26,7 @@ Rules for every external team:
 - **Bound every job** with a timeout, and know how to kill it (process group, plugin's cancel command).
 - **Results go to files** (final reply, log, summary) so a liaison or a later session can read them.
 - **A resumable id** (session, conversation, job id) is recorded on the card the moment the job starts.
+- **No end-to-end testing.** External agents generally cannot drive a browser, device or the full stack. Their acceptance is static checks and unit tests; the director arranges end-to-end checks after acceptance ([verification.md](verification.md), "End-to-end checks for outsourced work").
 
 ## Choosing and adjusting external teams
 
@@ -87,7 +88,7 @@ Raise the liaison to mid tier when its acceptance checks require reading code (d
 4. **Check** with the acceptance commands from the card; for content work, the mechanical checks (identical key sets, placeholders and escapes preserved, order kept).
 5. **Answer straightforward questions.** External agents report blockers in their final reply ("stopped: the key list has no entry for X"). If the answer is already in the brief, the contract, the card or a repository fact the liaison can look up, it answers by continuing the same job with the answer quoted from its source.
 6. **Rework once** for mechanical failures: continue the same job with the concrete failure output.
-7. **Report** to the card holder above it at real transitions only: dispatched, returned, accepted or rework, escalated. Keep the card's status and log current; the liaison is the holder of its job's card.
+7. **Report** to the card holder above it at real transitions only: dispatched, returned, accepted or rework, escalated. Keep the card's status and log current; the liaison is the holder of its job's card. For user-facing changes, end the report with `E2E: pending director` and the flows to walk; the liaison never runs them.
 
 ### What the liaison escalates (to L2, or L1 if the flow has no L2)
 

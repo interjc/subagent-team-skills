@@ -9,8 +9,9 @@ Asking a model to "read the code and think about what could go wrong" is slow, e
 | Implementer | Writes unit tests and a runnable verification list; it knows best what changed and where the edges are |
 | Reviewer | Audits those tests first, executes them, then hunts for risks outside them |
 | L2 (where the flow has it) and L1 director | Accept: scope check, targeted re-runs, factual checks, fills gaps the brief missed; L1 always runs the integration gate |
-| Liaison (external jobs) | Runs the acceptance commands and mechanical checks on the job's output; escalates instead of judging |
-| Browser | Last layer, a few targeted checks, never open-ended exploration |
+| Liaison (external jobs) | Runs the acceptance commands and mechanical checks on the job's output; escalates instead of judging; never runs end-to-end checks |
+| External teams (L4) | Static checks and unit or snapshot tests only; no end-to-end checks (below) |
+| Browser / end-to-end | Last layer, a few targeted checks, never open-ended exploration; arranged by L1 |
 
 ## What to unit-test
 
@@ -30,6 +31,15 @@ Ask the implementer to explain why it wrote these tests and not others; that exp
 3. **Hunt outside the checklist**: now read code, with specific questions. Would this change affect something neither the brief nor the tests mention? The implementer answers for the brief; the reviewer answers for the result.
 
 Reviewers without browser tools must not be asked to "check in the browser". The task lead or director performs browser checks and passes the evidence into the review brief; the final report says which layer did what.
+
+## End-to-end checks for outsourced work
+
+External CLI agents in general cannot run end-to-end checks: they have no browser or device, run sandboxed or without network, and their briefs forbid dev servers, builds and databases. So by rule, the **director (L1) arranges every end-to-end check for outsourced work**, never the external team or its liaison.
+
+- External briefs carry static checks and unit or snapshot tests only. An end-to-end step in an external brief is a brief bug; an external report that says it "checked in the browser" or "ran the app" is unverified.
+- When an outsourced change touches anything user-facing (UI, routes, API responses, generated copy shown to users), the card records `E2E: pending director` with the flows to walk and their expected results; the liaison or L2 lists them, and the job is accepted but the task is not done.
+- L1 runs those checks itself, or hands them to an in-house agent that actually has the tools (browser, device, the real stack), on the user's running dev server where possible. Batch them: one walkthrough after several jobs land is cheaper than one per job.
+- The final report says which checks the external team ran and which L1 arranged.
 
 ## Reviewer hygiene
 

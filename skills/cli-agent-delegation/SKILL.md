@@ -63,6 +63,7 @@ Write the brief to a file in your scratch directory (start from `subagent-team`'
 - **Freeze the list first.** Keys or endpoints added after dispatch will not be handled.
 - **A file lease plus "must not touch"**: list the files other agents are editing right now.
 - **Acceptance commands use executable paths** (`./node_modules/.bin/tsc --noEmit -p .`), not package-manager scripts. Say where acceptance runs: a sandboxed job may be unable to start test runners that need local ports; it should report that, and the liaison runs the rest outside the sandbox.
+- **No end-to-end steps.** External CLIs generally cannot drive a browser, a device or the full stack. Acceptance in the brief is static checks and unit or snapshot tests only.
 - **"If anything falls outside this spec, stop and explain it in your final reply; do not decide."**
 - **Prohibitions**: no state-changing git operations (read-only `git status` / `git diff` is fine), no installs, builds, dev servers or database commands, no reading `.env*`, nothing outside the lease.
 - **Report**: files changed and why, uncertain spots, problems noticed but not fixed.
@@ -94,7 +95,8 @@ The job's report is a claim. Acceptance is yours (or your liaison's, for the mec
 3. Content work (translations, copy, examples) is reviewed and edited, not just accepted: key sets identical across languages, `{placeholders}` and escapes such as `\n` preserved, order matching the base file.
 4. Docs work: check every verifiable fact (versions, scripts, paths, environment variables, endpoints).
 5. Small issues: fix them yourself. Larger ones: continue the same job with the concrete failure. **Two failed rounds → take it back in-house.**
-6. Commit only after acceptance, and only by the director.
+6. **End-to-end checks are the director's job.** For user-facing changes, the main agent walks the affected flows on the real stack (browser, device, real API), itself or through an in-house agent that has those tools; a liaison only lists the flows. Treat any end-to-end claim in an external report as unverified.
+7. Commit only after acceptance, and only by the director.
 
 ## 7. Tracking through a liaison
 

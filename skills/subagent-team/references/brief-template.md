@@ -82,6 +82,7 @@ External agents only know the brief and cannot ask follow-up questions.
 - **Fully self-contained**: paste the spec, key lists, base-language text and insertion points into the brief. Do not just give a path the agent may not be able to read (files outside the workspace especially).
 - **Freeze the list first**: an external agent will not pick up keys or endpoints you add after dispatch.
 - **Acceptance commands use executable paths** (`./node_modules/.bin/tsc --noEmit -p .`, `./node_modules/.bin/eslint <files>`), not package-manager scripts, which may fail on engine checks or a different shell environment.
+- **No end-to-end steps**: acceptance is static checks and unit or snapshot tests only. Do not ask for browser, device, dev-server or full-stack checks; the director arranges those after acceptance ([verification.md](verification.md), "End-to-end checks for outsourced work").
 - **No decisions**: "If anything falls outside this spec, stop and explain it in your final reply; do not decide."
 - **Prohibitions**: state-changing git operations (read-only status/diff is fine); installing packages, builds, dev servers, database commands; reading `.env*`; editing outside the lease.
 - **Report**: files changed and why, uncertain spots, problems noticed but not fixed.
@@ -117,7 +118,7 @@ Timeout: <duration>; wait in bounded slices (<how, for this host>)
 Edit code, commit, talk to the user, start a second job for the same work, widen the lease.
 
 ## Report (at transitions only: dispatched, returned, accepted / rework, escalated)
-One line each: job id, verdict, changed files, acceptance numbers, open questions.
+One line each: job id, verdict, changed files, acceptance numbers, open questions, and for user-facing changes "E2E: pending director" with the flows to walk.
 ```
 
 ## Reviewer brief
