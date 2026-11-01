@@ -198,6 +198,8 @@ node scripts/opencode-acp-run.mjs run ... --session <id>  # rework with context 
 
 - Read-only is the default; `--write` allows edits inside the workspace only. Shell is limited to read-only git, `ls`, `pwd`, `wc` and your `--allow-shell` patterns, so list the acceptance commands the job must run. Web access needs `--allow-web`.
 - `--model` and `--effort` are required and must be offered in that directory (the probe lists both). Pass your in-house vendor to `--forbid-provider`.
+- A session belongs to the directory it started in: `--session` with a different `--repo` fails with "does not belong to cwd". Rework uses the first run's `--repo`.
+- The allow-list matches the whole command line, so `cd x && tsc ...` is refused even when `tsc ...` is listed. In the brief, say the job already runs in `--repo` and give acceptance commands as single commands with no `cd` and no pipe (`tsc ... | head` was refused too), and repeat the same `--allow-shell` patterns on a rework run.
 - Outputs in `--out-dir`: `last.md`, `reply.md`, `events.jsonl`, `stderr.txt`, `summary.json` (with `stopReason`, `sessionId`, applied model and effort, failed tool calls, rejected permission requests, usage, cost, `resumeHint`). Exit codes: `0` finished, `1` usage, `2` agent error (refusal, `authRequired`, no reply), `3` launch or setup failure, `5` timeout.
 - When a prompt needs sign-in, the summary has `authRequired: true`: ask the user to run `opencode auth login`.
 
