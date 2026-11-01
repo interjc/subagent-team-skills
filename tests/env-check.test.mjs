@@ -44,7 +44,7 @@ test('checkNode: error below the minimum, warning below recommended, ok at recom
   assert.equal(low.status, 'error');
   assert.match(low.detail, /below the minimum 18/);
   assert.match(low.fix, /nvm install 24/);
-  assert.match(low.fix, /fallbacks in SKILL\.md/);
+  assert.match(low.fix, /fallbacks in references\/environment-check\.md/);
   assert.equal(checkNode('v18.0.0').status, 'warn');
   assert.equal(checkNode('v22.22.0').status, 'warn');
   assert.equal(checkNode('v24.1.0').status, 'ok');
@@ -87,7 +87,7 @@ test('runChecks: asks which external teams to use unless the policy says roster 
   const dir = project('ask', { 'AGENTS.md': '## Subagent team\n- Model policy: auto\n- Host harness: Codex\n- Team board: native\n' });
   const env = { ...noOthers(), CODEX_BIN: fakeCodex, AGY_BIN: missing('agy'), HOME: tmp, CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg') };
   const r = envCheck.runChecks({ root: dir }, env, 'v24.1.0');
-  assert.deepEqual(r.next, ['External teams available (codex): ask the user which may take work this session, pre-selecting the policy roster (SKILL.md "Start", step 5). Policy "External delegation: roster" or "none" skips this question.']);
+  assert.deepEqual(r.next, ['External teams available (codex): ask the user which may take work this session, pre-selecting the policy roster (references/environment-check.md, step 5). Policy "External delegation: roster" or "none" skips this question.']);
   fs.writeFileSync(path.join(dir, 'AGENTS.md'), '## Subagent team\n- Model policy: auto\n- Host harness: Codex\n- Team board: native\n- External delegation: none\n');
   const r2 = envCheck.runChecks({ root: dir }, env, 'v24.1.0');
   assert.match(r2.next[0], /External delegation: none \(from the policy\): keep all work in-house/);

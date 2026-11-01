@@ -56,7 +56,8 @@
 | **agy**（Google Antigravity） | CLI，或 [agy-staff](https://github.com/keli-wen/agy-staff) 插件 | 真实项目中使用，有封装脚本 |
 | **Codex CLI** | CLI（`codex exec`），或 OpenAI 为 Claude Code 出的 [Codex 插件](https://github.com/openai/codex-plugin-cc) | CLI 在真实项目中使用，有封装脚本。插件依据其文档和源码整理，用于审核和作为第二通道 |
 | **OpenCode** | [ACP](https://opencode.ai/v2/docs/cli/acp/)（`opencode acp`） | 有封装脚本：固定模型和 effort、默认全部拒绝的权限集、超时和续做。已在 OpenCode 2.2.5 上用小任务验证，尚未用于真实项目 |
-| Pi、Grok CLI、其他 ACP agent，以及通过 MCP 暴露的 agent | CLI / ACP / MCP | 未测试。skill 给出接入新 CLI 的检查步骤，先跑一个只读小任务验证再用 |
+| Grok Build、Cursor、Pi 以及 [ACP Registry](https://agentclientprotocol.com/get-started/registry) 里的其他 agent | ACP | 尚未用于实际工作。已在 Grok Build 和 Cursor 上验证会话建立。Gemini CLI 已并入 agy，视为弃用，请用 agy。[接入指南](skills/cli-agent-delegation/references/acp-agents.md)借鉴了 [T3 Code](https://github.com/pingdotgg/t3code) 支持多种 agent 的做法，给出准入检查、权限策略和常见陷阱 |
+| 其他 CLI，以及通过 MCP 暴露的 agent | CLI / MCP | 未测试。skill 给出接入新 CLI 的检查步骤，先跑一个只读小任务验证再用 |
 
 会话开始时，agent 会问你检测到的外包团队里哪些可以接活（或者直接读项目策略里的选择）；之后只要你开口（"Codex 能审这个吗？""加上 OpenCode""别再用 agy 了"），它就会重新核实并调整。每个团队都有降级路线：先换同一团队的其他通道，再换同档位的其他团队，最后收回内部。
 
@@ -138,7 +139,7 @@ docs/agent-team/
 | Skill | 内容 | 什么时候加载 |
 |---|---|---|
 | [`subagent-team`](skills/subagent-team/SKILL.md)（核心） | 宿主 agent 的检测与确认；首次使用时约定团队策略；四层组织与层 / 档位的区分；任务拆分与每个任务的流程；外包准入与对接人；团队看板与 `AGENTS.md` / `docs/` 互相引用；三种模式（单干 / 标准 / 严格）；任务说明模板；可执行验证与三步审核；逐层上报的决策阶梯；agent 复用与槽位限制；Claude Code 与 Codex 的差异 | 任务跨多个文件或阶段；要拆任务、定流程、派活、选模型或 effort、写任务说明、跟踪外包、审核委派结果、记录经验，或者拿不准要不要问用户 |
-| [`cli-agent-delegation`](skills/cli-agent-delegation/SKILL.md) | 外包给 OpenAI Codex CLI（封装脚本，或 OpenAI 的 Codex 插件）、Google Antigravity（`agy`，装不装 [agy-staff](https://github.com/keli-wen/agy-staff) 都行）和通过 ACP 连接的 OpenCode：和用户确认用哪些团队、按需重新核实，什么活交给谁，安全封装、降级路线、进度追踪、续做、验收、实测数据；对接人如何有上限地等待；接入 Pi、Grok 等其他 CLI、ACP agent 或 MCP 的检查步骤 | 把需求明确的批量活交给其他厂商的 agent 时，或想确认有哪些外部 agent 可用时 |
+| [`cli-agent-delegation`](skills/cli-agent-delegation/SKILL.md) | 外包给 OpenAI Codex CLI（封装脚本，或 OpenAI 的 Codex 插件）、Google Antigravity（`agy`，装不装 [agy-staff](https://github.com/keli-wen/agy-staff) 都行）和通过 ACP 连接的 OpenCode：和用户确认用哪些团队、按需重新核实，什么活交给谁，安全封装、降级路线、进度追踪、续做、验收、实测数据；对接人如何有上限地等待；接入 ACP Registry 中其他 ACP agent 的指南，以及接入其他 CLI 或 MCP 的检查步骤 | 把需求明确的批量活交给其他厂商的 agent 时，或想确认有哪些外部 agent 可用时 |
 | [`agent-handover`](skills/agent-handover/SKILL.md) | 进度记录、任务卡片和经验记录；规则落进仓库而不是本地记忆；commit hash 占位与回填；决策记录；交出与接手清单 | 验收之后、会话可能中断之前、切换 agent 或工具时、接手别人的工作时 |
 
 Claude Code 插件附带两个审核 agent：

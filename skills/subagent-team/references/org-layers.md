@@ -9,7 +9,7 @@ Run the team like a small software organisation. A **layer** says what an agent 
 | **L1 Director** | the main session (one) | priorities, the task breakdown, each task's flow, contracts, cross-task conflicts, what goes to the human | talks to the user; writes the task cards and contracts; grants edit leases; integration gate; commit | waits on implementers directly in Strict mode; lets a subagent talk to the user |
 | **L2 In-house experts** | high / top-tier subagents | detail design inside a task, interpretation of the spec, accept or send back, technical calls escalated from below | designers (detail design, sub-task split, briefs), task leads (own a task line), senior reviewers (risky or cross-module review, task-level acceptance), principal expert (top tier, hardest calls) | implement; commit; decide product or business questions |
 | **L3 In-house execution** | mid / low-tier subagents (high tier for risky work) | nothing beyond the brief | implementers (code plus tests), independent reviewers and testers (read-only), runners (search, run commands), liaisons (track external teams) | widen the scope; review their own work; commit |
-| **L4 External teams** | other vendors' agents via CLI, plugin or MCP | nothing | fully specified bulk work, read-only second opinions | anything that fails the outsourcing gate (SKILL.md section 3) |
+| **L4 External teams** | other vendors' agents via CLI, plugin or MCP | nothing | fully specified bulk work, read-only second opinions | anything that fails the outsourcing gate ([SKILL.md](../SKILL.md), "Breakdown, flows and the outsourcing gate") |
 | **Human** | the user | product and business calls, money, credentials, public or irreversible actions | answers one batched question list | is interrupted mid-way for something a layer could decide |
 
 The director's context is the most expensive in the system. Everything that can be pushed down a layer is.
@@ -40,7 +40,7 @@ Choosing a flow:
 3. Is it money, auth, data migration or anything irreversible? Then L2 designs and a senior reviewer reviews, whatever the size; L4 may only write tests and snapshots for it.
 4. When in doubt between two flows, pick the lighter one and let escalation pull the heavier layer in.
 
-The mode (SKILL.md section 0) sets how formal the paperwork is; the flow sets who works on a task. Strict mode forces `designed` (or `designed+outsource`) for every code task, with an L2 task lead per task line ([strict-mode.md](strict-mode.md)).
+The mode ("Start" in [SKILL.md](../SKILL.md)) sets how formal the paperwork is; the flow sets who works on a task. Strict mode forces `designed` (or `designed+outsource`) for every code task, with an L2 task lead per task line ([strict-mode.md](strict-mode.md)).
 
 ## Breaking work down
 
@@ -54,6 +54,7 @@ The director splits the program; L2 splits a task into sub-tasks. The same rules
 - **Size for one agent**: a unit fits one agent's context without compaction, and its brief fits on about two pages. Bigger: split. Smaller than the cost of writing the brief: merge, or let the director do it.
 - **Dependencies are explicit**: on the card (`Parent:` and the log) and in the native task list where the harness has one. Contracts and shared types come first; they are on the critical path for everything parallel.
 - **Order by critical path, then by risk**: start what blocks others, then what is most likely to surprise you.
+- **Delegate even though it is tempting to do it yourself**: cross-file mechanical replacements, one-off verification scripts, bulk fact collection, renames under fixed rules. Size is not the test; judgement is.
 
 ## Escalation through the layers
 
@@ -67,6 +68,8 @@ Questions travel **up to the next layer present in the flow**; that layer either
 | L1 | principal expert (`consult`), then the human | hard technical trade-offs | only a human may decide: goes to the open questions and the end-of-task grill-me list |
 
 Each question is written where it can be found: an `[open]` item in the asking unit's card, with who asked, who should answer, the options, and what the asker does meanwhile (the conservative path). The answer is written in place (`[answered <date> by <who>]`), and the asker is continued with it. Questions are never deleted.
+
+The principal expert is a read-only top-tier subagent; if the top tier is unavailable, use the next flagship at its highest effort and say so. Its advice is data, not orders: check its basis, and let the implementer prove it with scenario tests. Experts return *recommendation + reasons + risks*.
 
 An escalation message is short and self-contained:
 

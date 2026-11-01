@@ -2,7 +2,7 @@
 
 External teams are other vendors' agents that the host harness reaches through a channel: a **CLI** run headless, a **plugin** that wraps a CLI, a protocol server such as **ACP** (Agent Client Protocol) driven by a small client, or an **MCP server** that exposes the agent as tools. They are cheap or strong, never tire of bulk work, and a different model family catches different mistakes. They cannot ask questions mid-run, do not share your context, and each job has a fixed start-up cost.
 
-Only work that passes the outsourcing gate (SKILL.md section 3) goes to them. How to call Codex CLI, agy and OpenCode, wrappers, timeouts, resume and each team's fallback ladder: skill `cli-agent-delegation`.
+Only work that passes the outsourcing gate ([SKILL.md](../SKILL.md), "Breakdown, flows and the outsourcing gate") goes to them. How to call Codex CLI, agy and OpenCode, wrappers, timeouts, resume and each team's fallback ladder: skill `cli-agent-delegation`.
 
 ## The external roster
 
@@ -13,8 +13,8 @@ Recorded in the project's `## Subagent team` section ([project-setup.md](project
 | agy (Google Antigravity) | CLI (`agy -p`), plugin (agy-staff) | external-fast (flash models), external-strong (strong models) | used in real projects |
 | Codex CLI | CLI (`codex exec` through `codex-run.mjs`); OpenAI's Codex plugin for Claude Code for reviews | external-strong (and external-fast with a light model at low effort) | CLI used in real projects; plugin checked from its docs and source only |
 | OpenCode | ACP (`opencode acp` through `opencode-acp-run.mjs`); `opencode run` as the no-Node fallback | the tier of the model it is configured with (it reaches many providers) | wrapper checked against OpenCode 2.2.5 on small jobs (2026-11); not yet used in real projects |
-| Pi coding agent | CLI *unverified* | depends on the configured model | not tested |
-| Grok CLI | CLI *unverified* | depends on the models it offers | not tested |
+| Grok Build, Cursor, Pi and other ACP Registry agents | ACP; onboarding in `cli-agent-delegation` (`references/acp-agents.md`) | the tier of the models each offers | session setup checked on Grok Build and Cursor (2026-11); not tested for work |
+| Gemini CLI | deprecated: merged into agy | use agy instead | only if the user insists, after the ACP admission checklist |
 | Any agent behind an MCP server | MCP tools in the host | depends on the agent | not tested |
 
 `scripts/env-check.cjs` reports which of these CLIs are on `PATH`, whether the Codex and agy-staff plugins are installed, and which MCP servers the project's `.mcp.json` declares; `cli-agent-delegation`'s `doctor.mjs` adds versions, Codex's default effort and whether `opencode acp` exists, and `opencode-acp-run.mjs probe` lists OpenCode's models and effort levels without spending tokens. Presence is not capability: a binary called `pi` may be another program. Before the first job with an untested team, run one tiny read-only job (summarise a file, list exported functions) and check that it ran headless, honoured the working directory, and returned a parsable final reply. Record what you found in the roster row (*verified YYYY-MM-DD* or *unverified*).
@@ -29,11 +29,11 @@ Rules for every external team:
 
 ## Choosing and adjusting external teams
 
-**At the start of a session** (SKILL.md "Start", step 5) the user picks which detected teams may take work this session. The project policy's `External delegation:` line sets whether that question is asked:
+**At the start of a session** ([environment-check.md](environment-check.md), step 5) the user picks which detected teams may take work this session. The project policy's `External delegation:` line sets whether that question is asked:
 
 | Value | At session start |
 |---|---|
-| `ask` (default) | ask one multi-select question, pre-selecting the roster's teams |
+| `ask` (default) | ask one multi-select question listing each team with its channel and typical work, plus "none"; pre-select the roster's teams |
 | `roster` | use the roster as recorded; state it in one line |
 | `none` | keep all work in-house; state it in one line |
 

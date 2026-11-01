@@ -1,36 +1,36 @@
 ---
 name: cli-agent-delegation
-description: Outsource well-specified bulk coding work to another vendor's agent through its CLI, a plugin, ACP or an MCP server. Covers OpenAI Codex CLI (codex exec, or OpenAI's Codex plugin for Claude Code), Google Antigravity (agy, with or without the agy-staff plugin) and OpenCode through its Agent Client Protocol server (opencode acp), with a fallback ladder for each, plus how to adapt Pi, Grok or other agents. Asks the user which external teams to use and re-checks their capabilities on request. Use this when handing translations, mechanical refactors, test or snapshot backfills, doc syncs or a second-opinion review to an external agent; when running codex, agy or opencode headless; when choosing between them or falling back from one to another; when the user asks which external agents are available or wants to add, drop or verify one; when a liaison dispatches, waits on, resumes or accepts their jobs; or when a dispatch plugin is missing or broken.
+description: Outsource well-specified bulk coding work to another vendor's agent through its CLI, a plugin, ACP or an MCP server. Covers OpenAI Codex CLI (codex exec, or OpenAI's Codex plugin for Claude Code), Google Antigravity (agy, with or without the agy-staff plugin) and OpenCode through its Agent Client Protocol server (opencode acp), with fallback ladders, plus onboarding other agents through ACP and its Registry (Grok Build, Cursor, Pi; Gemini CLI is deprecated, use agy). Asks the user which external teams to use and re-checks their capabilities on request. Use this when handing translations, mechanical refactors, test or snapshot backfills, doc syncs or a second-opinion review to an external agent; when running codex, agy or opencode headless; when choosing between them or falling back from one to another; when the user asks which external agents are available or wants to add, drop or verify one; when a liaison dispatches, waits on, resumes or accepts their jobs; or when a dispatch plugin is missing or broken.
 license: MIT
 compatibility: Needs a shell. The helper scripts need Node.js 18+ (24 recommended); external agents need their own CLIs and accounts (Codex CLI, agy, OpenCode). Run scripts/doctor.mjs first.
 metadata:
-  version: "0.3.0"
+  version: "0.3.1"
 ---
 
 # CLI Agent Delegation
 
-Outsourced staff are other vendors' agents run headless. They are cheap or strong, they never get tired of bulk work, and a different model family catches different mistakes. But they cannot ask questions, they do not share your context, and each job carries a fixed start-up cost. This skill covers how to use them well. It is the outsourcing arm of the `subagent-team` skill, where external agents form the fourth layer (external teams) and each job is tracked by a low-tier in-house *liaison* subagent. Without that skill, still apply its gate (section 2).
+Outsourced staff are other vendors' agents run headless. They are cheap or strong, they never get tired of bulk work, and a different model family catches different mistakes. But they cannot ask questions, they do not share your context, and each job carries a fixed start-up cost. This skill is the outsourcing arm of `subagent-team`, where external agents form the fourth layer and each job is tracked by a low-tier in-house *liaison* subagent. Without that skill, still apply the gate below.
 
-Three teams are covered in depth: **Codex CLI** and **agy** (used in real projects) and **OpenCode through ACP** (wrapper checked against OpenCode 2.2.5, not yet used in real projects). Tested with **Claude Code** as the host (background `Bash` plus completion notifications); works from Codex and other hosts that can run shell commands. Host notes are at the end.
+This page holds the decisions that apply to every team: gate, team choice, brief, channel ladder, acceptance. Each team's mechanics live in `references/`; read only the page for the team you are about to use.
 
-## 1. Start: agree on the external teams, and re-check on request
+| You are about to... | Read |
+|---|---|
+| run Codex CLI, or use OpenAI's Codex plugin | [references/codex.md](references/codex.md) |
+| run agy, or use the agy-staff plugin | [references/agy.md](references/agy.md) |
+| run OpenCode through ACP | [references/opencode-acp.md](references/opencode-acp.md) |
+| add or check any other ACP agent (Grok Build, Cursor, Registry agents) | [references/acp-agents.md](references/acp-agents.md) |
+| add a non-ACP CLI or an MCP-fronted agent | [references/other-agents.md](references/other-agents.md) |
+| hand a job to a liaison, wait on it, or adapt to a host | [references/liaison-and-hosts.md](references/liaison-and-hosts.md) |
+| answer "which teams may take work?" or re-verify a team | [references/roster-and-verification.md](references/roster-and-verification.md) |
+| judge timings, token costs and past lessons | [references/field-data.md](references/field-data.md) |
 
-Script paths in this skill are relative to the skill's own directory. Run the doctor once per session:
+## 1. Start
 
-```bash
-node scripts/doctor.mjs          # Node version; Codex CLI, its default effort and the Codex plugin; agy and agy-staff; OpenCode and `opencode acp`
-```
+Script paths are relative to this skill's directory. Run `node scripts/doctor.mjs` once per session: it reports the Node version, Codex CLI (and its default effort), agy and agy-staff, OpenCode, and the Codex plugin. Without Node, check `codex --version`, `agy --version` and `opencode --version` by hand. Report blockers to the user; install only with their consent.
 
-Report blockers and recommendations to the user and install only with their consent.
+Before the first external job, ask the user one multi-select question: which detected teams may take work in this session (each with its channel and what it would do), or none. Skip it when `subagent-team` already asked, the project policy says `External delegation: roster` or `none`, or the run is non-interactive; then state the choice in one line and record it where the team keeps state.
 
-**Ask which teams may take work.** Before the first external job, ask the user one multi-select question: which of the detected teams may take work in this session (for each: channel, what it would do, e.g. "Codex CLI: reviews and code-reading syncs"), plus "none, keep everything in-house". Pre-select the teams the project's roster already lists. Skip the question when the `subagent-team` skill already asked it this session, when the project policy says `External delegation: roster` (use the roster) or `none` (stay in-house), or when the run is non-interactive; then state the choice in one line. Record the answer where the team keeps state (the board's progress record; the policy if the user wants it permanent).
-
-**Verify and adjust when the user asks** ("can Codex take this?", "add OpenCode", "stop using agy", "is agy still working?"), at any point in the run:
-
-1. Do not interrupt running jobs. Cancel one only when the user asks, through its own channel (`/codex:cancel`, agy-staff `cancel`, the wrapper's process), and confirm it stopped.
-2. Check, cheapest first: `node scripts/doctor.mjs` (presence, versions, plugins); for OpenCode `node scripts/opencode-acp-run.mjs probe --repo <abs repo>` (version, auth methods, models, effort levels, no tokens spent); `agy models` or `node scripts/agy-run.mjs models`; `/codex:setup` when the Codex plugin is installed. Only one tiny read-only job proves a team end to end; run one for a team or model not used before.
-3. Report one table to the user: team, channel, found and version, signed in, models for external-fast and external-strong, may edit or review only, verified date.
-4. Apply: update the session's choice; for a lasting change, update the roster row in the project policy; re-route queued (not running) jobs and update their cards; write the change with the user's words into the board's lessons.
+When the user asks to check, add or drop a team ("can Codex take this?", "stop using agy"), follow [references/roster-and-verification.md](references/roster-and-verification.md). Never interrupt running jobs for it.
 
 ## 2. Gate: should this be outsourced at all?
 
@@ -50,25 +50,24 @@ If writing the brief costs as much as doing the job (a ten-line edit), do not ou
 | Translations, bulk copy, mechanical replacement, filling in from a template | agy, fast tier (e.g. `gemini-3.8-flash-high`; `-medium` for purely mechanical), or OpenCode with a cheap fast model | Cheapest. agy has about five minutes of fixed overhead per job, so bigger batches pay off more. |
 | Large homogeneous implementation from a fixed spec | agy, strong tier (e.g. `gemini-4-argon-medium`/`-high`), Codex at `medium`, or OpenCode with a strong model | Needs steadier reasoning but no decisions |
 | Syncs that require reading the code to get right (docs against code, tests following existing patterns) | Codex at `high` | Reads code on its own initiative and checks facts; modest token use |
-| Read-only second opinion on a diff or plan | Codex: the Codex plugin's `/codex:review` or `/codex:adversarial-review`, or `codex-run.mjs` in `read-only`; agy's reviewer persona; OpenCode read-only | Another vendor covers blind spots. The verdict stays with your in-house reviewer. |
-| A model family none of the others reach (e.g. DeepSeek, GLM, Mistral through OpenCode's providers) | OpenCode through ACP | OpenCode routes to many providers; its tier is the model's tier |
+| Read-only second opinion on a diff or plan | Codex: the plugin's `/codex:review` or `/codex:adversarial-review`, or `codex-run.mjs` in `read-only`; agy's reviewer persona; OpenCode read-only | Another vendor covers blind spots. The verdict stays with your in-house reviewer. |
+| A model family none of the others reach (DeepSeek, GLM, Mistral, Kimi, Qwen) | OpenCode through ACP, or another ACP agent after its admission checklist | OpenCode routes to many providers; its tier is the model's tier |
 
-Model names are examples from 2026-10. List what is actually available: `agy models`, Codex's `~/.codex/models_cache.json` (the doctor lists it), and `opencode-acp-run.mjs probe` for OpenCode in that directory. Do not use agy or OpenCode to call your in-house family (Claude models under a Claude host, GPT under a Codex host): that routes outsourced work back home and adds cost, not perspective.
+Model names are examples from 2026-10. List what is actually available: `agy models`, Codex's `~/.codex/models_cache.json` (the doctor lists it), `opencode-acp-run.mjs probe` in that directory. Do not use agy or OpenCode to call your in-house family (Claude models under a Claude host, GPT under a Codex host): that routes work back home and adds cost, not perspective. **Gemini CLI is deprecated** (merged into agy): recommend agy. Under a Codex host, Codex CLI is in-house, not an external team.
 
-## 4. Before dispatch
+## 4. Brief
 
-The scripts need Node.js 18 or newer (24 recommended) and no dependencies; each refuses to run on an older Node with a clear message. Without Node, use each team's raw command (section 5).
+Write the brief to a file in your scratch directory (start from `subagent-team`'s brief template if installed). Outsourcing rules:
 
-Write the brief to a file in your scratch directory. If the `subagent-team` skill is installed, start from its brief template; either way, apply these outsourcing rules:
-
-- **Fully self-contained.** Paste the spec, the frozen key list, base-language text and insertion points. The agent cannot ask, and may not be able to read paths outside the workspace.
+- **Fully self-contained.** Paste the spec, the frozen key list, base-language text and insertion points. The agent cannot ask, and may not read paths outside the workspace.
 - **Freeze the list first.** Keys or endpoints added after dispatch will not be handled.
 - **A file lease plus "must not touch"**: list the files other agents are editing right now.
-- **Acceptance commands use executable paths** (`./node_modules/.bin/tsc --noEmit -p .`), not package-manager scripts.
+- **Acceptance commands use executable paths** (`./node_modules/.bin/tsc --noEmit -p .`), not package-manager scripts. Say where acceptance runs: a sandboxed job may be unable to start test runners that need local ports; it should report that, and the liaison runs the rest outside the sandbox.
 - **"If anything falls outside this spec, stop and explain it in your final reply; do not decide."**
 - **Prohibitions**: no state-changing git operations (read-only `git status` / `git diff` is fine), no installs, builds, dev servers or database commands, no reading `.env*`, nothing outside the lease.
 - **Report**: files changed and why, uncertain spots, problems noticed but not fixed.
-- **Say where acceptance runs.** A sandboxed job may be unable to start test runners that need local ports. Tell it to report that and give what it could run; the liaison runs the rest outside the sandbox.
+
+The wrappers need Node.js 18+ and no dependencies; each refuses an older Node with a clear message. Without Node, use the team's raw command (in its reference page).
 
 ## 5. Channels and fallbacks
 
@@ -76,179 +75,29 @@ Each team has a preferred channel and a ladder below it. Move down **the same te
 
 | Team | Preferred | Next | Without Node.js 18+ | Team unavailable |
 |---|---|---|---|---|
-| Codex CLI | `scripts/codex-run.mjs` for jobs; the Codex plugin's review commands for read-only second opinions | the Codex plugin's `task` runtime with explicit `--model` and `--effort` | raw `codex exec` (section 6) | OpenCode or agy with a strong model, else in-house |
-| agy | agy-staff plugin | `scripts/agy-run.mjs` | raw `agy -p` (section 7) | OpenCode with a fast model or Codex at `low`/`medium`, else in-house |
-| OpenCode | `scripts/opencode-acp-run.mjs` | the same with `--agent <project agent>` if the injected agent is not picked up | raw `opencode run --standalone` with the agent injected by hand (section 8) | Codex or agy for the same tier, else in-house |
+| Codex CLI | `scripts/codex-run.mjs` for jobs; the Codex plugin's review commands for read-only second opinions | the plugin's `task` runtime with explicit `--model` and `--effort` | raw `codex exec` ([codex.md](references/codex.md)) | OpenCode or agy with a strong model, else in-house |
+| agy | agy-staff plugin | `scripts/agy-run.mjs` | raw `agy -p` ([agy.md](references/agy.md)) | OpenCode with a fast model or Codex at `low`/`medium`, else in-house |
+| OpenCode | `scripts/opencode-acp-run.mjs` | the same with `--agent <project agent>` if the injected agent is not picked up | raw `opencode run --standalone` with the agent injected by hand ([opencode-acp.md](references/opencode-acp.md)) | Codex or agy for the same tier, else in-house |
 
-- A fallback team must still be another vendor than your in-house team, and must fit the job's tier (an external-strong job does not drop to a flash model without saying so).
+- A fallback team must still be another vendor than your in-house team, and fit the job's tier (an external-strong job does not drop to a flash model without saying so).
 - **Never answer a refusal with looser permissions**: no `danger-full-access`, no retrying agy `--write` with other flags, no `--allow-shell '*'`. Ask the user, or use a channel with a real sandbox or allow-list.
 - Say the switch in one line ("Codex quota exhausted; T4.b goes to OpenCode `<model>` · high") and record it on the job's card.
 - Two failed rounds on the same work → take it back in-house, whichever team did them.
+- Pin model and effort on every call; never inherit a tool's personal defaults. Bound every job with a timeout.
 
-## 6. Codex CLI
-
-### Jobs: `scripts/codex-run.mjs`
-
-The wrapper makes the easy mistakes impossible: effort is always explicit, `ultra` and `danger-full-access` are refused, output goes to known files, and the result is summarized.
-
-```bash
-# run in the background (Claude Code: Bash with run_in_background: true); you are notified on exit
-node scripts/codex-run.mjs exec --repo /abs/repo --prompt-file /scratch/job.md \
-  --model gpt-6.1-sol --effort medium --sandbox workspace-write --timeout 30m
-```
-
-- **Effort is required on every call** (`low`, `medium`, `high`, `xhigh`, `max`; codex-cli 0.165.0 accepted all of them). Without `-c model_reasoning_effort=…`, raw Codex inherits `~/.codex/config.toml` (often `high` on a personal machine), not the model's own default. The log header prints the applied value; the wrapper flags any mismatch. Use `low` for mechanical work, `medium` by default, `high` when much code must be read. `xhigh` and `max` rarely pay off: work that needs them should not be outsourced. Never use `ultra`: in the author's use it dispatched its own sub-tasks outside the director's control, so the wrapper refuses it.
-- **Sandbox**: `read-only` for reviews (the default), `workspace-write` for edits (it can write the workdir and temp directories; network access follows `[sandbox_workspace_write] network_access` in `~/.codex/config.toml`). The wrapper always passes the sandbox, so a `sandbox_mode` default in `config.toml` does not leak in. In `exec` mode approvals are `never`, so a job never hangs waiting for approval.
-- **Tracking**: completion notification → read `last.md` (final reply) → `git status --short` / `git diff --stat` for the truth → `log.txt` only when diagnosing (it shows every command, the replies, and `tokens used`). Add `--json` for JSONL events.
-- **Resume** with context: `node scripts/codex-run.mjs resume --repo /abs/repo --session <id> --prompt-file /scratch/followup.md --effort medium --sandbox workspace-write`. The sandbox is not inherited from the first run: without `--sandbox` a resume is `read-only`, so rework cannot edit. The summary's `resumeHint` carries the session id and the original sandbox. Resume has no `-C`/`-s`, so the wrapper runs it from the repo directory and passes the sandbox as config.
-- **No network → endless reconnects.** Codex retries indefinitely ("Reconnecting... waiting for network"). There is no default timeout, so set `--timeout` (max `24h`); on expiry the wrapper kills Codex's process group and every descendant. Codex runs tool commands in their own session, outside its group, so killing the group alone would leave them running.
-- **Wrapper contract**: files in `--out-dir` (default under the system temp dir): `log.txt`, `last.md`, `summary.json`. The JSON printed on stdout (same as `summary.json`) has `ok`, `exitCode`, `timedOut`, `sessionId`, `effortRequested`/`effortReported`/`effortMismatch`, `sandbox`, `tokensUsed` and a ready `resumeHint`. Exit code: Codex's own, `124` on timeout, `1` for usage or launch errors. `--dry-run` prints the command without running it; `summary <log.txt>` re-parses an existing log.
-- Two Codex jobs touching disjoint files can run in the same workspace at the same time.
-
-### The Codex plugin for Claude Code
-
-OpenAI publishes [codex-plugin-cc](https://github.com/openai/codex-plugin-cc), the Codex counterpart of agy-staff: slash commands and a forwarding subagent on top of the local Codex CLI and its app server, with the same sign-in and `config.toml`.
-
-```bash
-claude plugin marketplace add openai/codex-plugin-cc && claude plugin install codex@openai-codex
-# in a session: /reload-plugins, then /codex:setup (checks install and sign-in)
-```
-
-What it offers: `/codex:review` (read-only review of uncommitted changes, or `--base <ref>`), `/codex:adversarial-review [focus]` (read-only, steerable), `/codex:rescue` (hand a task to Codex), `/codex:status`, `/codex:result`, `/codex:cancel`, `/codex:transfer`. Reviews and rescues take `--background`. How to use it inside this method:
-
-- **Second opinions**: `/codex:review --background` or `/codex:adversarial-review --background <the risk to probe>`, then `/codex:result`. The findings are input for your in-house reviewer, never the acceptance. The plugin's own rule "after review findings, stop and ask the user which to fix" yields to `subagent-team`: the director decides, and only product calls go to the user's end-of-task list.
-- **Jobs, if the user prefers the plugin to the wrapper**: call its runtime directly from the liaison, with the install path the doctor reports: `node "<install path>/scripts/codex-companion.mjs" task --background --write --model <id> --effort <level> --prompt-file /scratch/job.md` returns a job id; wait with `status <job-id> --wait --timeout-ms <below the shell tool limit> --json`, repeated; then `result <job-id> --json`; stop with `cancel <job-id>`. Check status and results through the same channel you dispatched with: the runtime keeps job state in the plugin's data directory when Claude Code runs it, and in a fallback directory otherwise.
-- **Pin model and effort every time.** Without them the plugin uses `config.toml` defaults, the same trap as raw `codex exec`. Its effort values are `none`, `minimal`, `low`, `medium`, `high`, `xhigh` (no `max`). `--write` means the `workspace-write` sandbox, otherwise `read-only`; approvals are `never`.
-- `/codex:rescue` defaults to a write-capable run, leaves model and effort unset unless you name them, and its forwarding subagent runs on a Claude model. Prefer the explicit `task` call above for outsourced jobs.
-- `--resume-last` continues the latest task thread in the repository, not one you choose. With parallel Codex jobs, use `codex-run.mjs resume --session <id>`.
-- There is no job timeout; use `cancel`. Keep the optional review gate (a `Stop` hook) off in team runs: it can loop and drain usage.
-- Only `codex@openai-codex` is OpenAI's. Forks exist with other defaults (some run `danger-full-access`); the doctor flags them.
-- Checked against the plugin's README and source (version 1.0.6, 2026-07); not yet used in real projects with this method.
-
-`codex mcp-server` has been removed from Codex, so dispatch plugins and guides built on it no longer work. Use the wrapper or the plugin above.
-
-### Without Node.js: the raw command
-
-What the wrapper runs, checked against codex-cli 0.165.0. Always pass the effort; bound the job with the shell's `timeout 30m …` where available:
-
-```bash
-codex exec -m gpt-6.1-sol -c model_reasoning_effort=medium -s workspace-write -C /abs/repo \
-  -o /scratch/last.md - < /scratch/job.md > /scratch/log.txt 2>&1
-```
-
-## 7. agy (Google Antigravity CLI)
-
-### Preferred: the agy-staff plugin
-
-[agy-staff](https://github.com/keli-wen/agy-staff) gives Claude Code, Codex, Pi and OpenCode a set of agy personas: `staffer`, `researcher`, `reviewer`, `implementer` and `ask`, plus `lead` and `jobs`. It also handles background jobs, waiting, continuation, timeouts and dirty-workspace prompts.
-
-```bash
-claude plugin marketplace add keli-wen/agy-staff && claude plugin install agy@agy-staff
-codex plugin marketplace add https://github.com/keli-wen/agy-staff && codex plugin add agy@agy-staff
-```
-
-How to use it inside this method:
-
-- Call `/agy:implementer` (`$agy:implementer` in Codex) for edits, `researcher` for surveys, `reviewer` for a read-only second opinion. Long briefs go in a file and are passed with `--prompt-file`. Choose the model with `--model <id-with-effort-suffix>`, or `--effort` to change only the strength.
-- Collect each job with **one background `wait <job-id> --timeout 10m`**. Do not `observe` or read logs while it runs, unless the user asks or the job failed.
-- Exit codes of `wait`: `0` finished (not the same as accepted), `1` invalid or refused (for example continuing a running job), `2` still running (wait again), `3` error, `4` cancelled, `5` resumable timeout. On `5`, inspect the partial diff and ask before continuing.
-- Follow-ups and rework go through `continue --job <id> --prompt-file <new brief>`, which keeps the conversation.
-- **Role ownership stays with your method.** The plugin's generic `lead` guidance ("the lead may handle small tasks itself", "the lead talks to the user") does not override `subagent-team`. The director owns user communication, acceptance and commit.
-- The plugin runs agy **unrestricted** by default: it can read the repo, run commands and edit files. Its prompts are guardrails, not permission isolation. Use its `--restricted` / `setup` hardening for untrusted input.
-
-### Without the plugin: `scripts/agy-run.mjs`
-
-```bash
-node scripts/agy-run.mjs run --repo /abs/repo --prompt-file /scratch/job.md \
-  --model gemini-3.8-flash-high --write --timeout 15m
-node scripts/agy-run.mjs run ... --conversation <id>      # continue with context
-node scripts/agy-run.mjs models                           # list model ids
-```
-
-Raw equivalent of what it runs, from the repo directory (add `--conversation <id>` to continue). Use it when Node.js is missing:
-
-```bash
-cd /abs/repo && agy -p "$(cat /scratch/job.md)" --model gemini-3.8-flash-high --output-format json \
-  --print-timeout 15m --add-dir /abs/repo --dangerously-skip-permissions   # last flag only for edits
-```
-
-With `--write` the wrapper adds `--dangerously-skip-permissions`, because headless edits need it. It saves the final reply to `last.md` (plus `result.json`, `stderr.txt`, `summary.json` in `--out-dir`) and prints a JSON summary whose `conversationId` and `continueHint` let you continue. Defaults: `--timeout 10m` (max `24h`); the wrapper kills agy's process group and every descendant at timeout + 60s. agy 1.4.10 keeps `status: "SUCCESS"` when its print timeout fires and reports it only on stderr (`[agy] print timeout after …`); the wrapper reads stderr and treats that as a timeout. When agy ends a turn while a background task it started is still running, it kills the task; the wrapper then sets `warning`, because the reply may describe work that never finished. Exit codes: `0` ok (a reply came back; `warning` set, `partial: true` if agy hit its time limit mid-answer), `1` usage error, `2` agy reported an error with no reply, `3` launch failure or unparseable output, `5` timed out with no reply (resumable with `--conversation` if an id is known). These are **agy-run's** codes; agy-staff's `wait` uses its own (above). Model ids for Claude or GPT families are refused unless you pass `--allow-any-model`. `--dry-run` shows the command.
-
-The brief travels as a command-line argument, so keep it under 100 KB (the wrapper refuses larger ones). For bigger specs, put the spec in a file inside the repo and make the brief "Read docs/tasks/<job>.md and follow it".
-
-### agy facts that matter
-
-- **Headless, not ACP.** The agy CLI has no native ACP. Community bridges depend on internal interfaces that break between versions and may put personal accounts at risk. Its headless mode covers the "spec → background batch → director checks the diff" pattern. Re-evaluate if official ACP support ships (OpenCode's official ACP server is what section 8 builds on).
-- Fixed overhead of about five minutes and millions of cached tokens per job, and context cost grows with batch size. Still far cheaper than translating in a top-tier session.
-- **Job state is per worktree.** Serialize agy writing jobs in one checkout, or give each its own worktree. While a job runs, do not edit its files. Add follow-up keys after it returns.
-- It needs to run outside restrictive host sandboxes, because it uses local ports and OAuth tokens.
-- **`--write` means no permission prompts at all.** A host's permission layer may refuse it. Do not retry with other flags. Ask the user or use Codex with `workspace-write`, which is a real sandbox, or OpenCode with its allow-list. After the user authorizes writes, prove the path once with a tiny job in a scratch directory before a real one.
-
-## 8. OpenCode through ACP
-
-`opencode acp` runs OpenCode as an [Agent Client Protocol](https://agentclientprotocol.com) server over stdio. `scripts/opencode-acp-run.mjs` is a headless ACP client for it: it injects its own OpenCode agent whose permission set denies everything except reads, the edits you allow and an allow-list of shell commands; pins model and effort through ACP's session config; rejects any permission request so a run never waits; and cancels, then kills, on timeout.
-
-```bash
-node scripts/opencode-acp-run.mjs probe --repo /abs/repo     # version, auth, models, efforts; no tokens
-node scripts/opencode-acp-run.mjs run --repo /abs/repo --prompt-file /scratch/job.md \
-  --model <provider/model> --effort medium --write --allow-shell './node_modules/.bin/tsc *' \
-  --forbid-provider <in-house vendor> --timeout 30m
-node scripts/opencode-acp-run.mjs run ... --session <id>  # rework with context (see resumeHint)
-```
-
-- Read-only is the default; `--write` allows edits inside the workspace only. Shell is limited to read-only git, `ls`, `pwd`, `wc` and your `--allow-shell` patterns, so list the acceptance commands the job must run. Web access needs `--allow-web`.
-- `--model` and `--effort` are required and must be offered in that directory (the probe lists both). Pass your in-house vendor to `--forbid-provider`.
-- Outputs in `--out-dir`: `last.md`, `reply.md`, `events.jsonl`, `stderr.txt`, `summary.json` (with `stopReason`, `sessionId`, applied model and effort, failed tool calls, rejected permission requests, usage, cost, `resumeHint`). Exit codes: `0` finished, `1` usage, `2` agent error (refusal, `authRequired`, no reply), `3` launch or setup failure, `5` timeout.
-- When a prompt needs sign-in, the summary has `authRequired: true`: ask the user to run `opencode auth login`.
-
-Why ACP rather than `opencode run`, the full permission set, what was verified on 2.2.5, and the raw fallback without Node.js: [references/opencode-acp.md](references/opencode-acp.md).
-
-## 9. Acceptance after the job returns
+## 6. Acceptance
 
 The job's report is a claim. Acceptance is yours (or your liaison's, for the mechanical steps):
 
 1. `git status --short` and `git diff --stat`: did it stay inside the lease?
 2. Run the acceptance commands yourself.
-3. Content work (translations, copy, examples) must be reviewed and edited, not just accepted: check that key sets are identical across languages, `{placeholders}` and escapes such as `\n` are preserved, and the order matches the base file.
+3. Content work (translations, copy, examples) is reviewed and edited, not just accepted: key sets identical across languages, `{placeholders}` and escapes such as `\n` preserved, order matching the base file.
 4. Docs work: check every verifiable fact (versions, scripts, paths, environment variables, endpoints).
 5. Small issues: fix them yourself. Larger ones: continue the same job with the concrete failure. **Two failed rounds → take it back in-house.**
 6. Commit only after acceptance, and only by the director.
 
-## 10. Tracking jobs through a liaison
+## 7. Tracking through a liaison
 
-When the host can run subagents with shell access, give each external job (or each team's sequence of jobs) to a cheap in-house liaison instead of waiting in the main session:
+When the host can run subagents with shell access, give each external job to a cheap in-house liaison instead of waiting in the main session. It dispatches with the exact command from its brief, records job and conversation ids where the team tracks state, never starts a duplicate, waits in **bounded slices** (not on notifications, which may reach the root session instead), runs the mechanical acceptance steps, and sends one rework round with the concrete failure. When a team is unavailable it reports and does not switch teams itself; the layer above picks the fallback (section 5). With the wrapper scripts, use a **fresh `--out-dir` for every round**. Without a liaison, run the wrapper in the background (Claude Code: `Bash` with `run_in_background: true`) and react to the completion notification; never foreground-`sleep` or poll. The wait loop, per-wrapper variants and host notes: [references/liaison-and-hosts.md](references/liaison-and-hosts.md).
 
-- The liaison dispatches with the exact command from its brief, writes the job and conversation ids where the team tracks state (a task card, a progress record), and never starts a duplicate.
-- **Wait in bounded slices**, not on notifications: subagent background notifications may go to the root session instead. Start the wrapper detached with an explicit `--out-dir`, then wait for its `summary.json` with an `until` loop whose upper bound stays below the host's shell-tool time limit; repeat while the job runs. With agy-staff, repeat `wait <job-id> --timeout <below the limit>` while it exits `2`; with the Codex plugin's runtime, repeat `status <job-id> --wait --timeout-ms <below the limit>`.
-
-  ```bash
-  OUT=/scratch/jobs/T3a-r1; mkdir -p "$OUT"        # a fresh --out-dir per round (r2, r3, ...)
-  nohup node scripts/codex-run.mjs exec --repo /abs/repo --prompt-file /scratch/T3a.md \
-    --model <id> --effort medium --sandbox workspace-write --timeout 30m --out-dir "$OUT" > "$OUT/stdout.json" 2>&1 &
-  # each later call: wait at most ~9 minutes, then report "still running" and call again
-  i=0; until [ -f "$OUT/summary.json" ] || [ $i -ge 54 ]; do sleep 10; i=$((i+1)); done; ls "$OUT"
-  ```
-
-- The same loop works for `agy-run.mjs` and `opencode-acp-run.mjs`. Use a **fresh `--out-dir` for every round** (first run, each rework, each resume): the wrappers write `summary.json` only at the end, so a reused directory would end the wait at once.
-- It runs steps 1, 2 and the mechanical part of 3 in section 9, and sends one rework round with the concrete failure. Blockers the external agent reported in its final reply are answered only when the answer is already in the brief or the repository; everything else, and any second failure, goes back to whoever assigned the job.
-- When the team is unavailable (auth, quota, network), the liaison reports it and does not switch teams on its own: the layer above picks the fallback (section 5).
-
-## 11. Other agents and channels (not tested here)
-
-Pi, Grok CLI and other agent CLIs, other ACP agents, and agents exposed through an MCP server follow the same pattern. Before the first real job, find out and write down once: the headless invocation (prompt from a file or stdin, working directory, model and effort flags); how to allow edits inside the workspace only, and how to run read-only; where the final reply goes and whether there is a machine-readable result; how to continue a job by session or conversation id; and how it behaves without network, at timeout and when it wants approval (a headless run must never wait for approval). Then run one tiny read-only job and check all of that before trusting it with edits.
-
-- Check presence and versions with `<cli> --version`; a binary with the expected name can belong to another program.
-- Pin model and effort on every call; do not inherit the tool's personal defaults.
-- Bound every job with the shell's `timeout` (or the tool's own) and kill the whole process group on expiry.
-- Prefer models from another vendor than your in-house team; a tool that routes back to your own vendor's models adds cost, not perspective.
-- MCP calls are synchronous for the agent making them: keep long jobs on the CLI channel, or give them to a liaison, never to the main session.
-- **Other ACP agents** (for example adapters that put Codex or other CLIs behind ACP): the protocol part of `opencode-acp-run.mjs` carries over, but its permission control relies on OpenCode's config injection. Another agent needs its own way to restrict tools before it may edit.
-
-## 12. Host notes
-
-- **Claude Code**: in the main session, run wrappers through `Bash` with `run_in_background: true` and react to the completion notification. Don't use foreground `sleep`, and don't poll. A liaison subagent is the exception: it waits in bounded slices as in section 10, because background notifications may not reach it. The Codex plugin and agy-staff both install here.
-- **Codex as host**: Codex is then in-house, so its CLI is not an external team; agy-staff installs as a Codex plugin, and OpenCode works through the wrapper. Request escalated execution when the sandbox blocks agy, OpenCode or the network. Codex hosts poll background work and each wake-up carries their full context, so prefer fewer, larger jobs.
-- **OpenCode as host**: `opencode acp` starts its own private server, so the wrapper also works from inside an OpenCode session; it only adds a second perspective with another vendor's model than the session's.
-- **Other hosts / other CLIs** (Pi, Grok, DeepSeek-backed agents and others): not tested here. The principles carry over (section 11), but adapt the mechanics yourself. For a new worker CLI, agy-staff's [DESIGN.md](https://github.com/keli-wen/agy-staff/blob/master/docs/DESIGN.md) is a good blueprint. It covers headless mode, a prompt file, one background wait per job, continuation by conversation id, and results written to files.
-
-Measured runs and their lessons: [references/field-data.md](references/field-data.md). OpenCode details: [references/opencode-acp.md](references/opencode-acp.md).
+Tested with Claude Code as the host (background `Bash` plus completion notifications); it works from Codex and other hosts that can run shell commands. Status by team: Codex CLI and agy are used in real projects; OpenCode through ACP was checked against OpenCode 2.2.5 on small jobs; every other agent is *not tested for work*.

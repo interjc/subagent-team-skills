@@ -21,7 +21,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export const MIN_NODE_MAJOR = 18;
 if (Number(process.versions.node.split('.')[0]) < MIN_NODE_MAJOR) {
   console.error(`opencode-acp-run.mjs: Node.js >= ${MIN_NODE_MAJOR} is required (found v${process.versions.node}). ` +
-    'Install Node.js 24 LTS (e.g. `nvm install 24`), or use the fallback described in SKILL.md.');
+    'Install Node.js 24 LTS (e.g. `nvm install 24`), or use the raw commands in SKILL.md, "Channels and fallbacks".');
   process.exit(1);
 }
 

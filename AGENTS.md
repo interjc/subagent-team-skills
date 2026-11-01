@@ -18,7 +18,8 @@ scripts/              # repository tooling (check-skills.mjs)
 
 - `subagent-team` is the core skill. Other skills cover corner cases (outsourcing to CLI agents, handover) and must stand alone: no imports or relative links across skill directories, because `npx skills` can install one skill by itself. Refer to another skill by name.
 - Each skill's `name` equals its directory name. The `description` is the trigger: say what the skill does **and** when to use it, a little pushy, at most 1024 characters, no angle brackets.
-- Keep `SKILL.md` under 500 lines. Move detail into `references/` and link it.
+- Keep `SKILL.md` under 500 lines, and in practice far shorter (currently about 80 to 160). `SKILL.md` holds only what applies on every use: the decisions, gates and rules an agent needs each time, plus a "when you..., read..." table near the top. Mechanics, per-tool or per-harness detail, procedures used only sometimes, templates and field data go into `references/`, one topic per file, loaded on demand.
+- Reference files link to each other and back to `SKILL.md` with relative links inside the skill. Refer to a `SKILL.md` part by its heading text, not its section number, so renumbering cannot break references.
 
 ## 2. Language
 
@@ -33,7 +34,7 @@ scripts/              # repository tooling (check-skills.mjs)
 - Skill bodies use abstract layers, roles and tiers: layers L1 director / L2 in-house experts / L3 in-house execution / L4 external teams; tiers top / high / mid / low / external-fast / external-strong. A layer is responsibility, a tier is model strength. Concrete model names appear only as dated examples ("as of 2026-10").
 - Harness-specific mechanics go into `references/harness-*.md`. Mark anything not personally verified as *unverified*.
 - Claude Code is the primary target, Codex secondary. Do not claim support for other agents beyond "installs via the Agent Skills format".
-- The same rule applies to external teams: agy and Codex CLI are used in real projects; OpenCode through ACP has a wrapper checked against a real OpenCode on small jobs but is not yet used in real projects; OpenAI's Codex plugin is described from its README and source; Pi, Grok, other ACP agents and MCP-fronted agents are *not tested*. Say which of these levels a claim rests on. Host-detection environment variables other than Claude Code's are *unverified* hints; keep `HOST_HINTS` in `env-check.cjs` and `references/host-harness.md` in agreement.
+- The same rule applies to external teams: agy and Codex CLI are used in real projects; OpenCode through ACP has a wrapper checked against a real OpenCode on small jobs but is not yet used in real projects; OpenAI's Codex plugin is described from its README and source; Grok Build and Cursor had ACP session setup checked but no work run; Gemini CLI is deprecated (merged into agy); Pi, other ACP agents and MCP-fronted agents are *not tested*. Say which of these levels a claim rests on. Host-detection environment variables other than Claude Code's are *unverified* hints; keep `HOST_HINTS` in `env-check.cjs` and `references/host-harness.md` in agreement.
 
 ## 4. Privacy (this repository is public)
 
