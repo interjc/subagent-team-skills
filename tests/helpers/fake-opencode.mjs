@@ -12,6 +12,14 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 
+// Tests poll the record while the fake runs, and it is rewritten on every
+// message: write a temp file and rename it, so a reader never sees a
+// truncated, half-written file.
+const writeAtomic = (file, text) => {
+  fs.writeFileSync(`${file}.${process.pid}.tmp`, text);
+  fs.renameSync(`${file}.${process.pid}.tmp`, file);
+};
+
 const argv = process.argv.slice(2);
 const mode = process.env.FAKE_MODE || 'ok';
 
@@ -36,7 +44,7 @@ const received = [];
 const extra = {};
 const record = () => {
   if (!process.env.FAKE_RECORD) return;
-  fs.writeFileSync(process.env.FAKE_RECORD, JSON.stringify({
+  writeAtomic(process.env.FAKE_RECORD, JSON.stringify({
     argv, cwd: process.cwd(), pid: process.pid, configContent: process.env.OPENCODE_CONFIG_CONTENT ?? null, received, ...extra,
   }));
 };

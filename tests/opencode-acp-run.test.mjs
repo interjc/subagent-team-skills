@@ -8,7 +8,7 @@ import {
   flattenValues, describeConfig, applyConfig, createTracker, trackUpdate, finalReply, fullReply, permissionResponse,
   classify, buildResumeHint, isAuthError, AcpClient, READONLY_AGENT, WRITE_AGENT, READ_ONLY_SHELL, EXIT, UsageError, SetupError,
 } from '../skills/cli-agent-delegation/scripts/opencode-acp-run.mjs';
-import { SCRIPTS, makeTempDir, removeDir, makeFakeBin, runScript, readJson, waitUntilGone } from './helpers/fakes.mjs';
+import { SCRIPTS, makeTempDir, removeDir, makeFakeBin, runScript, readJson, waitUntilGone, waitForRecord, killLeftovers } from './helpers/fakes.mjs';
 
 let tmp;
 let repo;
@@ -430,17 +430,17 @@ describe('opencode-acp-run: running the fake opencode', () => {
     });
     let stdout = '';
     child.stdout.on('data', (d) => { stdout += d; });
-    const deadline = Date.now() + 5000;
-    while (!(fs.existsSync(record) && readJson(record).received.some((m) => m.method === 'session/prompt')) && Date.now() < deadline) {
-      await new Promise((res) => setTimeout(res, 50));
+    try {
+      const rec = await waitForRecord(record, (r) => r.received.some((m) => m.method === 'session/prompt'));
+      child.kill('SIGINT');
+      const code = await new Promise((res) => child.on('close', res));
+      assert.equal(code, 130);
+      assert.equal(JSON.parse(stdout).exitCode, 130);
+      assert.ok(readJson(record).received.some((m) => m.method === 'session/cancel'));
+      assert.ok(waitUntilGone(rec.pid), 'fake opencode should be gone');
+    } finally {
+      killLeftovers(child, record);
     }
-    const rec = readJson(record);
-    child.kill('SIGINT');
-    const code = await new Promise((res) => child.on('close', res));
-    assert.equal(code, 130);
-    assert.equal(JSON.parse(stdout).exitCode, 130);
-    assert.ok(readJson(record).received.some((m) => m.method === 'session/cancel'));
-    assert.ok(waitUntilGone(rec.pid), 'fake opencode should be gone');
   });
 
   test('dry-run prints the plan and spawns nothing', () => {
