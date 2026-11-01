@@ -9,6 +9,7 @@ import {
 } from '../skills/cli-agent-delegation/scripts/agy-run.mjs';
 import {
   SCRIPTS, makeTempDir, removeDir, makeFakeBin, runScript, readJson, isAlive, waitUntilGone,
+  waitForRecord, killLeftovers,
 } from './helpers/fakes.mjs';
 
 let tmp;
@@ -403,7 +404,8 @@ describe('agy-run: running the fake agy', () => {
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 const gc = spawn('sleep', ['30'], { stdio: ['ignore', 'inherit', 'inherit'] });
-fs.writeFileSync(process.env.FAKE_RECORD, JSON.stringify({ pid: process.pid, grandchildPid: gc.pid }));
+fs.writeFileSync(process.env.FAKE_RECORD + '.tmp', JSON.stringify({ pid: process.pid, grandchildPid: gc.pid }));
+fs.renameSync(process.env.FAKE_RECORD + '.tmp', process.env.FAKE_RECORD);
 process.stdout.write(JSON.stringify({ status: 'SUCCESS', response: 'done', conversation_id: 'c' }) + '\\n');
 process.exit(0);
 `);
@@ -424,17 +426,17 @@ process.exit(0);
     });
     let stdout = '';
     child.stdout.on('data', (d) => { stdout += d; });
-    const deadline = Date.now() + 5000;
-    while (!(fs.existsSync(record) && readJson(record).grandchildPid) && Date.now() < deadline) {
-      await new Promise((res) => setTimeout(res, 50));
+    try {
+      const rec = await waitForRecord(record, (r) => r.grandchildPid);
+      child.kill('SIGINT');
+      const code = await new Promise((res) => child.on('close', res));
+      assert.equal(code, 130);
+      assert.equal(JSON.parse(stdout).exitCode, 130);
+      assert.ok(waitUntilGone(rec.pid), 'fake agy should be gone');
+      assert.ok(waitUntilGone(rec.grandchildPid), 'grandchild should be gone');
+    } finally {
+      killLeftovers(child, record);
     }
-    const rec = readJson(record);
-    child.kill('SIGINT');
-    const code = await new Promise((res) => child.on('close', res));
-    assert.equal(code, 130);
-    assert.equal(JSON.parse(stdout).exitCode, 130);
-    assert.ok(waitUntilGone(rec.pid), 'fake agy should be gone');
-    assert.ok(waitUntilGone(rec.grandchildPid), 'grandchild should be gone');
   });
 
 

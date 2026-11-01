@@ -8,6 +8,13 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 
+// Tests poll the record while the fake runs: write a temp file and rename it,
+// so a reader never sees a truncated, half-written file.
+const writeAtomic = (file, text) => {
+  fs.writeFileSync(`${file}.${process.pid}.tmp`, text);
+  fs.renameSync(`${file}.${process.pid}.tmp`, file);
+};
+
 const argv = process.argv.slice(2);
 const mode = process.env.FAKE_MODE || 'ok';
 const headerFile = new URL('../fixtures/codex-log-header.txt', import.meta.url);
@@ -21,7 +28,7 @@ let stdin = '';
 try { stdin = fs.readFileSync(0, 'utf8'); } catch { /* no stdin */ }
 const record = (extra = {}) => {
   if (process.env.FAKE_RECORD) {
-    fs.writeFileSync(process.env.FAKE_RECORD, JSON.stringify({ argv, cwd: process.cwd(), stdin, pid: process.pid, ...extra }));
+    writeAtomic(process.env.FAKE_RECORD, JSON.stringify({ argv, cwd: process.cwd(), stdin, pid: process.pid, ...extra }));
   }
 };
 record();

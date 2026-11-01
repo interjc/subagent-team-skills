@@ -9,6 +9,7 @@ import {
 } from '../skills/cli-agent-delegation/scripts/codex-run.mjs';
 import {
   SCRIPTS, FIXTURES, makeTempDir, removeDir, makeFakeBin, runScript, readJson, waitUntilGone,
+  waitForRecord, killLeftovers,
 } from './helpers/fakes.mjs';
 
 const fixture = (name) => fs.readFileSync(path.join(FIXTURES, name), 'utf8');
@@ -356,19 +357,19 @@ describe('codex-run: running the fake codex', () => {
     });
     let stdout = '';
     child.stdout.on('data', (d) => { stdout += d; });
-    const deadline = Date.now() + 5000;
-    while (!(fs.existsSync(record) && readJson(record).grandchildPid) && Date.now() < deadline) {
-      await new Promise((res) => setTimeout(res, 50));
+    try {
+      const rec = await waitForRecord(record, (r) => r.grandchildPid);
+      child.kill('SIGTERM');
+      const code = await new Promise((res) => child.on('close', res));
+      assert.equal(code, 143);
+      const j = JSON.parse(stdout);
+      assert.equal(j.ok, false);
+      assert.equal(j.interrupted, 'SIGTERM');
+      assert.ok(waitUntilGone(rec.pid), 'fake codex should be gone');
+      assert.ok(waitUntilGone(rec.grandchildPid), 'grandchild should be gone');
+    } finally {
+      killLeftovers(child, record);
     }
-    const rec = readJson(record);
-    child.kill('SIGTERM');
-    const code = await new Promise((res) => child.on('close', res));
-    assert.equal(code, 143);
-    const j = JSON.parse(stdout);
-    assert.equal(j.ok, false);
-    assert.equal(j.interrupted, 'SIGTERM');
-    assert.ok(waitUntilGone(rec.pid), 'fake codex should be gone');
-    assert.ok(waitUntilGone(rec.grandchildPid), 'grandchild should be gone');
   });
 
   test('missing binary: exit 1 with error', () => {

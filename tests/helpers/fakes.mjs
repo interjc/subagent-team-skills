@@ -47,6 +47,32 @@ export function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
+// Polls a fake's record until `ready(record)` holds. Unparsable reads count as
+// "not yet". Returns the record, or throws after `timeoutMs`.
+export async function waitForRecord(file, ready, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    let rec = null;
+    try { rec = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* missing or being replaced */ }
+    if (rec && ready(rec)) return rec;
+    if (Date.now() > deadline) throw new Error(`record ${file} not ready after ${timeoutMs}ms`);
+    await new Promise((res) => setTimeout(res, 50));
+  }
+}
+
+// Cleanup for tests that spawn a wrapper around a hanging fake: kills the
+// wrapper and every pid the fake recorded, so a failed assertion cannot leave
+// processes that keep the test runner alive.
+export function killLeftovers(child, file) {
+  let rec = null;
+  try { rec = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* nothing recorded */ }
+  const pids = [rec?.pid, rec?.grandchildPid].filter(Number.isInteger);
+  if (child.exitCode === null && child.signalCode === null) pids.unshift(child.pid);
+  for (const pid of pids) {
+    try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+  }
+}
+
 // True while `pid` exists (process.kill(pid, 0) does not throw ESRCH).
 export function isAlive(pid) {
   try {
