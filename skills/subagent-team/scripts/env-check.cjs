@@ -6,9 +6,10 @@
 // Run once per session before the team starts working. Checks Node.js
 // (hard minimum and recommended version), git, which host harness this
 // session probably runs in (a hint to confirm with the user), the optional
-// external teams (Codex CLI, agy, the agy-staff plugin, OpenCode, Pi, Grok
-// CLIs, project MCP servers), whether the project already has a
-// "## Subagent team" policy section, and whether it has a team board.
+// external teams (Codex CLI and its Claude Code plugin, agy, the agy-staff
+// plugin, OpenCode, Pi, Grok CLIs, project MCP servers), whether the project
+// already has a "## Subagent team" policy section (and its "External
+// delegation:" choice), and whether it has a team board.
 // Prints blockers, warnings and the exact fix for each; never installs or
 // changes anything.
 //
@@ -37,7 +38,7 @@ var USAGE = [
   '  --json        print one JSON object instead of the report',
   '',
   'Requirements: Node.js >= ' + MIN_NODE_MAJOR + ' (hard minimum), ' + RECOMMENDED_NODE_MAJOR + ' recommended; git.',
-  'Optional external teams: Codex CLI, agy, agy-staff plugin, OpenCode, Pi, Grok CLI, project MCP servers.',
+  'Optional external teams: Codex CLI, Codex plugin, agy, agy-staff plugin, OpenCode (ACP), Pi, Grok CLI, project MCP servers.',
   'The host harness is detected from environment variables: a hint, confirm it with the user.',
   'Env overrides: GIT_BIN, CODEX_BIN, AGY_BIN, OPENCODE_BIN, PI_BIN, GROK_BIN, CLAUDE_CONFIG_DIR, HOME.',
   'Exit codes: 0 ready (warnings allowed), 1 usage error, 2 blocked.'
@@ -120,14 +121,23 @@ function homeDir(env) {
   return env.HOME || env.USERPROFILE || os.homedir();
 }
 
-function findAgyStaff(env) {
+function readInstalledPlugins(env) {
   var dir = env.CLAUDE_CONFIG_DIR || path.join(homeDir(env), '.claude');
-  var file = path.join(dir, 'plugins', 'installed_plugins.json');
   try {
-    return fs.readFileSync(file, 'utf8').indexOf('agy-staff') !== -1;
+    return fs.readFileSync(path.join(dir, 'plugins', 'installed_plugins.json'), 'utf8');
   } catch (e) {
-    return false;
+    return '';
   }
+}
+
+function findAgyStaff(env) {
+  return readInstalledPlugins(env).indexOf('agy-staff') !== -1;
+}
+
+// Returns the installed codex@<marketplace> key, or null.
+function findCodexPlugin(env) {
+  var m = /"(codex@[^"]+)"/.exec(readInstalledPlugins(env));
+  return m ? m[1] : null;
 }
 
 // Environment variables a host harness sets for the commands it runs. Only the
@@ -194,7 +204,10 @@ function checkOtherAgents(env, root) {
     var a = OTHER_AGENTS[i];
     var r = probe(env[a.envBin] || a.bin, ['--version']);
     if (r.found) {
-      checks.push({ id: a.id, status: 'ok', detail: a.label + ' (presumed): ' + (r.output || 'found') + '. Not tested with these skills; confirm it is the agent you mean before outsourcing to it.' });
+      var note = a.id === 'opencode'
+        ? 'Reachable through ACP with the cli-agent-delegation skill (opencode-acp-run.mjs; its probe lists models without spending tokens); confirm it is the agent you mean before outsourcing to it.'
+        : 'Not tested with these skills; confirm it is the agent you mean before outsourcing to it.';
+      checks.push({ id: a.id, status: 'ok', detail: a.label + ' (presumed): ' + (r.output || 'found') + '. ' + note });
     }
   }
   var mcp = findMcpServers(root);
@@ -211,6 +224,12 @@ function checkExternal(env) {
   checks.push(codex.found
     ? { id: 'codex', status: 'ok', detail: 'Codex CLI: ' + codex.output }
     : { id: 'codex', status: 'info', detail: 'Codex CLI not found (optional external team, external-strong).', fix: 'Optional: `npm install -g @openai/codex`, then sign in once with `codex`.' });
+  var codexPlugin = findCodexPlugin(env);
+  if (codexPlugin) {
+    checks.push(codexPlugin === 'codex@openai-codex'
+      ? { id: 'codex-plugin', status: 'ok', detail: 'Codex plugin installed (Claude Code, ' + codexPlugin + '): review commands for read-only second opinions.' }
+      : { id: 'codex-plugin', status: 'warn', detail: 'Codex plugin "' + codexPlugin + '" is not OpenAI\'s codex@openai-codex.', fix: 'Check its sandbox default before use (some forks run danger-full-access); prefer codex-run.mjs from the cli-agent-delegation skill.' });
+  }
   var agyBin = env.AGY_BIN || 'agy';
   var agy = probe(agyBin, ['--version']);
   checks.push(agy.found
@@ -237,13 +256,15 @@ function findPolicy(root) {
       var m = /^\s*-?\s*Model policy:\s*([A-Za-z-]+)/m.exec(text);
       var h = /^\s*-?\s*Host harness:\s*([^<\n]+)/m.exec(text);
       var b = /^\s*-?\s*Team board:\s*([^<\n]+)/m.exec(text);
+      var x = /^\s*-?\s*External delegation:\s*([A-Za-z-]+)/m.exec(text);
       return {
         found: true, file: names[i], modelPolicy: m ? m[1] : null,
-        hostHarness: h ? h[1].trim() : null, teamBoard: b ? b[1].trim() : null
+        hostHarness: h ? h[1].trim() : null, teamBoard: b ? b[1].trim() : null,
+        externalDelegation: x ? x[1].toLowerCase() : null
       };
     }
   }
-  return { found: false, file: null, modelPolicy: null, hostHarness: null, teamBoard: null };
+  return { found: false, file: null, modelPolicy: null, hostHarness: null, teamBoard: null, externalDelegation: null };
 }
 
 function findBoard(root, policy) {
@@ -285,8 +306,18 @@ function runChecks(opts, env, nodeVersion) {
   if (!policy.found) next.push('No "## Subagent team" policy yet: run the first-use setup (references/project-setup.md).');
   else if (!policy.modelPolicy) next.push('The policy section in ' + policy.file + ' has no "Model policy:" line: complete it with the user.');
   if (policy.found && !policy.hostHarness) next.push('The policy has no "Host harness:" line: confirm the host' + (host.id === 'unknown' ? '' : ' (detected: ' + host.name + ')') + ' with the user and record it.');
+  var teams = checks.filter(function (c) {
+    return c.status === 'ok' && ['codex', 'agy', 'opencode', 'pi', 'grok'].indexOf(c.id) !== -1;
+  }).map(function (c) { return c.id; });
+  if (checks.some(function (c) { return c.id === 'mcp'; })) teams.push('MCP servers');
+  var choice = policy.externalDelegation;
+  if (policy.found && teams.length && choice !== 'roster' && choice !== 'none') {
+    next.push('External teams available (' + teams.join(', ') + '): ask the user which may take work this session, pre-selecting the policy roster (SKILL.md "Start", step 5). Policy "External delegation: roster" or "none" skips this question.');
+  } else if (choice === 'roster' || choice === 'none') {
+    next.push('External delegation: ' + choice + ' (from the policy): ' + (choice === 'none' ? 'keep all work in-house' : 'use the roster as recorded') + ' and say so in one line; re-check only when the user asks.');
+  }
   if (!board.found && !(policy.teamBoard && /^(native|none)\b/i.test(policy.teamBoard))) next.push('No team board yet: when the work involves external teams, several sessions or Strict mode, create one (scripts/team-board.mjs init) and link it from the policy section.');
-  if (!next.length) next.push('Environment ready and policy found: proceed.');
+  if (!next.length || next.every(function (n) { return n.indexOf('External delegation: ') === 0; })) next.push('Environment ready and policy found: proceed.');
   return {
     status: status,
     minNode: MIN_NODE_MAJOR,

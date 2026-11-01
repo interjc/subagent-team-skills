@@ -1,10 +1,10 @@
 ---
 name: subagent-team
-description: Run multi-file, multi-phase coding work as a small software organisation in four layers. The main session is the director; in-house expert subagents design, review and accept; in-house execution subagents implement and test; external teams (other vendors' agents via CLI, plugin or MCP, such as agy, Codex CLI or OpenCode) take gated bulk work through a low-tier liaison; the human gets one batched question list at the end. Detects and confirms the host harness, keeps shared state on a team board in the repository (or the harness's native task list), and keeps AGENTS.md and docs cross-referenced. Use this whenever a task spans several files or phases, and whenever you are about to split work or choose a task's flow, delegate to a subagent or an external agent, pick a model or effort for one, write a brief, track an external job, review or accept delegated work, set up a project's team policy, record a lesson or user adjustment, or decide whether to ask the user, even if the user never says "subagent".
+description: Run multi-file, multi-phase coding work as a small software organisation in four layers. The main session is the director; in-house expert subagents design, review and accept; in-house execution subagents implement and test; external teams (other vendors' agents via CLI, plugin, ACP or MCP, such as agy, Codex CLI or OpenCode) take gated bulk work through a low-tier liaison; the human gets one batched question list at the end. Detects and confirms the host harness, keeps shared state on a team board in the repository, and keeps AGENTS.md and docs cross-referenced. Use this whenever a task spans several files or phases, and whenever you are about to split work or choose a task's flow, delegate to a subagent or an external agent, pick a model or effort for one, write a brief, choose, verify or track external teams, review or accept delegated work, set up a project's team policy, record a lesson or user adjustment, or decide whether to ask the user, even if the user never says "subagent".
 license: MIT
 compatibility: The method itself needs nothing but a harness that can spawn subagents. The optional helper scripts need Node.js 18+ (24 recommended) and git; run scripts/env-check.cjs at the start of a session.
 metadata:
-  version: "0.2.1"
+  version: "0.3.0"
 ---
 
 # Subagent Team
@@ -27,7 +27,7 @@ It installs nothing and reports:
 
 - **Hard requirements**: Node.js 18 or newer for the helper scripts, and git. **Recommended**: Node.js 24.
 - **Host harness hint**: which agent this session probably runs in, from environment variables. A hint to confirm, never a decision (section 0).
-- **Optional external teams**: Codex CLI, agy, the agy-staff plugin, other agent CLIs on `PATH` (OpenCode, Pi, Grok), MCP servers in the project's `.mcp.json`.
+- **Optional external teams**: Codex CLI and OpenAI's Codex plugin, agy and the agy-staff plugin, OpenCode (reachable through ACP), other agent CLIs on `PATH` (Pi, Grok), MCP servers in the project's `.mcp.json`.
 - **Project policy and team board**: whether `## Subagent team` exists, records the host, and links a board.
 
 Exit `0` means ready, possibly with warnings; `2` means blocked. If `node` itself is missing, the command fails with "not found": treat that as a failed Node check. Then:
@@ -41,10 +41,12 @@ Exit `0` means ready, possibly with warnings; `2` means blocked. If `node` itsel
 |---|---|
 | Node.js 18+ | The method needs no scripts. Map tiers from the harness's model list and the vendor pages ([references/model-tiers.md](references/model-tiers.md)); write board files by hand from [references/team-board.md](references/team-board.md); for external teams, `cli-agent-delegation` lists the raw CLI commands. |
 | git | Not workable for team mode: leases, diffs, reviews and commits rely on it. Stay in Solo mode until git is installed. |
-| An external CLI | Keep that work in-house, or use whichever external team is available. |
-| agy-staff plugin | Use the raw `agy` CLI (skill `cli-agent-delegation`). |
+| An external CLI | Go down that team's fallback ladder, then to another team of the same tier, then in-house (`cli-agent-delegation`, "Channels and fallbacks"). |
+| agy-staff plugin | Use `agy-run.mjs` or the raw `agy` CLI (skill `cli-agent-delegation`). |
+| Codex plugin | Nothing lost for jobs: `codex-run.mjs` is the job channel; reviews run through it in `read-only`. |
 
-5. **Record the result** in the policy section (`Environment:` line, [references/project-setup.md](references/project-setup.md)). Warnings the user already accepted get one line next time, not a new question.
+5. **Choose the external teams for this session.** When the check found any external team, ask the user one multi-select question: which teams may take work this session (each with its channel and typical work), or none. Pre-select the roster in the policy. Skip it when the policy's `External delegation:` line says `roster` (use the roster as recorded) or `none` (stay in-house), when the run is non-interactive, or on first use, where the setup questionnaire covers it; then state the choice in one line. Write the answer into the board's progress record; a lasting change goes into the policy's roster. The user can add, drop or re-check a team at any time (section 5).
+6. **Record the result** in the policy section (`Environment:` line, [references/project-setup.md](references/project-setup.md)). Warnings the user already accepted get one line next time, not a new question.
 
 ## 0. Host harness, policy and mode
 
@@ -147,7 +149,9 @@ Skipped layers can still be summoned when a question needs them. Outside `solo`,
 
 ## 5. External teams and the liaison
 
-External teams are reached through a **CLI** (headless), a **plugin** that wraps one, or an **MCP server**. The project's roster lists each team, its channel, which external tier each of its models fills, and whether it may edit or only review. Before trusting an untested team, run one tiny read-only job and record what you found.
+External teams are reached through a **CLI** (headless), a **plugin** that wraps one, a protocol server such as **ACP** (OpenCode), or an **MCP server**. The project's roster lists each team, its channel, which external tier each of its models fills, and whether it may edit or only review. Before trusting an untested team, run one tiny read-only job and record what you found. Each team has a fallback ladder (another channel, another team of the same tier, then in-house); a switch is stated in one line and recorded on the card.
+
+**Verify and adjust on request.** Which teams take work is agreed at the start (Start, step 5). Whenever the user asks to add, drop or check a team mid-run, the director re-checks without interrupting running jobs (doctor, the OpenCode probe, a tiny read-only job for anything new), reports one capability table, then updates the session choice, the roster if the change should last, the queued cards, and `lessons.md`. Procedure: [references/external-teams.md](references/external-teams.md), "Choosing and adjusting external teams".
 
 Every external job gets a **liaison**: an L3, low-tier, low-effort in-house subagent that tracks it so the director's context does not.
 
@@ -155,7 +159,7 @@ Every external job gets a **liaison**: an L3, low-tier, low-effort in-house suba
 - **Escalates** to L2 (L1 if the flow has no L2): any decision the brief does not make, spec contradictions, a second failed round, changes outside the lease, resumable timeouts, the team being unavailable, anything near a never-outsourced path.
 - **Never**: decides product or architecture, edits code, commits, talks to the user, or starts a duplicate job.
 
-Raise the liaison to mid tier when its checks require reading code. Without subagents (or without shell access for them) there is no liaison; the director runs the job in the background and reacts to the completion notification. Channels, the roster, adapting a new CLI, harness-specific waiting: [references/external-teams.md](references/external-teams.md). Calling agy and Codex: skill `cli-agent-delegation`.
+Raise the liaison to mid tier when its checks require reading code. Without subagents (or without shell access for them) there is no liaison; the director runs the job in the background and reacts to the completion notification. Channels, the roster, adapting a new CLI, harness-specific waiting: [references/external-teams.md](references/external-teams.md). Calling Codex, agy and OpenCode: skill `cli-agent-delegation`.
 
 ## 6. The team board: shared, persistent state
 
@@ -221,9 +225,9 @@ What to write where, and when: [references/team-board.md](references/team-board.
 - [references/host-harness.md](references/host-harness.md): detecting and confirming the host harness, capability checklist, other hosts
 - [references/project-setup.md](references/project-setup.md): first-use questionnaire and the `## Subagent team` policy section
 - [references/org-layers.md](references/org-layers.md): the four layers, flows, task breakdown, escalation, who writes which document
-- [references/external-teams.md](references/external-teams.md): external roster, channels (CLI, plugin, MCP), tiers, the liaison
+- [references/external-teams.md](references/external-teams.md): external roster, channels (CLI, plugin, ACP, MCP), tiers, choosing and adjusting teams, fallbacks, the liaison
 - [references/team-board.md](references/team-board.md): native vs repository state, board layout, task cards, `scripts/team-board.mjs`, docs cross-references
-- `scripts/env-check.cjs`: environment health check (Node.js minimum 18 / recommended 24, git, host hint, external teams, policy, board)
+- `scripts/env-check.cjs`: environment health check (Node.js minimum 18 / recommended 24, git, host hint, external teams, policy and its external-delegation choice, board)
 - [references/model-tiers.md](references/model-tiers.md): tier mapping, role table, dated roster, `scripts/model-roster.mjs`
 - [references/brief-template.md](references/brief-template.md): implementer, outsourced, liaison, reviewer and expert briefs; pre-dispatch checklist
 - [references/verification.md](references/verification.md): review procedure, fingerprints, mutation checks, command pitfalls

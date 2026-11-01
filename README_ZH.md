@@ -11,7 +11,7 @@
 - **第一层 总管**：一个主 session。拆任务、给每个任务定流程、写契约、集成、提交
 - **第二层 内部专家团队**：强模型 subagent。细化设计、负责任务线、审核验收、做专家决策
 - **第三层 内部执行团队**：便宜快速的 subagent。实现并测试、独立审核、检索，以及充当外包的**对接人**
-- **第四层 外包团队**：通过 CLI、插件或 MCP 连接的其他厂商 agent（agy、Codex CLI 等），接需求明确的批量活
+- **第四层 外包团队**：通过 CLI、插件、ACP 或 MCP 连接的其他厂商 agent（agy、Codex CLI、OpenCode 等），接需求明确的批量活
 - **人**：到最后一次性问清楚
 
 ```
@@ -54,8 +54,11 @@
 | 外包团队 | 接入方式 | 状态 |
 |---|---|---|
 | **agy**（Google Antigravity） | CLI，或 [agy-staff](https://github.com/keli-wen/agy-staff) 插件 | 真实项目中使用，有封装脚本 |
-| **Codex CLI** | CLI（`codex exec`） | 真实项目中使用，有封装脚本 |
-| OpenCode、Pi、Grok CLI，以及通过 MCP 暴露的 agent | CLI / MCP | 未测试。skill 给出接入新 CLI 的检查步骤，先跑一个只读小任务验证再用 |
+| **Codex CLI** | CLI（`codex exec`），或 OpenAI 为 Claude Code 出的 [Codex 插件](https://github.com/openai/codex-plugin-cc) | CLI 在真实项目中使用，有封装脚本。插件依据其文档和源码整理，用于审核和作为第二通道 |
+| **OpenCode** | [ACP](https://opencode.ai/v2/docs/cli/acp/)（`opencode acp`） | 有封装脚本：固定模型和 effort、默认全部拒绝的权限集、超时和续做。已在 OpenCode 2.2.5 上用小任务验证，尚未用于真实项目 |
+| Pi、Grok CLI、其他 ACP agent，以及通过 MCP 暴露的 agent | CLI / ACP / MCP | 未测试。skill 给出接入新 CLI 的检查步骤，先跑一个只读小任务验证再用 |
+
+会话开始时，agent 会问你检测到的外包团队里哪些可以接活（或者直接读项目策略里的选择）；之后只要你开口（"Codex 能审这个吗？""加上 OpenCode""别再用 agy 了"），它就会重新核实并调整。每个团队都有降级路线：先换同一团队的其他通道，再换同档位的其他团队，最后收回内部。
 
 ## 安装
 
@@ -96,7 +99,7 @@ codex plugin add subagent-team@subagent-team-skills
 
 - 阻塞项和警告，每一条都附上修复命令；
 - 宿主 agent 的初步判断（需要你确认）；
-- 有哪些外包团队可用：Codex CLI、agy、agy-staff，`PATH` 上的其他 agent CLI，项目 `.mcp.json` 里的 MCP server；
+- 有哪些外包团队可用：Codex CLI 及其插件、agy 和 agy-staff、OpenCode，`PATH` 上的其他 agent CLI，项目 `.mcp.json` 里的 MCP server；
 - 项目里是否已经有团队策略和团队看板。
 
 agent 只有在你同意之后才会安装东西，装完会重新检查。如果你不想装，就按文档里写好的替代方案继续。
@@ -135,7 +138,7 @@ docs/agent-team/
 | Skill | 内容 | 什么时候加载 |
 |---|---|---|
 | [`subagent-team`](skills/subagent-team/SKILL.md)（核心） | 宿主 agent 的检测与确认；首次使用时约定团队策略；四层组织与层 / 档位的区分；任务拆分与每个任务的流程；外包准入与对接人；团队看板与 `AGENTS.md` / `docs/` 互相引用；三种模式（单干 / 标准 / 严格）；任务说明模板；可执行验证与三步审核；逐层上报的决策阶梯；agent 复用与槽位限制；Claude Code 与 Codex 的差异 | 任务跨多个文件或阶段；要拆任务、定流程、派活、选模型或 effort、写任务说明、跟踪外包、审核委派结果、记录经验，或者拿不准要不要问用户 |
-| [`cli-agent-delegation`](skills/cli-agent-delegation/SKILL.md) | 外包给 Google Antigravity（`agy`，装不装 [agy-staff](https://github.com/keli-wen/agy-staff) 都行）和 OpenAI Codex CLI：两者怎么选、安全封装、进度追踪、续做、验收、实测数据；对接人如何有上限地等待；接入 OpenCode、Pi、Grok 等其他 CLI 或 MCP 的检查步骤 | 把需求明确的批量活交给其他厂商的 agent 时 |
+| [`cli-agent-delegation`](skills/cli-agent-delegation/SKILL.md) | 外包给 OpenAI Codex CLI（封装脚本，或 OpenAI 的 Codex 插件）、Google Antigravity（`agy`，装不装 [agy-staff](https://github.com/keli-wen/agy-staff) 都行）和通过 ACP 连接的 OpenCode：和用户确认用哪些团队、按需重新核实，什么活交给谁，安全封装、降级路线、进度追踪、续做、验收、实测数据；对接人如何有上限地等待；接入 Pi、Grok 等其他 CLI、ACP agent 或 MCP 的检查步骤 | 把需求明确的批量活交给其他厂商的 agent 时，或想确认有哪些外部 agent 可用时 |
 | [`agent-handover`](skills/agent-handover/SKILL.md) | 进度记录、任务卡片和经验记录；规则落进仓库而不是本地记忆；commit hash 占位与回填；决策记录；交出与接手清单 | 验收之后、会话可能中断之前、切换 agent 或工具时、接手别人的工作时 |
 
 Claude Code 插件附带两个审核 agent：
@@ -149,13 +152,14 @@ Claude Code 插件附带两个审核 agent：
 
 | 脚本 | 作用 |
 |---|---|
-| `skills/subagent-team/scripts/env-check.cjs` | 会话开始时的环境健康检查，覆盖 Node.js（下限 18、推荐 24）、git、宿主 agent 的初步判断、外包团队（Codex CLI、agy、agy-staff、其他 agent CLI、项目 MCP server）、团队策略和团队看板。用最保守的语法编写，Node 版本过旧时也能运行，并把问题说清楚 |
+| `skills/subagent-team/scripts/env-check.cjs` | 会话开始时的环境健康检查，覆盖 Node.js（下限 18、推荐 24）、git、宿主 agent 的初步判断、外包团队（Codex CLI 及其插件、agy、agy-staff、OpenCode、其他 agent CLI、项目 MCP server）、团队策略（包括是否询问本次用哪些外包团队）和团队看板。用最保守的语法编写，Node 版本过旧时也能运行，并把问题说清楚 |
 | `skills/subagent-team/scripts/team-board.mjs` | 团队看板：`init` 生成 `docs/agent-team/` 骨架（从不覆盖已有文件），`new` 新建任务卡片并登记到索引，`status` 汇总任务状态和待回答的问题，并报告索引、卡片和 `AGENTS.md` 之间的不一致 |
 | `skills/subagent-team/scripts/model-roster.mjs` | 从 OpenRouter 的公开模型列表拉取 Anthropic / OpenAI / Google / DeepSeek 的最新模型，附价格和上下文长度，用来把抽象档位映射到当前型号 |
 | `skills/subagent-team/scripts/audit-dispatch.mjs` | 从宿主会话记录中列出本次会话实际跑了什么：每个 subagent 的模型与 effort，以及外包作业。仅限 Claude Code |
 | `skills/cli-agent-delegation/scripts/codex-run.mjs` | 封装 `codex exec` 和 `exec resume`。必须显式传 effort；拒绝 `ultra` 和 `danger-full-access`；支持超时；日志和最终回复写到文件；输出带 session id 的 JSON 摘要 |
 | `skills/cli-agent-delegation/scripts/agy-run.mjs` | 没装 agy-staff 时直接 headless 调用 `agy`。会校验模型 id；拒绝绕道调用 Claude / GPT 模型；`--write` 对应不受限模式；可以按 conversation id 续做 |
-| `skills/cli-agent-delegation/scripts/doctor.mjs` | 只读的环境报告：CLI 是否安装及版本、Codex 默认 effort 的坑、可用模型、agy-staff 是否已安装 |
+| `skills/cli-agent-delegation/scripts/opencode-acp-run.mjs` | `opencode acp` 的 ACP 客户端。`run` 固定模型和 effort，注入一个 OpenCode agent：除了读取、允许的编辑和白名单里的 shell 命令，一律拒绝；权限请求一律驳回，保证不会卡在等待审批上；支持超时和续做，输出 JSON 摘要。`probe` 不花 token，列出 OpenCode 可用的模型和 effort 档位 |
+| `skills/cli-agent-delegation/scripts/doctor.mjs` | 只读的环境报告：CLI 是否安装及版本、Codex 默认 effort 的坑、可用模型、agy-staff 和 Codex 插件是否已安装、`opencode acp` 是否可用 |
 
 ## 首次使用：约定团队策略
 
@@ -169,7 +173,7 @@ Claude Code 插件附带两个审核 agent：
    - `fixed`：由你为每个档位指定模型和 effort。
    - `hybrid`：部分角色固定，其余 auto。
 3. **成本偏好**：均衡 / 省钱 / 质量优先
-4. **外包团队**：用哪些、通过什么方式接入（CLI / 插件 / MCP）、各自哪个模型对应 external-fast 和 external-strong 档位、哪些可以改文件、哪些只做审核
+4. **外包团队**：用哪些、通过什么方式接入（CLI / 插件 / ACP / MCP）、各自哪个模型对应 external-fast 和 external-strong 档位、哪些可以改文件、哪些只做审核，以及以后每次会话开始时是否再问一遍用哪些团队
 5. **团队看板**：推荐 `docs/agent-team/` 加宿主的原生任务列表
 6. **不外包的路径与共享文件**：例如计费、支付、鉴权；语言文件、文档索引
 7. **提交与推送规则**
@@ -179,7 +183,7 @@ Claude Code 插件附带两个审核 agent：
 ## 开发
 
 ```bash
-npm test          # 离线单元测试（用假的 codex / agy 可执行文件和 fixtures）
+npm test          # 离线单元测试（用假的 codex / agy / opencode 可执行文件和 fixtures）
 npm run check     # frontmatter、链接、版本一致、审核 prompt 同步、隐私扫描
 ```
 

@@ -11,6 +11,7 @@ export const FIXTURES = path.join(ROOT, 'tests', 'fixtures');
 export const SCRIPTS = {
   codexRun: path.join(ROOT, 'skills', 'cli-agent-delegation', 'scripts', 'codex-run.mjs'),
   agyRun: path.join(ROOT, 'skills', 'cli-agent-delegation', 'scripts', 'agy-run.mjs'),
+  opencodeAcpRun: path.join(ROOT, 'skills', 'cli-agent-delegation', 'scripts', 'opencode-acp-run.mjs'),
   doctor: path.join(ROOT, 'skills', 'cli-agent-delegation', 'scripts', 'doctor.mjs'),
   modelRoster: path.join(ROOT, 'skills', 'subagent-team', 'scripts', 'model-roster.mjs'),
 };

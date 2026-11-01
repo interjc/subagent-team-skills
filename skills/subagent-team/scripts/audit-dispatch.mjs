@@ -118,13 +118,15 @@ export function parseAgentTranscript(text) {
   return { turns, models };
 }
 
-const CODEX_JOB_RE = /codex-run\.mjs(?:[^\n]*?\s|\s+)exec\b|\bcodex\s+exec\b/;
+const CODEX_JOB_RE = /codex-run\.mjs(?:[^\n]*?\s|\s+)exec\b|\bcodex\s+exec\b|codex-companion\.mjs["']?\s+task\b/;
 const AGY_JOB_RE = /agy-run\.mjs(?:[^\n]*?\s|\s+)run\b|\bagy\s+-p\b/;
+const OPENCODE_JOB_RE = /opencode-acp-run\.mjs(?:[^\n]*?\s|\s+)run\b|\bopencode\s+run\b/;
 
 export function emptyDispatchAttempts() {
   return {
     codex: { bash: 0, agentPrompt: 0 },
     agy: { bash: 0, agentPrompt: 0 },
+    opencode: { bash: 0, agentPrompt: 0 },
   };
 }
 
@@ -145,9 +147,11 @@ export function parseExternalJobs(text) {
       if (item.name === 'Bash' && typeof item.input?.command === 'string') {
         if (CODEX_JOB_RE.test(item.input.command)) out.codex.bash += 1;
         if (AGY_JOB_RE.test(item.input.command)) out.agy.bash += 1;
+        if (OPENCODE_JOB_RE.test(item.input.command)) out.opencode.bash += 1;
       } else if (item.name === 'Agent' && typeof item.input?.prompt === 'string') {
         if (CODEX_JOB_RE.test(item.input.prompt)) out.codex.agentPrompt += 1;
         if (AGY_JOB_RE.test(item.input.prompt)) out.agy.agentPrompt += 1;
+        if (OPENCODE_JOB_RE.test(item.input.prompt)) out.opencode.agentPrompt += 1;
       }
     }
   }
@@ -181,6 +185,10 @@ export function summarize(agents, dispatchAttempts = emptyDispatchAttempts()) {
       agy: {
         bash: dispatchAttempts?.agy?.bash ?? 0,
         agentPrompt: dispatchAttempts?.agy?.agentPrompt ?? 0,
+      },
+      opencode: {
+        bash: dispatchAttempts?.opencode?.bash ?? 0,
+        agentPrompt: dispatchAttempts?.opencode?.agentPrompt ?? 0,
       },
     },
   };

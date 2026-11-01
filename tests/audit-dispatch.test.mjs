@@ -76,6 +76,7 @@ describe('audit-dispatch: pure functions', () => {
     assert.deepEqual(parseExternalJobs(textOnly), {
       codex: { bash: 0, agentPrompt: 0 },
       agy: { bash: 0, agentPrompt: 0 },
+      opencode: { bash: 0, agentPrompt: 0 },
     });
 
     const codexNoExec = JSON.stringify({
@@ -88,12 +89,14 @@ describe('audit-dispatch: pure functions', () => {
     assert.deepEqual(parseExternalJobs(codexNoExec), {
       codex: { bash: 0, agentPrompt: 0 },
       agy: { bash: 0, agentPrompt: 0 },
+      opencode: { bash: 0, agentPrompt: 0 },
     });
 
     const mainText = fs.readFileSync(MAIN_FIXTURE, 'utf8');
     assert.deepEqual(parseExternalJobs(mainText), {
       codex: { bash: 1, agentPrompt: 1 },
       agy: { bash: 2, agentPrompt: 0 },
+      opencode: { bash: 0, agentPrompt: 0 },
     });
   });
 
@@ -128,6 +131,7 @@ describe('audit-dispatch: pure functions', () => {
     assert.deepEqual(summary.dispatchAttempts, {
       codex: { bash: 1, agentPrompt: 1 },
       agy: { bash: 2, agentPrompt: 0 },
+      opencode: { bash: 0, agentPrompt: 0 },
     });
   });
 
@@ -177,6 +181,7 @@ describe('audit-dispatch: CLI via child_process', () => {
     assert.deepEqual(out.dispatchAttempts, {
       codex: { bash: 1, agentPrompt: 1 },
       agy: { bash: 2, agentPrompt: 0 },
+      opencode: { bash: 0, agentPrompt: 0 },
     });
     const stderrLines = r.stderr.trim().split('\n');
     assert.equal(stderrLines.length, 2);
@@ -220,5 +225,21 @@ describe('audit-dispatch: CLI via child_process', () => {
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
+  });
+});
+
+test('parseExternalJobs counts OpenCode jobs and the Codex plugin runtime', () => {
+  const bash = (command) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } });
+  const text = [
+    bash('node scripts/opencode-acp-run.mjs run --repo /w --prompt-file /s/j.md --model a/b --effort low'),
+    bash('node scripts/opencode-acp-run.mjs probe --repo /w'),
+    bash('cd /w && opencode run --standalone --agent x "$(cat /s/j.md)"'),
+    bash('node "/p/codex/scripts/codex-companion.mjs" task --background --write --model m --effort low --prompt-file /s/j.md'),
+    bash('node "/p/codex/scripts/codex-companion.mjs" status task-1 --wait'),
+  ].join('\n');
+  assert.deepEqual(parseExternalJobs(text), {
+    codex: { bash: 1, agentPrompt: 0 },
+    agy: { bash: 0, agentPrompt: 0 },
+    opencode: { bash: 2, agentPrompt: 0 },
   });
 });

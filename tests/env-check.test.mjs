@@ -53,9 +53,9 @@ test('checkNode: error below the minimum, warning below recommended, ok at recom
 
 test('findPolicy detects the Subagent team section and its model policy', () => {
   const withPolicy = project('p1', { 'AGENTS.md': '# Rules\n\n## Subagent team\n- Model policy: hybrid\n' }, { git: false });
-  assert.deepEqual(envCheck.findPolicy(withPolicy), { found: true, file: 'AGENTS.md', modelPolicy: 'hybrid', hostHarness: null, teamBoard: null });
+  assert.deepEqual(envCheck.findPolicy(withPolicy), { found: true, file: 'AGENTS.md', modelPolicy: 'hybrid', hostHarness: null, teamBoard: null, externalDelegation: null });
   const claudeOnly = project('p2', { 'CLAUDE.md': '## Subagent team\nsee docs\n' }, { git: false });
-  assert.deepEqual(envCheck.findPolicy(claudeOnly), { found: true, file: 'CLAUDE.md', modelPolicy: null, hostHarness: null, teamBoard: null });
+  assert.deepEqual(envCheck.findPolicy(claudeOnly), { found: true, file: 'CLAUDE.md', modelPolicy: null, hostHarness: null, teamBoard: null, externalDelegation: null });
   const full = project('p4', { 'AGENTS.md': '## Subagent team\n- Model policy: auto\n- Host harness: Claude Code   <!-- confirmed -->\n- Team board: docs/team/README.md + native task list\n' }, { git: false });
   const fp = envCheck.findPolicy(full);
   assert.equal(fp.hostHarness, 'Claude Code');
@@ -65,7 +65,7 @@ test('findPolicy detects the Subagent team section and its model policy', () => 
 });
 
 test('runChecks: ready with optional tools present and a policy in the repo root', () => {
-  const dir = project('ready', { 'AGENTS.md': '## Subagent team\n- Model policy: auto\n- Host harness: Claude Code\n- Team board: native\n' });
+  const dir = project('ready', { 'AGENTS.md': '## Subagent team\n- Model policy: auto\n- Host harness: Claude Code\n- Team board: native\n- External delegation: roster   <!-- ask | roster | none -->\n' });
   fs.mkdirSync(path.join(dir, 'sub'));
   const r = envCheck.runChecks({ root: path.join(dir, 'sub') },
     { ...noOthers(), CODEX_BIN: fakeCodex, AGY_BIN: fakeAgy, HOME: tmp, CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg') }, 'v24.1.0');
@@ -76,7 +76,38 @@ test('runChecks: ready with optional tools present and a policy in the repo root
     ['node', 'ok'], ['git', 'ok'], ['git-repo', 'ok'], ['host', 'info'], ['codex', 'ok'], ['agy', 'ok'], ['agy-staff', 'info'],
   ]);
   assert.equal(r.host.id, 'unknown');
-  assert.deepEqual(r.next, ['Environment ready and policy found: proceed.']);
+  assert.equal(r.policy.externalDelegation, 'roster');
+  assert.deepEqual(r.next, [
+    'External delegation: roster (from the policy): use the roster as recorded and say so in one line; re-check only when the user asks.',
+    'Environment ready and policy found: proceed.',
+  ]);
+});
+
+test('runChecks: asks which external teams to use unless the policy says roster or none', () => {
+  const dir = project('ask', { 'AGENTS.md': '## Subagent team\n- Model policy: auto\n- Host harness: Codex\n- Team board: native\n' });
+  const env = { ...noOthers(), CODEX_BIN: fakeCodex, AGY_BIN: missing('agy'), HOME: tmp, CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg') };
+  const r = envCheck.runChecks({ root: dir }, env, 'v24.1.0');
+  assert.deepEqual(r.next, ['External teams available (codex): ask the user which may take work this session, pre-selecting the policy roster (SKILL.md "Start", step 5). Policy "External delegation: roster" or "none" skips this question.']);
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), '## Subagent team\n- Model policy: auto\n- Host harness: Codex\n- Team board: native\n- External delegation: none\n');
+  const r2 = envCheck.runChecks({ root: dir }, env, 'v24.1.0');
+  assert.match(r2.next[0], /External delegation: none \(from the policy\): keep all work in-house/);
+  const noTeams = envCheck.runChecks({ root: project('ask2', { 'AGENTS.md': '## Subagent team\n- Model policy: auto\n- Host harness: Codex\n- Team board: native\n' }) },
+    { ...noOthers(), CODEX_BIN: missing('codex'), AGY_BIN: missing('agy'), HOME: tmp }, 'v24.1.0');
+  assert.deepEqual(noTeams.next, ['Environment ready and policy found: proceed.']);
+});
+
+test('Codex plugin detection: official plugin ok, a fork warns', () => {
+  const cfg = path.join(tmp, 'cfg-codex', 'plugins');
+  fs.mkdirSync(cfg, { recursive: true });
+  fs.writeFileSync(path.join(cfg, 'installed_plugins.json'), '{"plugins":{"codex@openai-codex":[{}]}}');
+  const env = { CLAUDE_CONFIG_DIR: path.dirname(cfg), CODEX_BIN: missing('c'), AGY_BIN: missing('a'), ...noOthers() };
+  let r = envCheck.runChecks({ root: tmp }, env, 'v24.0.0');
+  assert.equal(r.checks.find((c) => c.id === 'codex-plugin').status, 'ok');
+  fs.writeFileSync(path.join(cfg, 'installed_plugins.json'), '{"plugins":{"codex@a-fork":[{}]}}');
+  r = envCheck.runChecks({ root: tmp }, env, 'v24.0.0');
+  const c = r.checks.find((x) => x.id === 'codex-plugin');
+  assert.equal(c.status, 'warn');
+  assert.match(c.fix, /danger-full-access/);
 });
 
 test('runChecks: blocked when git is missing; missing optional CLIs are only info', () => {
@@ -123,6 +154,7 @@ test('runChecks: other agent CLIs, MCP servers, board and policy hints', () => {
   const byId = Object.fromEntries(r.checks.map((c) => [c.id, c]));
   assert.equal(byId.opencode.status, 'ok');
   assert.match(byId.opencode.detail, /confirm it is the agent you mean/);
+  assert.match(byId.opencode.detail, /Reachable through ACP/);
   assert.equal(byId.pi, undefined, 'absent optional agents are not listed');
   assert.match(byId.mcp.detail, /codex, docs/);
   assert.match(byId.host.detail, /Claude Code \(CLAUDECODE\)/);

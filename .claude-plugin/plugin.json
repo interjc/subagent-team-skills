@@ -1,7 +1,7 @@
 {
   "name": "subagent-team",
-  "version": "0.2.1",
-  "description": "Run coding work as a four-layer team: a director session, in-house expert and execution subagents, external agent teams (agy, Codex CLI and others) tracked by liaisons, independent read-only reviewers, a persistent team board, and resumable handover.",
+  "version": "0.3.0",
+  "description": "Run coding work as a four-layer team: a director session, in-house expert and execution subagents, external agent teams (agy, Codex CLI, OpenCode via ACP and others) tracked by liaisons, independent read-only reviewers, a persistent team board, and resumable handover.",
   "author": {
     "name": "Justin Chen",
     "url": "https://github.com/interjc"
@@ -9,5 +9,5 @@
   "homepage": "https://github.com/interjc/subagent-team-skills",
   "repository": "https://github.com/interjc/subagent-team-skills",
   "license": "MIT",
-  "keywords": ["subagents", "orchestration", "delegation", "code-review", "agy", "codex", "handover"]
+  "keywords": ["subagents", "orchestration", "delegation", "code-review", "agy", "codex", "opencode", "acp", "handover"]
 }

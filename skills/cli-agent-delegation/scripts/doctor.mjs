@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// doctor.mjs - read-only environment check for delegating work to Codex CLI
-// and Google Antigravity CLI (agy). Never reads auth or credential files.
+// doctor.mjs - read-only environment check for delegating work to Codex CLI,
+// Google Antigravity CLI (agy) and OpenCode (ACP). Never reads auth or
+// credential files.
 //
 // Usage:
 //   doctor.mjs [--json]
@@ -24,7 +25,7 @@ if (Number(process.versions.node.split('.')[0]) < MIN_NODE_MAJOR) {
 
 const PROBE_TIMEOUT_MS = 10_000;
 
-export const USAGE = `doctor.mjs - check the environment for Codex CLI and agy delegation.
+export const USAGE = `doctor.mjs - check the environment for Codex CLI, agy and OpenCode delegation.
 
 Usage:
   doctor.mjs [--json]
@@ -32,16 +33,19 @@ Usage:
 Checks (read-only; auth and credential files are never read):
   - Node.js version
   - Codex CLI: \`$CODEX_BIN --version\`, default model and reasoning effort from
-    <CODEX_HOME or ~/.codex>/config.toml, model ids from models_cache.json
+    <CODEX_HOME or ~/.codex>/config.toml, model ids from models_cache.json, and the
+    Codex plugin for Claude Code (codex@openai-codex) in installed_plugins.json
   - agy: \`$AGY_BIN --version\`, agy-staff Claude Code plugin in
     <CLAUDE_CONFIG_DIR or ~/.claude>/plugins/installed_plugins.json
+  - OpenCode: \`$OPENCODE_BIN --version\` and whether \`opencode acp\` exists
 
 Options:
   --json    Print one JSON object instead of human-readable lines.
   --help    Show this help.
 
 Environment:
-  CODEX_BIN (default codex), AGY_BIN (default agy), CODEX_HOME, CLAUDE_CONFIG_DIR, HOME.
+  CODEX_BIN (default codex), AGY_BIN (default agy), OPENCODE_BIN (default opencode),
+  CODEX_HOME, CLAUDE_CONFIG_DIR, HOME.
 
 Exit code: 0 (it is a report); 1 on usage errors.
 `;
@@ -109,20 +113,33 @@ export function extractModelIds(json) {
   return [...ids];
 }
 
-// Finds the agy-staff entry in installed_plugins.json content (already parsed).
-export function findAgyStaff(installed) {
+// Finds the first installed_plugins.json entry (already parsed) whose key
+// matches `test`; returns { key, installPath } or null.
+export function findPlugin(installed, test) {
   if (!installed || typeof installed !== 'object') return null;
   const maps = [installed];
   if (installed.plugins && typeof installed.plugins === 'object') maps.unshift(installed.plugins);
   for (const map of maps) {
     for (const [key, value] of Object.entries(map)) {
-      if (!key.includes('agy-staff')) continue;
+      if (!test(key)) continue;
       const entries = Array.isArray(value) ? value : [value];
       const withPath = entries.find((e) => e && typeof e === 'object' && typeof e.installPath === 'string');
       return { key, installPath: withPath ? withPath.installPath : null };
     }
   }
   return null;
+}
+
+export function findAgyStaff(installed) {
+  return findPlugin(installed, (key) => key.includes('agy-staff'));
+}
+
+// OpenAI's Codex plugin for Claude Code is `codex@openai-codex`; other
+// `codex@<marketplace>` entries are forks with their own defaults.
+export const OFFICIAL_CODEX_PLUGIN = 'codex@openai-codex';
+export function findCodexPlugin(installed) {
+  const found = findPlugin(installed, (key) => /^codex@/.test(key));
+  return found ? { ...found, official: found.key === OFFICIAL_CODEX_PLUGIN } : null;
 }
 
 // ---------- probes ----------
@@ -172,18 +189,41 @@ export function checkCodex(env = process.env) {
   codex.modelsCacheExists = cache.exists;
   if (cache.data) codex.cachedModels = extractModelIds(cache.data);
   if (cache.error) codex.warnings.push(cache.error);
+  const { file: pluginsFile, plugins } = claudePlugins(env);
+  codex.plugin = { installed: false, key: null, official: false, installPath: null, companionExists: false, pluginsFile, error: plugins.error };
+  const found = findCodexPlugin(plugins.data);
+  if (found) {
+    Object.assign(codex.plugin, { installed: true, key: found.key, official: found.official, installPath: found.installPath });
+    codex.plugin.companionExists = Boolean(found.installPath
+      && fs.existsSync(path.join(found.installPath, 'scripts', 'codex-companion.mjs')));
+  }
   return codex;
+}
+
+function claudePlugins(env) {
+  const claudeDir = env.CLAUDE_CONFIG_DIR || path.join(homeDir(env), '.claude');
+  const file = path.join(claudeDir, 'plugins', 'installed_plugins.json');
+  return { file, plugins: readJson(file) };
+}
+
+export function checkOpencode(env = process.env) {
+  const bin = env.OPENCODE_BIN || 'opencode';
+  const opencode = { bin, ...probeVersion(bin), acp: false, acpError: null };
+  if (!opencode.present) return opencode;
+  const r = spawnSync(bin, ['acp', '--help'], { encoding: 'utf8', timeout: PROBE_TIMEOUT_MS });
+  if (r.error) opencode.acpError = r.error.message;
+  else if (r.status !== 0) opencode.acpError = `\`${bin} acp --help\` exited with code ${r.status}`;
+  else opencode.acp = true;
+  return opencode;
 }
 
 export function checkAgy(env = process.env) {
   const bin = env.AGY_BIN || 'agy';
-  const claudeDir = env.CLAUDE_CONFIG_DIR || path.join(homeDir(env), '.claude');
-  const pluginsFile = path.join(claudeDir, 'plugins', 'installed_plugins.json');
+  const { file: pluginsFile, plugins } = claudePlugins(env);
   const agy = {
     bin, ...probeVersion(bin),
     agyStaff: { installed: false, key: null, installPath: null, companionExists: false, pluginsFile, error: null },
   };
-  const plugins = readJson(pluginsFile);
   if (plugins.error) agy.agyStaff.error = plugins.error;
   const found = findAgyStaff(plugins.data);
   if (found) {
@@ -198,7 +238,7 @@ export function checkAgy(env = process.env) {
 
 export const RECOMMENDED_NODE_MAJOR = 24;
 
-export function recommend({ codex, agy, nodeVersion = process.version }) {
+export function recommend({ codex, agy, opencode = null, nodeVersion = process.version }) {
   const recs = [];
   const major = Number(String(nodeVersion).replace(/^v/, '').split('.')[0]);
   if (major < RECOMMENDED_NODE_MAJOR) {
@@ -206,8 +246,23 @@ export function recommend({ codex, agy, nodeVersion = process.version }) {
   }
   if (!codex.present) recs.push(`Codex CLI not found (${codex.bin}): install it (npm install -g @openai/codex) or set CODEX_BIN.`);
   else if (codex.error) recs.push(`Codex CLI found but \`${codex.bin} --version\` failed: ${codex.error}.`);
-  if (codex.defaultEffort) recs.push(`Codex default effort is "${codex.defaultEffort}": always delegate through codex-run.mjs (it passes --effort explicitly).`);
+  if (codex.defaultEffort) recs.push(`Codex default effort is "${codex.defaultEffort}": always pass the effort explicitly (codex-run.mjs requires it; with the Codex plugin, pass --effort on every task).`);
   if (codex.present && !codex.defaultModel) recs.push('No default model in Codex config.toml: pass --model to codex-run.mjs to make runs reproducible.');
+  const cp = codex.plugin;
+  if (cp && cp.installed && !cp.official) {
+    recs.push(`Codex plugin "${cp.key}" is not OpenAI's ${OFFICIAL_CODEX_PLUGIN}: check its sandbox default before using it (some forks run danger-full-access); codex-run.mjs remains the safe channel.`);
+  } else if (cp && cp.installed && !cp.companionExists) {
+    recs.push(`Codex plugin is registered (${cp.key}) but scripts/codex-companion.mjs was not found${cp.installPath ? ` under ${cp.installPath}` : ''}: reinstall it or use codex-run.mjs.`);
+  } else if (cp && cp.installed) {
+    recs.push('Codex plugin installed: use /codex:review or /codex:adversarial-review for read-only second opinions; codex-run.mjs stays the channel for outsourced jobs (explicit effort, timeout, resume by session id).');
+  } else if (codex.present) {
+    recs.push(`Codex plugin for Claude Code not found (optional, adds review commands): claude plugin marketplace add openai/codex-plugin-cc && claude plugin install ${OFFICIAL_CODEX_PLUGIN}`);
+  }
+  if (opencode) {
+    if (!opencode.present) recs.push(`OpenCode not found (${opencode.bin}): optional external team; install from https://opencode.ai, sign in with \`opencode auth login\`, or set OPENCODE_BIN.`);
+    else if (!opencode.acp) recs.push(`OpenCode found but \`opencode acp\` is not available (${opencode.acpError}): upgrade OpenCode (\`opencode upgrade\`) to use opencode-acp-run.mjs.`);
+    else recs.push('OpenCode ACP available: run `node scripts/opencode-acp-run.mjs probe --repo <abs repo>` to list its models and effort levels (no tokens spent).');
+  }
   if (!agy.present) recs.push(`agy not found (${agy.bin}): install Google Antigravity CLI or set AGY_BIN.`);
   else if (agy.error) recs.push(`agy found but \`${agy.bin} --version\` failed: ${agy.error}.`);
   const s = agy.agyStaff;
@@ -224,13 +279,15 @@ export function recommend({ codex, agy, nodeVersion = process.version }) {
 export function runChecks(env = process.env) {
   const codex = checkCodex(env);
   const agy = checkAgy(env);
+  const opencode = checkOpencode(env);
   return {
     node: process.version,
     minNode: MIN_NODE_MAJOR,
     recommendedNode: RECOMMENDED_NODE_MAJOR,
     codex,
     agy,
-    recommendations: recommend({ codex, agy }),
+    opencode,
+    recommendations: recommend({ codex, agy, opencode }),
   };
 }
 
@@ -250,6 +307,10 @@ export function formatReport(r) {
   ];
   if (c.cachedModels.length) lines.push(`    ${c.cachedModels.join(', ')}`);
   for (const w of c.warnings) lines.push(`  warning: ${w}`);
+  if (c.plugin) {
+    lines.push(`  Codex plugin (Claude Code): ${c.plugin.installed ? `installed (${c.plugin.key}${c.plugin.official ? '' : ', not the official plugin'})` : 'not found'}`);
+    if (c.plugin.installed) lines.push(`  scripts/codex-companion.mjs present: ${yn(c.plugin.companionExists)}`);
+  }
   lines.push(
     '',
     `agy: ${a.present ? `found (${a.version ?? 'unknown version'})` : 'not found'} [${a.bin}]`,
@@ -260,6 +321,11 @@ export function formatReport(r) {
     lines.push(`  companion/agy-companion.mjs present: ${yn(a.agyStaff.companionExists)}`);
   }
   if (a.agyStaff.error) lines.push(`  warning: ${a.agyStaff.error}`);
+  const o = r.opencode;
+  if (o) {
+    lines.push('', `opencode: ${o.present ? `found (${o.version ?? 'unknown version'})` : 'not found'} [${o.bin}]`);
+    if (o.present) lines.push(`  acp subcommand: ${o.acp ? 'yes' : `no${o.acpError ? ` (${o.acpError})` : ''}`}`);
+  }
   lines.push('', 'Recommendations:');
   for (const rec of r.recommendations) lines.push(`  - ${rec}`);
   return `${lines.join('\n')}\n`;
