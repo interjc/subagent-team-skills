@@ -28,7 +28,7 @@ Working tree: <clean | existing changes and who owns them>
     do not widen the scope
 
 ## Contract (read-only)
-- <types file>, <state/store file>, <interface file>
+- <types file>, <state/store file>, <interface file> (list the directory first: name an existing file, do not write a second one)
 - You export: <component/function names and props>. You use: <others' names and props>
 
 ## File lease
@@ -97,6 +97,7 @@ Card: <docs/agent-team/tasks/<ID>.md> (you are its holder; keep Status, Job, Log
 External team: <team> via <CLI | plugin | MCP>; model <id>; effort <level>; sandbox <read-only | workspace-write>
 Frozen brief for the external agent: <path> (do not change it; continuations quote from it)
 Workspace: <absolute path>; lease of the job: <paths>; must not touch: <paths>
+Running at the same time in this workspace: <jobs and their paths, or "none"> (their changes in `git status` are not yours to report or reject)
 Dispatch: <exact command, or "already running as job <id>, collect from <worktree>">
 Timeout: <duration>; wait in bounded slices (<how, for this host>)
 
