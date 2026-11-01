@@ -11,7 +11,7 @@
 - **L1 統括**：メインセッション 1 つ。作業を分割し、タスクごとのフローを決め、契約を書き、統合してコミットする
 - **L2 社内エキスパート**：強いモデルの subagent。詳細設計、タスクラインの担当、レビューと受け入れ、エキスパート判断
 - **L3 社内実行チーム**：安くて速い subagent。実装とテスト、独立レビュー、調査、そして外部チームの**窓口役**
-- **L4 外部チーム**：CLI、プラグイン、MCP 経由でつなぐ他社の agent（agy、Codex CLI など）。仕様が固まった大量作業を担当
+- **L4 外部チーム**：CLI、プラグイン、ACP、MCP 経由でつなぐ他社の agent（agy、Codex CLI、OpenCode など）。仕様が固まった大量作業を担当
 - **人間**：最後にまとめて一度だけ質問される
 
 ```
@@ -54,8 +54,11 @@ L4  外部チーム        翻訳、一括編集、テストの補充、セカ�
 | 外部チーム | 接続方法 | 状況 |
 |---|---|---|
 | **agy**（Google Antigravity） | CLI、または [agy-staff](https://github.com/keli-wen/agy-staff) プラグイン | 実プロジェクトで使用。ラッパースクリプト同梱 |
-| **Codex CLI** | CLI（`codex exec`） | 実プロジェクトで使用。ラッパースクリプト同梱 |
-| OpenCode、Pi、Grok CLI、MCP 経由で公開された agent | CLI / MCP | 未テスト。新しい CLI をつなぐためのチェックリストがあり、まず小さな読み取り専用ジョブで検証してから使います |
+| **Codex CLI** | CLI（`codex exec`）、または OpenAI による Claude Code 向け [Codex プラグイン](https://github.com/openai/codex-plugin-cc) | CLI は実プロジェクトで使用。ラッパースクリプト同梱。プラグインはドキュメントとソースに基づき、レビュー用と第二の経路として扱います |
+| **OpenCode** | [ACP](https://opencode.ai/v2/docs/cli/acp/)（`opencode acp`） | ラッパースクリプト同梱：モデルと effort の固定、既定ですべて拒否する権限セット、タイムアウト、再開。OpenCode 2.2.5 で小さなジョブにより確認済み。実プロジェクトではまだ未使用 |
+| Pi、Grok CLI、その他の ACP agent、MCP 経由で公開された agent | CLI / ACP / MCP | 未テスト。新しい CLI をつなぐためのチェックリストがあり、まず小さな読み取り専用ジョブで検証してから使います |
+
+セッション開始時、agent は検出した外部チームのうちどれに仕事を任せてよいかを尋ねます（プロジェクトのポリシーに選択があればそれを使います）。その後も頼めばいつでも（「Codex にレビューさせられる？」「OpenCode を追加して」「agy はもう使わないで」）再確認して調整します。どのチームにもフォールバックの順序があります：同じチームの別経路、次に同じティアの別チーム、最後に社内です。
 
 ## インストール
 
@@ -94,7 +97,7 @@ codex plugin add subagent-team@subagent-team-skills
 
 - ブロッカーと警告、それぞれの修正コマンド
 - ホスト agent の推測（あなたの確認が必要）
-- 使える外部チーム：Codex CLI、agy、agy-staff、`PATH` 上のその他の agent CLI、プロジェクトの `.mcp.json` にある MCP サーバー
+- 使える外部チーム：Codex CLI とそのプラグイン、agy と agy-staff、OpenCode、`PATH` 上のその他の agent CLI、プロジェクトの `.mcp.json` にある MCP サーバー
 - プロジェクトにチームポリシーとチームボードがすでにあるか
 
 agent は、あなたの同意がある場合にのみ何かをインストールし、その後で再チェックします。断った場合は、文書化された代替手段で続行します。
@@ -133,7 +136,7 @@ docs/agent-team/
 | Skill | 内容 | 読み込まれる場面 |
 |---|---|---|
 | [`subagent-team`](skills/subagent-team/SKILL.md)（コア） | ホスト agent の検出と確認、初回のチームポリシー、4 層と層 / ティアの区別、タスク分割とタスクごとのフロー、外注の基準と窓口役、チームボードと `AGENTS.md` / `docs/` の相互参照、モード（solo / standard / strict）、指示書テンプレート、実行可能な検証と 3 段階のレビュー、層ごとのエスカレーション、agent の再利用とスロット制限、Claude Code と Codex の違い | タスクが複数のファイルや段階にまたがるとき。作業の分割、フローの選択、委任、モデルや effort の選択、指示書の作成、外部作業の追跡、委任結果のレビュー、教訓の記録、ユーザーに聞くべきか迷うとき |
-| [`cli-agent-delegation`](skills/cli-agent-delegation/SKILL.md) | Google Antigravity（`agy`。[agy-staff](https://github.com/keli-wen/agy-staff) の有無は問わない）と OpenAI Codex CLI への外注：agy と Codex の使い分け、安全なラッパー、追跡、再開、受け入れ、実測データ。窓口役による上限付きの待機。OpenCode、Pi、Grok などの CLI や MCP をつなぐためのチェックリスト | 仕様が固まった大量作業を他社の agent に渡すとき |
+| [`cli-agent-delegation`](skills/cli-agent-delegation/SKILL.md) | OpenAI Codex CLI（ラッパー、または OpenAI の Codex プラグイン）、Google Antigravity（`agy`。[agy-staff](https://github.com/keli-wen/agy-staff) の有無は問わない）、ACP 経由の OpenCode への外注：使うチームをユーザーと決め、求めに応じて再確認すること、どの作業をどのチームに渡すか、安全なラッパー、フォールバックの順序、追跡、再開、受け入れ、実測データ。窓口役による上限付きの待機。Pi、Grok などの CLI、ACP agent、MCP をつなぐためのチェックリスト | 仕様が固まった大量作業を他社の agent に渡すとき、または使える外部 agent を確かめたいとき |
 | [`agent-handover`](skills/agent-handover/SKILL.md) | 進捗記録、タスクカードと教訓、ローカルメモリではなくリポジトリに置くルール、コミットハッシュのプレースホルダー、決定記録、引き渡しと引き継ぎのチェックリスト | 作業を受け入れた後、セッションが終わりそうなとき、agent やツールを切り替えるとき、他人の作業を引き継ぐとき |
 
 Claude Code プラグインに同梱される agent：`team-reviewer`（通常の変更、medium effort）と `team-reviewer-deep`（リスクの高い変更や複数モジュールにまたがる変更、high effort）。どちらも指示によって読み取り専用とされ、編集や書き込みのツールを持ちません。ただしテストを実行するために Bash は残しており、Bash でもファイルは書けるので、必要に応じて作業ツリーのフィンガープリントを照合してください（`verification.md` を参照）。
@@ -142,12 +145,14 @@ Claude Code プラグインに同梱される agent：`team-reviewer`（通常�
 
 | スクリプト | 用途 |
 |---|---|
-| `skills/subagent-team/scripts/env-check.cjs` | セッション開始時の環境ヘルスチェック：Node.js（下限 18、推奨 24）、git、ホスト agent の推測、外部チーム（Codex CLI、agy、agy-staff、その他の agent CLI、プロジェクトの MCP サーバー）、プロジェクトのチームポリシーとチームボード。保守的な構文で書かれているため、古い Node でも動作して問題を説明できます。 |
+| `skills/subagent-team/scripts/env-check.cjs` | セッション開始時の環境ヘルスチェック：Node.js（下限 18、推奨 24）、git、ホスト agent の推測、外部チーム（Codex CLI とそのプラグイン、agy、agy-staff、OpenCode、その他の agent CLI、プロジェクトの MCP サーバー）、プロジェクトのチームポリシー（どの外部チームを使うか尋ねるかどうかを含む）とチームボード。保守的な構文で書かれているため、古い Node でも動作して問題を説明できます。 |
 | `skills/subagent-team/scripts/team-board.mjs` | チームボード：`init` は `docs/agent-team/` の骨格を作り（既存ファイルは上書きしない）、`new` はタスクカードとその索引行を追加し、`status` はタスクの状態と未回答の質問を集計して、索引・カード・`AGENTS.md` の食い違いを報告します。 |
 | `skills/subagent-team/scripts/model-roster.mjs` | OpenRouter の公開モデル一覧から、Anthropic / OpenAI / Google / DeepSeek の最新モデルを価格とコンテキスト長付きで一覧表示します。抽象ティアを現在のモデルに対応づけるのに使います。 |
+| `skills/subagent-team/scripts/audit-dispatch.mjs` | ハーネスのトランスクリプトから、セッションで実際に何が動いたかを一覧表示します（各 agent のモデルと effort、および外部ジョブ）。Claude Code のみ。 |
 | `skills/cli-agent-delegation/scripts/codex-run.mjs` | `codex exec` / `exec resume` を、effort の明示指定を必須にして実行します。`ultra` と `danger-full-access` を拒否し、タイムアウトに対応し、ログと最終回答をファイルに書き、session id 付きの JSON サマリーを出力します。 |
 | `skills/cli-agent-delegation/scripts/agy-run.mjs` | agy-staff プラグインがない場合に `agy` をヘッドレスで実行します。モデル id を検証し、Claude / GPT モデルへの回り道を拒否し、`--write` を制限なしモードに対応させ、conversation id による継続に対応します。 |
-| `skills/cli-agent-delegation/scripts/doctor.mjs` | 読み取り専用の環境レポート：CLI の有無とバージョン、Codex のデフォルト effort の落とし穴、使えるモデル、agy-staff のインストール状況。 |
+| `skills/cli-agent-delegation/scripts/opencode-acp-run.mjs` | `opencode acp` 用の ACP クライアント。`run` はモデルと effort を固定し、読み取り・許可した編集・許可リストのシェルコマンド以外をすべて拒否する OpenCode agent を注入します。権限リクエストはすべて却下するので承認待ちで止まりません。タイムアウトと再開に対応し、JSON サマリーを出力します。`probe` はトークンを使わずに OpenCode のモデルと effort レベルを一覧します。 |
+| `skills/cli-agent-delegation/scripts/doctor.mjs` | 読み取り専用の環境レポート：CLI の有無とバージョン、Codex のデフォルト effort の落とし穴、使えるモデル、agy-staff と Codex プラグインのインストール状況、`opencode acp` が使えるか。 |
 
 ## 初回利用：チームポリシーを決める
 
@@ -161,7 +166,7 @@ Claude Code プラグインに同梱される agent：`team-reviewer`（通常�
    - `fixed`：すべてのティアについて、あなたがモデルと effort を指定します。
    - `hybrid`：一部の役割は固定、残りは auto。
 3. **コストの方針**：バランス / 節約 / 品質優先。
-4. **外部チーム**：どれを使うか、どの方法（CLI / プラグイン / MCP）でつなぐか、それぞれどのモデルが external-fast と external-strong のティアを担うか、どれがファイルを編集してよく、どれがレビューのみか。
+4. **外部チーム**：どれを使うか、どの方法（CLI / プラグイン / ACP / MCP）でつなぐか、それぞれどのモデルが external-fast と external-strong のティアを担うか、どれがファイルを編集してよく、どれがレビューのみか。今後のセッション開始時に、使うチームを改めて尋ねるかどうか。
 5. **チームボード**：`docs/agent-team/` とホストのネイティブなタスクリストの併用を推奨します。
 6. **外注しないパスと共有ファイル**：例として、課金・決済・認証のパス、言語ファイルやドキュメント索引。
 7. **コミットとプッシュのルール**。
@@ -171,7 +176,7 @@ Claude Code プラグインに同梱される agent：`team-reviewer`（通常�
 ## 開発
 
 ```bash
-npm test          # オフラインのユニットテスト（偽の codex / agy 実行ファイルと fixtures）
+npm test          # オフラインのユニットテスト（偽の codex / agy / opencode 実行ファイルと fixtures）
 npm run check     # frontmatter、リンク、バージョンの一致、レビュー prompt の同期、プライバシースキャン
 ```
 

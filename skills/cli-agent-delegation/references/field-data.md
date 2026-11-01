@@ -25,6 +25,7 @@ Lessons:
 |---|---|---|---|
 | `gpt-6-luna` · high | Rebuild a docs index covering dozens of documents | ~1.7 min / 82k | Passed first time, inside the lease, no dead links; also flagged documents that looked stale |
 | `gpt-6.1-sol` · high | Rewrite the root README from current code (several hundred lines changed) | ~4.8 min / 88k | Versions, scripts, paths, dozens of environment variables and webhook events all correct; one duplicated heading for the director to fix |
+| Mid-tier model · medium (`workspace-write`) | Small pure scoring module with a frozen signature and a spec | 1 round / ~27k | Passed in one round; both acceptance commands passed when the liaison ran them |
 
 Lessons:
 
@@ -32,6 +33,17 @@ Lessons:
 - The two jobs touched disjoint files, ran at the same time in one workspace, and both passed first time.
 - The director still verified every checkable fact before committing.
 - Pass the effort explicitly: one session found the global config set to `high`, while the model's own default was `low`.
+
+## OpenCode through ACP (verification runs, not project work)
+
+Small jobs on a scratch repository with OpenCode 2.2.5 (2026-11), a free gateway model at `low` effort, to check the wrapper rather than the model.
+
+| Mode | Job | Tokens | Outcome |
+|---|---|---|---|
+| read-only | read a file, create a file, `touch`, `git status --short`, read `.env` | ~6.7k total | Read and `git status` worked; no edit tool was offered; `touch` and the `.env` read were denied; the model reported each denial and carried on |
+| `--write`, resumed session | create a file, `touch`, write outside the repo, recall the earlier turn | — | The earlier turn was remembered, but the model assumed from that history it still could not edit and did not try. Tell it explicitly when a resumed session gains edit rights. |
+| `--write`, new session | the same steps | — | The file was created; `touch` denied; the write outside the repository refused as an external directory |
+| raw `opencode run --standalone` with the agent injected by hand | `touch`, read a file | — | Same enforcement. Without `--standalone`: "Agent not found", because the shared background service ignores injected config. |
 
 ## When outsourcing did not pay
 

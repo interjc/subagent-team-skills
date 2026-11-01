@@ -46,7 +46,7 @@ Imitate <path> for <naming / structure / test style>.
 - No state-changing git operations (add, commit, stash, checkout, reset, push): the director reviews
   the diff and commits. Read-only `git status` / `git diff` is fine and needed for evidence.
 - Do not start or restart dev servers; the user's server is already running at <url>.
-- Do not edit .env* or read secrets.
+- Do not edit .env* or read secrets. Never print a secret or token value, in commands, logs or your report; masking fails open, so compare by hash and refer to the file by name.
 - No repo-wide rewriting commands (eslint --fix ., formatters): others are editing in parallel.
 - <task-specific prohibitions, each with its reason so you don't "helpfully" work around it>
 

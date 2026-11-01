@@ -10,7 +10,7 @@ If the user prefers a separate file, write it (e.g. `docs/agents/subagent-team.m
 
 ## When to run setup
 
-1. Look for the `## Subagent team` section (or the pointer to it). If it has a `Model policy:` line, **use it and do not ask**. If something it names is unavailable (a model was retired, a CLI is not installed), fall back as in the "auto" rules below and tell the user in one line. If it lacks a line that newer versions of this skill add (`Host harness:`, `Team board:`, the external-team table), ask only for the missing items, pre-filled.
+1. Look for the `## Subagent team` section (or the pointer to it). If it has a `Model policy:` line, **use it and do not ask**. If something it names is unavailable (a model was retired, a CLI is not installed), fall back as in the "auto" rules below and tell the user in one line. If it lacks a line that newer versions of this skill add (`Host harness:`, `Team board:`, `External delegation:`, the external-team table), ask only for the missing items, pre-filled.
 2. No section: run the questionnaire before dispatching the first subagent. Solo-mode work (section 0 of SKILL.md) does not need it.
 3. The user cannot be asked right now (non-interactive run, or they said "don't ask, just go"): write the section with `Model policy: auto` and `Decided: default, not confirmed`, continue, and include the policy in the end-of-task grill-me list.
 4. The user later changes their mind ("use another vendor's model for reviews"): update the section in place, with the date, and add a row to the board's `lessons.md` with the user's words.
@@ -21,7 +21,7 @@ Pre-fill every answer from what you can see, so the user can accept everything i
 
 - The host harness and its capabilities: your own tool list and [host-harness.md](host-harness.md).
 - Models the harness exposes (the `Agent` tool's model values in Claude Code; Codex's model picker or `~/.codex/models_cache.json`).
-- External teams: run the `cli-agent-delegation` skill's `scripts/doctor.mjs` if it is installed, or check `agy --version`, `codex --version`, other agent CLIs, and whether the agy-staff plugin is present. Rank each team's models into external-fast and external-strong ([external-teams.md](external-teams.md)).
+- External teams: run the `cli-agent-delegation` skill's `scripts/doctor.mjs` if it is installed (and `scripts/opencode-acp-run.mjs probe` when OpenCode is present), or check `agy --version`, `codex --version`, `opencode --version`, other agent CLIs, and whether the agy-staff and Codex plugins are present. Rank each team's models into external-fast and external-strong ([external-teams.md](external-teams.md)).
 - Commands from `package.json`, `Makefile`, CI config; sensitive paths (billing, payment, auth, migrations) and shared files (locale files, doc indexes) from the tree.
 - Existing docs: a `docs/` index, progress or decision records, an existing board. Reuse them instead of creating duplicates.
 - The current model line-up: [model-tiers.md](model-tiers.md), "Finding the current model line-up".
@@ -36,7 +36,7 @@ Use the harness's question tool when there is one (recommended option first; if 
    - **fixed**: the user fills in (or confirms) a model and effort per role; the director uses exactly that and asks before deviating.
    - **hybrid**: fixed for the roles the user names (often reviewer and expert), auto for the rest.
 3. **Cost preference**: balanced (recommended) / economize (prefer mid and low tiers, top tier only for the expert, outsource aggressively) / max quality (high tier for all reviews and risky work, top tier for design).
-4. **External teams** (pre-filled from detection): which teams, through which channel (CLI, plugin, MCP), which model fills external-fast and external-strong, and which may edit files versus review only. "None" is a valid answer.
+4. **External teams** (pre-filled from detection): which teams, through which channel (CLI, plugin, ACP, MCP), which model fills external-fast and external-strong, and which may edit files versus review only. "None" is a valid answer. Also: should later sessions ask again at the start which teams to use (`External delegation: ask`, recommended), use this roster without asking (`roster`), or keep everything in-house (`none`)?
 5. **Team board** (recommended: `docs/agent-team/` plus the host's native task list where it has one): where shared state lives ([team-board.md](team-board.md)). Projects that never involve external teams or multiple sessions may choose `native`.
 6. **Never outsourced and shared files** (pre-filled): paths whose business code stays in-house; files only the director writes.
 7. **Commit and push**: may the agent commit after checks pass? Push to which branches, if any? (Default: commit locally, never push without being asked.)
@@ -50,8 +50,9 @@ Use the harness's question tool when there is one (recommended option first; if 
 - Model policy: auto            <!-- auto | fixed | hybrid -->
 - Cost preference: balanced     <!-- balanced | economize | max-quality -->
 - Decided: <YYYY-MM-DD>, confirmed by the user   <!-- or: default, not confirmed -->
-- Environment (checked <YYYY-MM-DD>): Node.js <version>, git <version>, Codex CLI <version or none>, agy <version or none>, agy-staff <yes or no>; accepted warnings: <none, or e.g. "Node 22, not upgrading">
+- Environment (checked <YYYY-MM-DD>): Node.js <version>, git <version>, Codex CLI <version or none>, Codex plugin <yes or no>, agy <version or none>, agy-staff <yes or no>, OpenCode <version or none>; accepted warnings: <none, or e.g. "Node 22, not upgrading">
 - Team board: docs/agent-team/README.md + native task list   <!-- or: native -->
+- External delegation: ask      <!-- ask (which teams, at each session start) | roster (use the table below) | none (in-house only) -->
 
 | Layer | Role | Tier | Model | Effort |
 |---|---|---|---|---|
@@ -67,7 +68,8 @@ Use the harness's question tool when there is one (recommended option first; if 
 | External team | Channel | external-fast | external-strong | May edit? | Status |
 |---|---|---|---|---|---|
 | <e.g. agy> | <plugin agy-staff, or CLI> | <model id> | <model id> | yes | <verified YYYY-MM-DD> |
-| <e.g. Codex CLI> | CLI | — | <model id> · medium–high | yes | <verified YYYY-MM-DD> |
+| <e.g. Codex CLI> | CLI (codex-run.mjs); plugin for reviews | — | <model id> · medium–high | yes | <verified YYYY-MM-DD> |
+| <e.g. OpenCode> | ACP (opencode-acp-run.mjs) | <provider/model> · <effort> | <provider/model> · <effort> | yes, allow-listed shell | <verified YYYY-MM-DD> |
 
 - Never outsourced: <paths>
 - Shared files (director only): <paths>

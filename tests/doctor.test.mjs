@@ -4,13 +4,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import {
-  parseArgs, parseCodexConfig, extractModelIds, findAgyStaff, UsageError,
+  parseArgs, parseCodexConfig, extractModelIds, findAgyStaff, findCodexPlugin, UsageError,
 } from '../skills/cli-agent-delegation/scripts/doctor.mjs';
 import { SCRIPTS, makeTempDir, removeDir, makeFakeBin, runScript } from './helpers/fakes.mjs';
 
 let tmp;
 let fakeCodex;
 let fakeAgy;
+let fakeOpencode;
 
 before(() => {
   tmp = makeTempDir('doctor-test-');
@@ -18,6 +19,7 @@ before(() => {
   fs.mkdirSync(bin);
   fakeCodex = makeFakeBin(bin, 'codex', 'fake-codex.mjs');
   fakeAgy = makeFakeBin(bin, 'agy', 'fake-agy.mjs');
+  fakeOpencode = makeFakeBin(bin, 'opencode', 'fake-opencode.mjs');
 });
 
 after(() => removeDir(tmp));
@@ -35,7 +37,7 @@ function write(file, content) {
 
 function doctor(home, args = ['--json'], env = {}) {
   return runScript(SCRIPTS.doctor, args, {
-    env: { HOME: home, CODEX_HOME: undefined, CLAUDE_CONFIG_DIR: undefined, CODEX_BIN: fakeCodex, AGY_BIN: fakeAgy, ...env },
+    env: { HOME: home, CODEX_HOME: undefined, CLAUDE_CONFIG_DIR: undefined, CODEX_BIN: fakeCodex, AGY_BIN: fakeAgy, OPENCODE_BIN: fakeOpencode, FAKE_NO_ACP: undefined, ...env },
   });
 }
 
@@ -90,6 +92,13 @@ describe('doctor: pure helpers', () => {
     assert.equal(findAgyStaff({ plugins: { 'other@market': [] } }), null);
     assert.equal(findAgyStaff(null), null);
   });
+
+  test('findCodexPlugin tells the official plugin from forks', () => {
+    assert.deepEqual(findCodexPlugin({ plugins: { 'codex@openai-codex': [{ installPath: '/p/codex' }] } }),
+      { key: 'codex@openai-codex', installPath: '/p/codex', official: true });
+    assert.equal(findCodexPlugin({ plugins: { 'codex@some-fork': [{}] } }).official, false);
+    assert.equal(findCodexPlugin({ plugins: { 'agy@agy-staff': [{}], 'codexish@x': [{}] } }), null);
+  });
 });
 
 describe('doctor: end to end', () => {
@@ -100,8 +109,11 @@ describe('doctor: end to end', () => {
     write(path.join(home, '.codex', 'auth.json'), '{"secret":"DO-NOT-READ"}');
     const installPath = path.join(home, '.claude', 'plugins', 'cache', 'agy-staff', 'agy', '1.0.0');
     write(path.join(installPath, 'companion', 'agy-companion.mjs'), '// companion\n');
+    const codexPluginPath = path.join(home, '.claude', 'plugins', 'cache', 'openai-codex', 'codex', '1.0.6');
+    write(path.join(codexPluginPath, 'scripts', 'codex-companion.mjs'), '// companion\n');
     write(path.join(home, '.claude', 'plugins', 'installed_plugins.json'),
-      { version: 2, plugins: { 'agy@agy-staff': [{ scope: 'user', installPath, version: '1.0.0' }] } });
+      { version: 2, plugins: { 'agy@agy-staff': [{ scope: 'user', installPath, version: '1.0.0' }],
+        'codex@openai-codex': [{ scope: 'user', installPath: codexPluginPath, version: '1.0.6' }] } });
 
     const r = doctor(home);
     assert.equal(r.status, 0, r.stderr);
@@ -122,6 +134,13 @@ describe('doctor: end to end', () => {
     assert.equal(j.agy.agyStaff.companionExists, true);
     assert.ok(Array.isArray(j.recommendations));
     assert.ok(j.recommendations.some((x) => /agy-staff plugin installed/.test(x)));
+    assert.deepEqual({ ...j.codex.plugin, pluginsFile: undefined, error: undefined },
+      { installed: true, key: 'codex@openai-codex', official: true, installPath: codexPluginPath, companionExists: true, pluginsFile: undefined, error: undefined });
+    assert.ok(j.recommendations.some((x) => /Codex plugin installed: use \/codex:review/.test(x)));
+    assert.equal(j.opencode.present, true);
+    assert.equal(j.opencode.version, 'opencode v2.2.5');
+    assert.equal(j.opencode.acp, true);
+    assert.ok(j.recommendations.some((x) => /OpenCode ACP available: run `node scripts\/opencode-acp-run\.mjs probe/.test(x)));
     assert.doesNotMatch(r.stdout, /DO-NOT-READ/);
   });
 
@@ -145,7 +164,7 @@ describe('doctor: end to end', () => {
 
   test('nothing installed', () => {
     const home = newHome('empty');
-    const r = doctor(home, ['--json'], { CODEX_BIN: path.join(tmp, 'no-codex'), AGY_BIN: path.join(tmp, 'no-agy') });
+    const r = doctor(home, ['--json'], { CODEX_BIN: path.join(tmp, 'no-codex'), AGY_BIN: path.join(tmp, 'no-agy'), OPENCODE_BIN: path.join(tmp, 'no-opencode') });
     assert.equal(r.status, 0, r.stderr);
     const j = r.json;
     assert.equal(j.codex.present, false);
@@ -156,8 +175,26 @@ describe('doctor: end to end', () => {
     assert.equal(j.agy.agyStaff.installed, false);
     assert.ok(j.recommendations.some((x) => /Codex CLI not found/.test(x)));
     assert.ok(j.recommendations.some((x) => /agy not found/.test(x)));
+    assert.equal(j.opencode.present, false);
+    assert.ok(j.recommendations.some((x) => /OpenCode not found/.test(x)));
+    assert.equal(j.codex.plugin.installed, false);
     assert.ok(j.recommendations.some((x) => x.includes(
       'agy-staff plugin not found: use agy-run.mjs, or install it: claude plugin marketplace add keli-wen/agy-staff && claude plugin install agy@agy-staff')));
+  });
+
+  test('a Codex plugin fork and an OpenCode without acp get warnings', () => {
+    const home = newHome('fork');
+    write(path.join(home, '.claude', 'plugins', 'installed_plugins.json'), { plugins: { 'codex@some-fork': [{ installPath: '/nowhere' }] } });
+    const r = doctor(home, ['--json'], { FAKE_NO_ACP: '1' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.json.codex.plugin.official, false);
+    assert.ok(r.json.recommendations.some((x) => /is not OpenAI's codex@openai-codex: check its sandbox default/.test(x)));
+    assert.equal(r.json.opencode.acp, false);
+    assert.ok(r.json.recommendations.some((x) => /`opencode acp` is not available/.test(x)));
+    const human = doctor(home, [], { FAKE_NO_ACP: '1' });
+    assert.match(human.stdout, /opencode: found \(opencode v2\.2\.5\)/);
+    assert.match(human.stdout, /acp subcommand: no/);
+    assert.match(human.stdout, /Codex plugin \(Claude Code\): installed \(codex@some-fork, not the official plugin\)/);
   });
 
   test('malformed files are handled gracefully', () => {

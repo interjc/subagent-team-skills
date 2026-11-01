@@ -33,7 +33,7 @@ scripts/              # repository tooling (check-skills.mjs)
 - Skill bodies use abstract layers, roles and tiers: layers L1 director / L2 in-house experts / L3 in-house execution / L4 external teams; tiers top / high / mid / low / external-fast / external-strong. A layer is responsibility, a tier is model strength. Concrete model names appear only as dated examples ("as of 2026-10").
 - Harness-specific mechanics go into `references/harness-*.md`. Mark anything not personally verified as *unverified*.
 - Claude Code is the primary target, Codex secondary. Do not claim support for other agents beyond "installs via the Agent Skills format".
-- The same rule applies to external teams: agy and Codex CLI are used in real projects; OpenCode, Pi, Grok and MCP-fronted agents are *not tested*. Host-detection environment variables other than Claude Code's are *unverified* hints; keep `HOST_HINTS` in `env-check.cjs` and `references/host-harness.md` in agreement.
+- The same rule applies to external teams: agy and Codex CLI are used in real projects; OpenCode through ACP has a wrapper checked against a real OpenCode on small jobs but is not yet used in real projects; OpenAI's Codex plugin is described from its README and source; Pi, Grok, other ACP agents and MCP-fronted agents are *not tested*. Say which of these levels a claim rests on. Host-detection environment variables other than Claude Code's are *unverified* hints; keep `HOST_HINTS` in `env-check.cjs` and `references/host-harness.md` in agreement.
 
 ## 4. Privacy (this repository is public)
 
@@ -49,7 +49,7 @@ scripts/              # repository tooling (check-skills.mjs)
   - **Recommended (24)**: pinned in `.nvmrc` and in `RECOMMENDED_NODE_MAJOR` in `env-check.cjs` and `doctor.mjs`.
   - `npm run check` enforces that all of these agree.
 - `skills/subagent-team/scripts/env-check.cjs` stays conservative CommonJS (no ESM, no optional chaining, no newer syntax), so it can still report "Node too old" on an old Node.
-- Tests run offline with fake `codex` / `agy` binaries (`CODEX_BIN`, `AGY_BIN`) and temporary `HOME` directories. Never call real model APIs in the default suite.
+- Tests run offline with fake `codex` / `agy` / `opencode` binaries (`CODEX_BIN`, `AGY_BIN`, `OPENCODE_BIN`; the fake `opencode` speaks ACP) and temporary `HOME` directories. Never call real model APIs in the default suite.
 - Before committing: `npm test` and `npm run check` must pass.
 
 ## 6. Versioning and release

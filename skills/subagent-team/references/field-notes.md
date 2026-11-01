@@ -27,6 +27,9 @@ Lessons from several real web and mobile projects, each one either a mistake tha
 - Experts are not infallible. A top-tier recommendation ("push oldest-first on first upload") was disproved by the implementing worker's scenario test, which showed it would delete local data; the fix went newest-first. Briefs now say: "If the goal and a test disagree, follow the test and explain in the report."
 - A pure documentation slice: the independent reviewer checked the "verified" claims against source and found that a page mounted two instances of a widget sharing the same default storage key, a fact neither the implementer nor the director had noticed.
 - A brief listing "already verified, do not re-check" facts cut a worker's run from over ten minutes to about three.
+- An audit of a long run found a money review on a mid-tier model and an under-tiered implementer kept through every rework round, while each individual dispatch had looked reasonable. Tier mistakes compound silently; audit from the logs at milestones.
+- External teams stayed unused for most of a long run although both were installed. Nobody decided against them; the gate was simply never run.
+- On a ledger with money and concurrency, a senior in-house review reported no defect, and a read-only second opinion from another vendor, run at the same time, found four that reproduced in the real runtime, all a value read outside a batch and written inside one. Run both on money, withhold each from the other, and judge by reproduction, not by vote. The next round asked the reviewer to list every read that decides a later write and name its guard; that table found the remaining cases and is worth asking for up front.
 
 ## A complete example
 
