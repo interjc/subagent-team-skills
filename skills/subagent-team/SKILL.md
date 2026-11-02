@@ -2,9 +2,9 @@
 name: subagent-team
 description: Run multi-file, multi-phase coding work as a small software organisation in four layers. The main session is the director; in-house expert subagents design, review and accept; in-house execution subagents implement and test; external teams (other vendors' agents via CLI, plugin, ACP or MCP, such as agy, Codex CLI or OpenCode) take gated bulk work through a low-tier liaison; the human gets one batched question list at the end. Detects and confirms the host harness, keeps shared state on a team board in the repository, and keeps AGENTS.md and docs cross-referenced. Use this whenever a task spans several files or phases, and whenever you are about to split work or choose a task's flow, delegate to a subagent or an external agent, pick a model or effort for one, write a brief, choose, verify or track external teams, review or accept delegated work, set up a project's team policy, record a lesson or user adjustment, or decide whether to ask the user, even if the user never says "subagent".
 license: MIT
-compatibility: The method itself needs nothing but a harness that can spawn subagents. The optional helper scripts need Node.js 18+ (24 recommended) and git; run scripts/env-check.cjs at the start of a session.
+compatibility: Built for Claude Code (primary) and Codex (secondary); other hosts are unverified. The method itself needs nothing but a harness that can spawn subagents. The optional helper scripts need Node.js 18+ (24 recommended) and git; run scripts/env-check.cjs at the start of a session.
 metadata:
-  version: "0.3.1"
+  version: "0.3.2"
 ---
 
 # Subagent Team
@@ -34,7 +34,7 @@ This page holds the decisions you make on every task. Read a reference when you 
 
 Once per session, before the first dispatch, run `node <this skill's directory>/scripts/env-check.cjs --root <project root>`. It installs nothing; exit `0` is ready (maybe with warnings), `2` is blocked. Tell the user blockers and fixes in one short message, install only with consent, and re-run after changes. When external teams are found, ask the user once which may take work this session (unless the policy says `roster` or `none`). Fallbacks for anything missing, and what to record: [references/environment-check.md](references/environment-check.md).
 
-**Host harness.** On first use, take the check's hint plus your own tool list and **confirm the host with the user**. Then establish its capabilities once: subagents, per-subagent model and effort, nested dispatch, background runs, a native task list, shell for subagents ([references/host-harness.md](references/host-harness.md)).
+**Host harness.** On first use, take the check's hint plus your own tool list and **confirm the host with the user**. Then establish its capabilities once: subagents, per-subagent model and effort, nested dispatch, background runs, a native task list, shell for subagents ([references/host-harness.md](references/host-harness.md)). Support levels: **Claude Code is the primary host**, **Codex the secondary**, and every other host is *unverified*. On another host, tell the user once that the skill was not tested there, and record each capability you check as *verified YYYY-MM-DD* or *unverified*.
 
 **Team policy.** If `## Subagent team` exists in `AGENTS.md` (or `CLAUDE.md`), follow it without asking. If not, run the short setup questionnaire and write the section ([references/project-setup.md](references/project-setup.md)).
 
@@ -124,7 +124,7 @@ Outside `solo`, every code change gets an independent review, execution layers h
 
 External teams are reached through a CLI, a plugin, ACP or an MCP server; the project's roster lists each team, its channel, which external tier each model fills, and whether it may edit or only review. Before trusting an untested team, run one tiny read-only job. When the user asks mid-run to add, drop or check a team, re-check without interrupting running jobs, report one capability table, and update the session choice, roster, queued cards and lessons.
 
-Every external job gets a **liaison**: an L3, low-tier in-house subagent that dispatches exactly per the frozen brief, records job ids on the card, waits in bounded slices, checks the diff against the lease, runs the acceptance commands, answers only what the brief or repository already settles, and sends one mechanical rework round. It escalates every decision and any second failure, and never decides product or architecture, edits code, commits, talks to the user or starts a duplicate job. Without subagents, the director runs the job in the background instead. Roster, adjusting teams, fallbacks, the liaison's full duties and waiting per harness: [references/external-teams.md](references/external-teams.md). Calling Codex, agy, OpenCode and other ACP agents: skill `cli-agent-delegation`.
+Every external job gets a **liaison**: an L3, low-tier in-house subagent that dispatches exactly per the frozen brief, records job ids on the card, waits in bounded slices, checks the diff against the lease, runs the acceptance commands, answers only what the brief or repository already settles, and sends one mechanical rework round. It escalates every decision and any second failure, and never decides product or architecture, edits code, commits, talks to the user or starts a duplicate job. **External agents cannot run end-to-end checks** (no browser, device or full stack): their acceptance is static checks and unit tests, and the director arranges every end-to-end check for outsourced work, itself or through an in-house agent that has the tools. Without subagents, the director runs the job in the background instead. Roster, adjusting teams, fallbacks, the liaison's full duties and waiting per harness: [references/external-teams.md](references/external-teams.md). Calling Codex, agy, OpenCode and other ACP agents: skill `cli-agent-delegation`.
 
 ## 7. Shared state: the team board
 

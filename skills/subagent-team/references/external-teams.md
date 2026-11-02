@@ -10,7 +10,7 @@ Recorded in the project's `## Subagent team` section ([project-setup.md](project
 
 | Team | Channel | Tiers it can fill | Status in these skills |
 |---|---|---|---|
-| agy (Google Antigravity) | CLI (`agy -p`), plugin (agy-staff) | external-fast (flash models), external-strong (strong models) | used in real projects |
+| agy (Google Antigravity) | CLI (`agy -p`), plugin (agy-staff) | external-fast (flash models: a step below the in-house mid tier, cheap, holds up over long batches), external-strong (strong models: about the in-house mid tier) | used in real projects |
 | Codex CLI | CLI (`codex exec` through `codex-run.mjs`); OpenAI's Codex plugin for Claude Code for reviews | external-strong (and external-fast with a light model at low effort) | CLI used in real projects; plugin checked from its docs and source only |
 | OpenCode | ACP (`opencode acp` through `opencode-acp-run.mjs`); `opencode run` as the no-Node fallback | the tier of the model it is configured with (it reaches many providers) | wrapper checked against OpenCode 2.2.5 on small jobs (2026-11); not yet used in real projects |
 | Grok Build, Cursor, Pi and other ACP Registry agents | ACP; onboarding in `cli-agent-delegation` (`references/acp-agents.md`) | the tier of the models each offers | session setup checked on Grok Build and Cursor (2026-11); not tested for work |
@@ -26,6 +26,7 @@ Rules for every external team:
 - **Bound every job** with a timeout, and know how to kill it (process group, plugin's cancel command).
 - **Results go to files** (final reply, log, summary) so a liaison or a later session can read them.
 - **A resumable id** (session, conversation, job id) is recorded on the card the moment the job starts.
+- **No end-to-end testing.** External agents generally cannot drive a browser, device or the full stack. Their acceptance is static checks and unit tests; the director arranges end-to-end checks after acceptance ([verification.md](verification.md), "End-to-end checks for outsourced work").
 
 ## Choosing and adjusting external teams
 
@@ -87,7 +88,7 @@ Raise the liaison to mid tier when its acceptance checks require reading code (d
 4. **Check** with the acceptance commands from the card; for content work, the mechanical checks (identical key sets, placeholders and escapes preserved, order kept).
 5. **Answer straightforward questions.** External agents report blockers in their final reply ("stopped: the key list has no entry for X"). If the answer is already in the brief, the contract, the card or a repository fact the liaison can look up, it answers by continuing the same job with the answer quoted from its source.
 6. **Rework once** for mechanical failures: continue the same job with the concrete failure output.
-7. **Report** to the card holder above it at real transitions only: dispatched, returned, accepted or rework, escalated. Keep the card's status and log current; the liaison is the holder of its job's card.
+7. **Report** to the card holder above it at real transitions only: dispatched, returned, accepted or rework, escalated. Keep the card's status and log current; the liaison is the holder of its job's card. For user-facing changes, end the report with `E2E: pending director` and the flows to walk; the liaison never runs them.
 
 ### What the liaison escalates (to L2, or L1 if the flow has no L2)
 
