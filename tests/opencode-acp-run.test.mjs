@@ -154,6 +154,25 @@ describe('opencode-acp-run: pure helpers', () => {
     await assert.rejects(applyConfig(client, 's1', opts(), { agent: 'ghost', model: 'a/b', effort: 'low' }), /OPENCODE_CONFIG_CONTENT/);
   });
 
+  test('applyConfig tries a dropped effort once more, then gives up', async () => {
+    const opts = (effort) => [
+      { id: 'model', category: 'model', currentValue: 'a/b', options: [{ value: 'a/b' }] },
+      { id: 'effort', category: 'thought_level', currentValue: effort, options: [{ value: 'low' }, { value: 'default' }] },
+      { id: 'mode', category: 'mode', currentValue: READONLY_AGENT, options: [{ value: READONLY_AGENT }] },
+    ];
+    const cfg = { agent: READONLY_AGENT, model: 'a/b', effort: 'low' };
+    let sets = 0;
+    const flaky = { request: async () => { sets += 1; return { configOptions: opts(sets === 1 ? 'default' : 'low') }; } };
+    const r = await applyConfig(flaky, 's1', opts('default'), cfg);
+    assert.equal(sets, 2);
+    assert.equal(r.applied.effort, 'low');
+
+    sets = 0;
+    const stuck = { request: async () => { sets += 1; return { configOptions: opts('default') }; } };
+    await assert.rejects(applyConfig(stuck, 's1', opts('default'), cfg), /effort is "default" after selecting "low"/);
+    assert.equal(sets, 2);
+  });
+
   test('tracker: segments split at tool calls, child updates ignored, retries and cost recorded', () => {
     const t = createTracker();
     trackUpdate(t, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Plan: ' } });
