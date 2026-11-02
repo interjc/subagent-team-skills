@@ -10,7 +10,7 @@ Recorded in the project's `## Subagent team` section ([project-setup.md](project
 
 | Team | Channel | Tiers it can fill | Status in these skills |
 |---|---|---|---|
-| agy (Google Antigravity) | CLI (`agy -p`), plugin (agy-staff) | external-fast (flash models), external-strong (strong models) | used in real projects |
+| agy (Google Antigravity) | CLI (`agy -p`), plugin (agy-staff) | external-fast (flash models: a step below the in-house mid tier, cheap, holds up over long batches), external-strong (strong models: about the in-house mid tier) | used in real projects |
 | Codex CLI | CLI (`codex exec` through `codex-run.mjs`); OpenAI's Codex plugin for Claude Code for reviews | external-strong (and external-fast with a light model at low effort) | CLI used in real projects; plugin checked from its docs and source only |
 | OpenCode | ACP (`opencode acp` through `opencode-acp-run.mjs`); `opencode run` as the no-Node fallback | the tier of the model it is configured with (it reaches many providers) | wrapper checked against OpenCode 2.2.5 on small jobs (2026-11); not yet used in real projects |
 | Grok Build, Cursor, Pi and other ACP Registry agents | ACP; onboarding in `cli-agent-delegation` (`references/acp-agents.md`) | the tier of the models each offers | session setup checked on Grok Build and Cursor (2026-11); not tested for work |

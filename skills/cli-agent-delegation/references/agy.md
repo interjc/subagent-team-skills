@@ -2,6 +2,20 @@
 
 How to run agy as an external team: the agy-staff plugin, the `agy-run.mjs` wrapper, the raw command, and the facts that matter. Script paths are relative to the skill's directory. Gate, brief rules, fallback ladder and acceptance are in [SKILL.md](../SKILL.md). agy also replaces the deprecated Gemini CLI ([acp-agents.md](acp-agents.md)).
 
+## Choosing the model: two levels
+
+Whichever channel you use (agy-staff or the wrapper), every agy job picks one of two Gemini levels. Choose one on purpose for each dispatch and rework round, and pin it with the effort suffix. As of 2026-11:
+
+| Level | Model id (e.g.) | Think of it as | Use for |
+|---|---|---|---|
+| external-strong | `gemini-4-argon-medium` / `-high` | an outside contractor at about the in-house mid tier (Claude Sonnet 5.5 level) | large homogeneous implementation from a fixed spec, test backfills following existing patterns, read-only reviews (the agy-staff `reviewer`) |
+| external-fast | `gemini-3.8-flash-high` (`-medium` for purely mechanical work) | a cheaper contractor one step below, with more staying power: lower cost, and its quota lasts longer over long or repeated batches | translations, bulk copy, mechanical replacements, filling in from a template, long runs of similar jobs |
+
+- Start with Flash when the acceptance check is fully mechanical (key sets, placeholders, snapshots). Use Argon when the work means reading existing code or keeping many files consistent with each other.
+- If Flash fails the acceptance check because it reasoned badly (not because the brief was wrong), retry once on Argon. Do not keep retrying on Flash. Moving down from Argon to Flash, for quota or cost, is a downgrade: say so in one line and record it on the job's card.
+- Argon being roughly at the in-house mid tier does not let it take work that fails the outsourcing gate. The gate decides *whether* work goes out; the level only decides *how carefully* it is done.
+- Check that the ids exist with `agy models` before the first job. The names above go stale.
+
 ## Preferred: the agy-staff plugin
 
 [agy-staff](https://github.com/keli-wen/agy-staff) gives Claude Code, Codex, Pi and OpenCode a set of agy personas: `staffer`, `researcher`, `reviewer`, `implementer` and `ask`, plus `lead` and `jobs`. It also handles background jobs, waiting, continuation, timeouts and dirty-workspace prompts.

@@ -2,9 +2,9 @@
 name: cli-agent-delegation
 description: Outsource well-specified bulk coding work to another vendor's agent through its CLI, a plugin, ACP or an MCP server. Covers OpenAI Codex CLI (codex exec, or OpenAI's Codex plugin for Claude Code), Google Antigravity (agy, with or without the agy-staff plugin) and OpenCode through its Agent Client Protocol server (opencode acp), with fallback ladders, plus onboarding other agents through ACP and its Registry (Grok Build, Cursor, Pi; Gemini CLI is deprecated, use agy). Asks the user which external teams to use and re-checks their capabilities on request. Use this when handing translations, mechanical refactors, test or snapshot backfills, doc syncs or a second-opinion review to an external agent; when running codex, agy or opencode headless; when choosing between them or falling back from one to another; when the user asks which external agents are available or wants to add, drop or verify one; when a liaison dispatches, waits on, resumes or accepts their jobs; or when a dispatch plugin is missing or broken.
 license: MIT
-compatibility: Needs a shell. The helper scripts need Node.js 18+ (24 recommended); external agents need their own CLIs and accounts (Codex CLI, agy, OpenCode). Run scripts/doctor.mjs first.
+compatibility: Built for Claude Code (primary) and Codex (secondary) as the host; other hosts are unverified. Needs a shell. The helper scripts need Node.js 18+ (24 recommended); external agents need their own CLIs and accounts (Codex CLI, agy, OpenCode). Run scripts/doctor.mjs first.
 metadata:
-  version: "0.3.1"
+  version: "0.3.2"
 ---
 
 # CLI Agent Delegation
@@ -52,6 +52,8 @@ If writing the brief costs as much as doing the job (a ten-line edit), do not ou
 | Syncs that require reading the code to get right (docs against code, tests following existing patterns) | Codex at `high` | Reads code on its own initiative and checks facts; modest token use |
 | Read-only second opinion on a diff or plan | Codex: the plugin's `/codex:review` or `/codex:adversarial-review`, or `codex-run.mjs` in `read-only`; agy's reviewer persona; OpenCode read-only | Another vendor covers blind spots. The verdict stays with your in-house reviewer. |
 | A model family none of the others reach (DeepSeek, GLM, Mistral, Kimi, Qwen) | OpenCode through ACP, or another ACP agent after its admission checklist | OpenCode routes to many providers; its tier is the model's tier |
+
+**agy always means picking one of two levels** (the plugin and the CLI alike): a strong model at about your in-house mid tier (e.g. Gemini 4 Argon, roughly Claude Sonnet 5.5), or a flash model one step below that is cheaper and holds up over long batches (e.g. Gemini 3.8 Flash). Name the level at every dispatch. Rules for choosing and escalating: [agy.md](references/agy.md), "Choosing the model: two levels".
 
 Model names are examples from 2026-10. List what is actually available: `agy models`, Codex's `~/.codex/models_cache.json` (the doctor lists it), `opencode-acp-run.mjs probe` in that directory. Do not use agy or OpenCode to call your in-house family (Claude models under a Claude host, GPT under a Codex host): that routes work back home and adds cost, not perspective. **Gemini CLI is deprecated** (merged into agy): recommend agy. Under a Codex host, Codex CLI is in-house, not an external team.
 
@@ -102,4 +104,4 @@ The job's report is a claim. Acceptance is yours (or your liaison's, for the mec
 
 When the host can run subagents with shell access, give each external job to a cheap in-house liaison instead of waiting in the main session. It dispatches with the exact command from its brief, records job and conversation ids where the team tracks state, never starts a duplicate, waits in **bounded slices** (not on notifications, which may reach the root session instead), runs the mechanical acceptance steps, and sends one rework round with the concrete failure. When a team is unavailable it reports and does not switch teams itself; the layer above picks the fallback (section 5). With the wrapper scripts, use a **fresh `--out-dir` for every round**. Without a liaison, run the wrapper in the background (Claude Code: `Bash` with `run_in_background: true`) and react to the completion notification; never foreground-`sleep` or poll. The wait loop, per-wrapper variants and host notes: [references/liaison-and-hosts.md](references/liaison-and-hosts.md).
 
-Tested with Claude Code as the host (background `Bash` plus completion notifications); it works from Codex and other hosts that can run shell commands. Status by team: Codex CLI and agy are used in real projects; OpenCode through ACP was checked against OpenCode 2.2.5 on small jobs; every other agent is *not tested for work*.
+Claude Code is the primary host and the one this was tested with (background `Bash` plus completion notifications). Codex is the secondary host. Other hosts that can run shell commands are *unverified*. Status by team: Codex CLI and agy are used in real projects; OpenCode through ACP was checked against OpenCode 2.2.5 on small jobs; every other agent is *not tested for work*.
