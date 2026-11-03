@@ -32,6 +32,19 @@ Ask the implementer to explain why it wrote these tests and not others; that exp
 
 Reviewers without browser tools must not be asked to "check in the browser". The task lead or director performs browser checks and passes the evidence into the review brief; the final report says which layer did what.
 
+## Sensitive work: two independent reviews
+
+For money, auth, schema and irreversible-data changes, arrange an in-house senior review and an authorized read-only review by another vendor's strong model at high effort. The external review supplements the senior review; it does not accept the task. If the roster cannot supply it, the fallback is one independent in-house senior review with the missing external opinion recorded; stricter project review gates still apply ([SKILL.md](../SKILL.md), "Breakdown, flows and the outsourcing gate").
+
+- Review the same revision or scoped working-tree fingerprint. Run the two reviews in parallel where possible and withhold their findings from each other until both return. Give requirements and code, not a preferred verdict.
+- Ask for concrete failure paths: a result lost after charging, retries or duplicate settlement, cross-user reads, missing schema constraints, and each read that decides a later write. Pick the cases relevant to the change; do not require this checklist on routine work.
+- Treat findings as claims. The fixer reproduces the trigger or checks decisive source evidence before changing code. Record confirmed / rebutted / unresolved, with evidence; disagreement is settled by evidence, not reviewer votes. A sandbox-blocked reproduction stays unverified until an authorized in-house runner checks it.
+- Budget two review-and-fix rounds for risky units, whatever the implementer tier. This is a planning allowance: re-review changed paths and affected invariants, stop when confirmed blockers are closed and gates pass. An unresolved finding with material correctness impact blocks acceptance: escalate to an in-house expert instead of repeating the same failed fix.
+
+## Generated tests need semantic review
+
+External test and snapshot backfills need an independent in-house content review after mechanical acceptance, even if the liaison ran every command successfully. Compare cases and expected values with the frozen requirements: do they enforce the intended invariant, cover failure paths, and fail for the defect they claim to guard? Passing generated tests alone does not prove this. Keep that judgment with a reviewer at the module's risk floor, not a low-tier liaison.
+
 ## End-to-end checks for outsourced work
 
 External CLI agents in general cannot run end-to-end checks: they have no browser or device, run sandboxed or without network, and their briefs forbid dev servers, builds and databases. So by rule, the **director (L1) arranges every end-to-end check for outsourced work**, never the external team or its liaison.

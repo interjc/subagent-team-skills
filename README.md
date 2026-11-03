@@ -35,6 +35,8 @@ The method is distilled from the author's day-to-day work on several production 
 - when to stop and ask the human
 - how team state persists in the project, with `AGENTS.md` and `docs/` cross-referencing each other and capturing lessons, so work can be handed over at any time
 
+The [four-week delegation report](docs/field-report-2026-11-delegation.md) informed the current rules: another-vendor read-only review alongside in-house senior review for risky work; medium/high implementation effort; review-and-fix capacity planned by risk; liaisons that collect results and run checks before finishing; and independent content review of generated tests. Its single-project observations guide the workflow, not a model ranking.
+
 ## Which agents are supported
 
 Compatibility has two levels: the **host agent** that runs your main session, and the **external teams** it can reach.

@@ -11,7 +11,7 @@ Use Strict mode for long programs with several concurrent task lines, high-risk 
 | L3 | **Implementer** | implement per brief, run the quality gate, hand in evidence | review itself, commit |
 | L3 | **Reviewer** | independent read-only review (tests first, then execution, then risks); an L2 senior reviewer for the riskiest changes | edit anything, implement |
 | L3 | **Liaison** | track an external job for the task lead ([external-teams.md](external-teams.md), "The liaison") | decide, edit code, commit |
-| L4 | **External team** | mechanical work that passed the gate, through its liaison | anything else |
+| L4 | **External team** | mechanical work that passed the implementation gate, or authorized read-only second opinions, through its liaison | implement sensitive business logic; accept its own output |
 
 **Coordination files are the exception.** The director keeps writing the board (`docs/agent-team/**`: index, progress record, decisions, lessons, the cards it holds) and the `## Subagent team` section of `AGENTS.md`, because recording the user's decisions and adjustments immediately is its job and must not wait for a task chain. Task leads write only the cards they hold. Every other file, including the rest of `docs/` and `AGENTS.md`, goes through a task.
 
@@ -67,7 +67,7 @@ The director keeps planning, talking to the user, or running unrelated read-only
 - New user requirements for an active task go through the director to that task's task lead; nobody bypasses it to edit code or instruct the implementer.
 - The task lead decides whether the change can wait for the current result (then continue the same implementer) or needs an immediate redirect (cancel, confirm, continue).
 - Anything that widens authorization or scope goes back to the director and the user.
-- A resumable timeout of an external job is not resumed automatically: report the partial diff and conversation id; the director gets the user's decision and passes it back.
+- A resumable timeout of an external job is not resumed automatically by the liaison: report the job state, partial diff and conversation id to the task lead, then the director. The director decides whether a bounded continuation fits existing authorization; ask the user only if it widens scope or permissions, or needs a user-only decision.
 
 ## Final report (task lead → director)
 

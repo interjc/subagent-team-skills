@@ -4,7 +4,7 @@ The skill never hard-codes a vendor. In-house agents (layers L1–L3) use four t
 
 | Tier | Position | Default effort |
 |---|---|---|
-| top | strongest reasoning, slowest, most expensive; expert decisions and critical design evaluations only | high |
+| top | strongest reasoning, slowest, most expensive; expert decisions, critical design evaluations and senior review of the riskiest work | high |
 | high | strong reasoning; director, cross-module design, hard bugs, code review, sensitive modules | medium–high |
 | mid | best value; routine decisions, specified implementation, detail-heavy UI | medium–high |
 | low | fastest, cheapest; search, running commands, collecting output | low |
@@ -26,21 +26,24 @@ The two external tiers decide *how carefully* the work is done, not *whether ris
 | Specified component / API / storage implementation | L3 implementer | mid · medium |
 | Detail-heavy UI (responsive, touch interaction) | L3 implementer | mid · high |
 | Splitting a large file without behaviour change, cross-module change, hard bug | L3 implementer | high · high |
-| Billing / payment / auth logic | L1 or L3 implementer, L2 review | high · medium–high |
+| Billing / payment / auth logic | L1 or L3 implementer, L2 review | high · high |
+| Bounded codebase research with a clear question and sources to report | L3 researcher | mid · medium–high |
 | Routine independent review, running a verification list | L3 reviewer / tester | mid · medium |
 | Search, collect command output | L3 runner | low · low |
 | Tracking an external job, simple answers, mechanical acceptance checks | L3 liaison | low · low (mid if checks need code reading) |
 | Translations, bulk copy, mechanical replacements | L4 | external-fast |
 | Doc syncs that require reading code, test backfills following existing patterns | L4 | external-strong · high |
 | Large homogeneous implementation from a fixed spec | L4 | external-strong · medium |
-| Read-only second opinion from another vendor | L4 | external-strong · medium–high; verdict stays in-house |
+| Read-only second opinion from another vendor | L4 | external-strong · medium for routine scope, high for money / auth / schema / irreversible data; verdict stays in-house |
 
-Reviewer effort: single file, straightforward logic, clear blast radius → medium; many files, cross-module, irreversible consequences → high or above.
+Reviewer effort: single file, straightforward logic, clear blast radius → medium; many files, cross-module, irreversible consequences → high. Risk overrides file count.
 
 ## Rules for every pick
 
 - The director runs at **high tier, high effort**: the session's own model, never switched. As of 2026-10 that meant Claude Opus 5.5 or GPT-6.1 Sol at `high`.
 - **Tier and effort are independent.** Mid + high effort suits a precise but fiddly implementation; high + low effort suits a quick architectural sanity check. Effort follows **how much can only be settled by reasoning**, not the size of the change.
+- **Keep implementation at medium or high.** A frozen, bounded edit starts at mid · medium; risk justifies high · high. If reasoning above high seems necessary, name the unresolved question and route it to an L2 expert before writing more code. Effort above high is an explicit design escalation, not a way to avoid review.
+- **Budget review by risk.** Allow two review-and-fix rounds for money, auth and schema work even with the strongest implementer; stop earlier when findings are closed and gates pass. In the 2026-11 field audit, known rework rates were similar across two implementer tiers assigned different risks; this is not evidence that the tiers are interchangeable. See [field-notes.md](field-notes.md).
 - **Pick before every dispatch and every rework round.** State the role, tier, effort and outsourcing gate result in one line, against the project's role table. Defaults drift: a run that never names them ends up with whatever model was used last.
 - **Risk sets a floor, not just a different model.** A review of money, auth, migrations or irreversible data is a senior review: high or top tier at high effort, on a model other than the author's. A mid-tier reviewer does not meet the floor, even at high effort. When the author is already on the strongest in-house model that fits, use a different top-tier model.
 - Use what the harness actually exposes, not names from memory. If the harness cannot set effort per call, choose by tier only and ask for a thorough job in the brief.
@@ -96,7 +99,7 @@ Notes that held at the time:
 
 - agy's two levels, both through agy-staff and through the CLI: `gemini-4-argon` was an outside contractor at about the in-house mid tier (Claude Sonnet 5.5 level). `gemini-3.8-flash` was one step below, but cheaper and with a quota that lasted longer, so it was the default for long or repeated mechanical batches. A Flash job that failed because it reasoned badly was retried once on Argon. Details: skill `cli-agent-delegation`, `references/agy.md`.
 - agy model ids carry the effort as a suffix (`-low` / `-medium` / `-high`); `agy models` lists them. agy can also route to Claude or GPT models; do not use that, it just takes a detour back to in-house models.
-- Codex effort is `-c model_reasoning_effort=<level>` (levels seen at the time: `low`, `medium`, `high`, `xhigh`, `max`, `ultra`; codex-cli 0.165.0 accepted and echoed `max`; what a given model honours is up to the model) and must be passed **every time**: when omitted, Codex reads `~/.codex/config.toml` (often `high` on a personal machine), which differs from the model's own default. Outsourced work is usually `medium`, `high` when much code must be read; `xhigh`/`max` rarely pay off (needing that much reasoning usually means the work should not be outsourced); never `ultra`, which in the author's use dispatched its own sub-tasks outside the director's control.
+- Codex effort is `-c model_reasoning_effort=<level>` (levels seen at the time: `low`, `medium`, `high`, `xhigh`, `max`, `ultra`; codex-cli 0.165.0 accepted and echoed `max`; what a given model honours is up to the model) and must be passed **every time**: when omitted, Codex reads `~/.codex/config.toml` (often `high` on a personal machine), which differs from the model's own default. Outsourced implementation uses `medium` or `high`; a design question needing more reasoning returns to L2. Never `ultra`, which in the author's use dispatched its own sub-tasks outside the director's control.
 - With Codex as the main session, GPT-6.1 Sol at `high` was the director, the in-family `gpt-6-luna` handled simple work, and the expert was the top model Codex offered.
 
 Other harnesses: rank whatever models they expose into the same tiers by capability and price. If effort cannot be set per call, choose by tier only.

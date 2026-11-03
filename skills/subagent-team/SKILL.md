@@ -4,7 +4,7 @@ description: Run multi-file, multi-phase coding work as a small software organis
 license: MIT
 compatibility: Built for Claude Code (primary) and Codex (secondary); other hosts are unverified. The method itself needs nothing but a harness that can spawn subagents. The optional helper scripts need Node.js 18+ (24 recommended) and git; run scripts/env-check.cjs at the start of a session.
 metadata:
-  version: "0.3.2"
+  version: "0.3.3"
 ---
 
 # Subagent Team
@@ -69,7 +69,7 @@ Two principles run through everything:
 
 | Tier | Typical layer and role | Typical effort |
 |---|---|---|
-| top | L2 principal expert: hardest design calls, evaluating competing designs | high |
+| top | L2 principal expert: hardest design calls, evaluating competing designs, senior review of the riskiest work | high |
 | high | L1 director; L2 designers, task leads, senior reviewers; L3 implementers of risky work | medium–high |
 | mid | L3 implementers of specified work, routine reviewers; L2 for routine splits | medium–high |
 | low | L3 runners and liaisons | low |
@@ -79,6 +79,7 @@ Two principles run through everything:
 - **The director is the session's own model at high effort**; never switch it.
 - **Pick before every dispatch and every rework round**, and state role, tier, effort and gate result in one line. Defaults drift.
 - **Effort follows how much can only be settled by reasoning**, not the size of the change.
+- **Implementation uses medium or high effort.** Start specified work at mid tier · medium; risky implementation at high tier · high. An unresolved question that seems to need effort above high goes to an L2 `consult` before implementation resumes.
 - **Risk sets a floor**: a review of money, auth, migrations or irreversible data is high or top tier at high effort, on a model other than the author's.
 - The project policy decides concrete models; under `auto` you choose and say so. Mapping, role table, dated roster and `scripts/model-roster.mjs`: [references/model-tiers.md](references/model-tiers.md).
 
@@ -99,20 +100,22 @@ Two principles run through everything:
 
 Outside `solo`, every code change gets an independent review, execution layers hand in real acceptance output, and the integration gate and commit stay with L1. Keep with the director: cross-task priorities, talking to the user, product decisions, contracts, final integration and commit.
 
-**Outsourcing gate.** Send work to an external team only when *all four* hold:
+**Outsourcing gate for implementation.** Send editing work to an external team only when *all four* hold:
 
 1. **Fully specified**: what to do and which files are decided; no product or architecture decisions remain.
 2. **No risk**: no business logic in billing, payment or auth, no data migrations, concurrency or data-loss paths; a mistake is easy to spot and roll back.
 3. **Objective acceptance**: runnable commands or a checklist anyone can tick.
 4. **Bulk or repetitive**: translations, homogeneous integrations, template fills, snapshot and exhaustive tests, doc syncs, mechanical refactors; or a small pure module with no billing or auth role, a frozen signature and hand-checkable cases.
 
-**Run the gate on every task** and write the result on its card. In-house is an outcome of the gate, not the default; a long run with external teams on the roster and no external job usually means the gate was never run. Every sensitive design gets a read-only second opinion from another vendor before it is frozen. Second opinions skip criterion 4, and their verdict is input for the in-house reviewer, never the acceptance. Tests *for* a sensitive module may go out; its business code may not.
+**Run the gate on every task** and write the result on its card. In-house is an outcome of the gate, not the default; a long run with external teams on the roster and no external job usually means the gate was never run. Tests *for* a sensitive module may go out; its business code may not. Generated tests still need independent review of what they prove.
+
+**Read-only second opinions have a separate route.** Sensitive code may be read by an authorized external reviewer even though it fails the implementation risk gate. Give another vendor's strong model at high effort the requirements, review scope and evidence to return, with no edit lease. Review sensitive designs before freezing them, and money, auth, schema or irreversible-data implementations alongside the in-house senior review. Keep the reviews independent; confirm findings by reproduction or decisive source evidence before fixing them. The verdict and acceptance stay in-house. If no authorized external reviewer is available, retain one independent in-house senior review and record the missing external opinion; stricter project review gates still apply. Do not widen the roster silently.
 
 ## 5. Workflow (Standard mode)
 
 1. **Design doc and board.** Decision table, architecture, tasks with their flows, assignment table (layer, tier, effort, in-house or which external team), risks. When external teams are involved or the work may span sessions, open the team board with one card per task.
 2. **Contracts first.** Types, state, interface signatures, component names and props, directory conventions; the type check passes. A shared computation has one named owner.
-3. **Design** (flows with L2): sub-tasks, briefs, leases, acceptance commands; specs going to L4 are frozen.
+3. **Design** (flows with L2): sub-tasks, briefs, leases, acceptance commands; specs going to L4 are frozen. For money, auth and schema work, budget two review-and-fix rounds regardless of implementer tier; this is capacity planning, not a required number of rounds.
 4. **Dispatch.** Every writer owns a lease; one writer per file at a time. Launch independent work, in-house and external, in one message.
 5. **Execute and test** (L3, L4): code with tests and real acceptance output; independent reviewers audit, run and probe.
 6. **Accept** (L2 where in the flow, otherwise L1), then the director integrates: wiring, shared files, dead code.
@@ -124,7 +127,7 @@ Outside `solo`, every code change gets an independent review, execution layers h
 
 External teams are reached through a CLI, a plugin, ACP or an MCP server; the project's roster lists each team, its channel, which external tier each model fills, and whether it may edit or only review. Before trusting an untested team, run one tiny read-only job. When the user asks mid-run to add, drop or check a team, re-check without interrupting running jobs, report one capability table, and update the session choice, roster, queued cards and lessons.
 
-Every external job gets a **liaison**: an L3, low-tier in-house subagent that dispatches exactly per the frozen brief, records job ids on the card, waits in bounded slices, checks the diff against the lease, runs the acceptance commands, answers only what the brief or repository already settles, and sends one mechanical rework round. It escalates every decision and any second failure, and never decides product or architecture, edits code, commits, talks to the user or starts a duplicate job. **External agents cannot run end-to-end checks** (no browser, device or full stack): their acceptance is static checks and unit tests, and the director arranges every end-to-end check for outsourced work, itself or through an in-house agent that has the tools. Without subagents, the director runs the job in the background instead. Roster, adjusting teams, fallbacks, the liaison's full duties and waiting per harness: [references/external-teams.md](references/external-teams.md). Calling Codex, agy, OpenCode and other ACP agents: skill `cli-agent-delegation`.
+Every external job gets a **liaison**: an L3, low-tier in-house subagent that dispatches exactly per the frozen brief, records job ids on the card, waits in bounded slices, checks the diff against the lease, runs the acceptance commands, answers only what the brief or repository already settles, and sends one mechanical rework round. Dispatch alone is never a final delivery: the liaison stays until collection and checks are complete, or explicitly escalates a blocker with the job's state and ids. The brief names where each acceptance check runs; a sandbox refusal leaves that check pending for an authorized in-house runner. It escalates every decision and any second failure, and never decides product or architecture, edits code, commits, talks to the user or starts a duplicate job. **External agents cannot run end-to-end checks** (no browser, device or full stack): their acceptance is static checks and unit tests, and the director arranges every end-to-end check for outsourced work, itself or through an in-house agent that has the tools. Without subagents, the director runs the job in the background instead. Roster, adjusting teams, fallbacks, the liaison's full duties and waiting per harness: [references/external-teams.md](references/external-teams.md). Calling Codex, agy, OpenCode and other ACP agents: skill `cli-agent-delegation`.
 
 ## 7. Shared state: the team board
 
@@ -142,6 +145,7 @@ The human decides product and business calls, accounts, keys, payment, anything 
 - **Implementers deliver tests with the code.** **Reviewers** audit the tests, then execute them and paste real output, and only then read code; test gaps mean NEEDS_CHANGES. Reviewers are read-only, never review their own work, and preferably run on another model or vendor.
 - **"Done" is a claim.** Look at the diff, check the lease, run the acceptance commands, verify factual claims in docs. L2 accepts where the flow has it; L1 always runs the integration gate.
 - **Rework** goes to the *same* agent with the concrete failure; a small fix may be done by the director outside Strict mode; L2 never edits, it sends the fix back. External work that fails twice comes back in-house.
+- **Close review with evidence.** A finding needs a reproducible trigger or source evidence; its fixer confirms or rebuts it before editing. Re-review the fixes and affected invariants, then stop when confirmed blockers are closed and the gates pass. Rework on risky work alone is no reason to raise tier or effort.
 
 Review procedure, fingerprints, mutation checks and command pitfalls: [references/verification.md](references/verification.md). Running agents (continue vs respawn, slots, worktrees, processes, dispatch audits): [references/running-agents.md](references/running-agents.md).
 

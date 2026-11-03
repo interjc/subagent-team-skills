@@ -37,7 +37,7 @@ Choosing a flow:
 
 1. Does the task need judgement beyond what the director can write down in one brief? Yes → include L2.
 2. Is part of it mechanical, fully specified and verifiable by commands? That part goes to L4 through a liaison; the rest stays in L3.
-3. Is it money, auth, data migration or anything irreversible? Then L2 designs and a senior reviewer reviews, whatever the size; L4 may only write tests and snapshots for it.
+3. Is it money, auth, data migration or anything irreversible? Then L2 designs and a senior reviewer reviews, whatever the size; L4 may write tests and snapshots, or give an authorized read-only second opinion, but never implement the business logic. Budget review-and-fix capacity by risk ([verification.md](verification.md), "Sensitive work: two independent reviews").
 4. When in doubt between two flows, pick the lighter one and let escalation pull the heavier layer in.
 
 The mode ("Start" in [SKILL.md](../SKILL.md)) sets how formal the paperwork is; the flow sets who works on a task. Strict mode forces `designed` (or `designed+outsource`) for every code task, with an L2 task lead per task line ([strict-mode.md](strict-mode.md)).
