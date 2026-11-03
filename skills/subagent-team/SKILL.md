@@ -1,10 +1,10 @@
 ---
 name: subagent-team
 description: Run multi-file, multi-phase coding work as a small software organisation in four layers. The main session is the director; in-house expert subagents design, review and accept; in-house execution subagents implement and test; external teams (other vendors' agents via CLI, plugin, ACP or MCP, such as agy, Codex CLI or OpenCode) take gated bulk work through a low-tier liaison; the human gets one batched question list at the end. Detects and confirms the host harness, keeps shared state on a team board in the repository, and keeps AGENTS.md and docs cross-referenced. Use this whenever a task spans several files or phases, and whenever you are about to split work or choose a task's flow, delegate to a subagent or an external agent, pick a model or effort for one, write a brief, choose, verify or track external teams, review or accept delegated work, set up a project's team policy, record a lesson or user adjustment, or decide whether to ask the user, even if the user never says "subagent".
-license: MIT
+license: MIT with Commons Clause v1.0 (see LICENSE)
 compatibility: Built for Claude Code (primary) and Codex (secondary); other hosts are unverified. The method itself needs nothing but a harness that can spawn subagents. The optional helper scripts need Node.js 18+ (24 recommended) and git; run scripts/env-check.cjs at the start of a session.
 metadata:
-  version: "0.3.3"
+  version: "0.3.4"
 ---
 
 # Subagent Team

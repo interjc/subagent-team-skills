@@ -1,9 +1,9 @@
 {
   "name": "subagent-team-skills",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "private": true,
   "description": "Agent Skills for running coding work as a team of subagents and external CLI agents.",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
     "node": ">=18"

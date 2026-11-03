@@ -196,4 +196,10 @@ Put private terms (project names, internal hosts) in an untracked `.privacy-deny
 
 ## License
 
-[MIT](LICENSE)
+Starting with v0.3.4, this project is licensed under [MIT with Commons Clause v1.0](LICENSE).
+
+- Free use, modification and redistribution are permitted, including use in commercial work, subject to the license terms.
+- You may not sell the project or a product or service whose value derives entirely or substantially from its functionality. This includes paid hosting, consulting or support when that condition is met.
+- When redistributing the original or modified project, retain the copyright notice, the MIT permission notice and the Commons Clause notice.
+
+This is a source-available license, not an OSI-approved open-source license. Previously released MIT versions remain under MIT; this change does not revoke existing MIT grants. The full license text controls.
