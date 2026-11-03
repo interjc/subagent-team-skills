@@ -4,7 +4,7 @@ description: Keep multi-agent coding work resumable at any moment. Record progre
 license: MIT
 compatibility: Built for Claude Code (primary) and Codex (secondary); other hosts are unverified. Needs only a repository it can write to.
 metadata:
-  version: "0.3.2"
+  version: "0.3.3"
 ---
 
 # Agent Handover

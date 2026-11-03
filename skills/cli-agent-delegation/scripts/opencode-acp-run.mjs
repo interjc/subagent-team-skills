@@ -377,6 +377,12 @@ export async function applyConfig(client, sessionId, configOptions, cfg) {
   mode = findOption(opts, 'mode', 'mode');
   model = findOption(opts, 'model', 'model');
   effort = findOption(opts, 'effort', 'thought_level');
+  // OpenCode 2.2.5 has answered a good selection with effort back at "default" while another session was
+  // starting. One more try; the check below still decides.
+  if (effort && effort.currentValue !== cfg.effort) {
+    await set(effort, cfg.effort);
+    effort = findOption(opts, 'effort', 'thought_level');
+  }
   const applied = { agent: mode?.currentValue ?? null, model: model?.currentValue ?? null, effort: effort?.currentValue ?? null };
   if (applied.agent !== cfg.agent) throw new SetupError(`agent is "${applied.agent}" after selecting "${cfg.agent}"`);
   if (applied.model !== cfg.model) throw new SetupError(`model is "${applied.model}" after selecting "${cfg.model}"`);

@@ -82,6 +82,7 @@ External agents only know the brief and cannot ask follow-up questions.
 - **Fully self-contained**: paste the spec, key lists, base-language text and insertion points into the brief. Do not just give a path the agent may not be able to read (files outside the workspace especially).
 - **Freeze the list first**: an external agent will not pick up keys or endpoints you add after dispatch.
 - **Acceptance commands use executable paths** (`./node_modules/.bin/tsc --noEmit -p .`, `./node_modules/.bin/eslint <files>`), not package-manager scripts, which may fail on engine checks or a different shell environment.
+- **Name the execution owner and environment for each check** (external or in-house). If the external sandbox refuses a command, report it as not run; the liaison runs it where authorized or escalates. Never weaken permissions to make the checklist green.
 - **No end-to-end steps**: acceptance is static checks and unit or snapshot tests only. Do not ask for browser, device, dev-server or full-stack checks; the director arranges those after acceptance ([verification.md](verification.md), "End-to-end checks for outsourced work").
 - **No decisions**: "If anything falls outside this spec, stop and explain it in your final reply; do not decide."
 - **Prohibitions**: state-changing git operations (read-only status/diff is fine); installing packages, builds, dev servers, database commands; reading `.env*`; editing outside the lease.
@@ -103,8 +104,16 @@ Dispatch: <exact command, or "already running as job <id>, collect from <worktre
 Timeout: <duration>; wait in bounded slices (<how, for this host>)
 
 ## Acceptance (run yourself; paste real output)
-- <command> → <expected>
+- <command> → <expected>; execution environment: <authorized in-house environment>
 - `git status --short` and `git diff --stat`: nothing outside the lease
+- External commands that were refused or not run: <list>; keep pending until checked in-house
+- Independent content reviewer: <agent / assigning layer>; command success alone does not accept generated tests
+
+## Completion
+Stay with this job until the final result is collected and the checks above are complete,
+or explicitly escalate a blocker with job state, ids and the next action.
+A successful dispatch or an expired wait slice is not a final delivery.
+At the job timeout, report partial results and the resumable id; do not restart or resume on your own.
 
 ## You may answer (by continuing the same job, quoting the source)
 - Facts in the frozen brief, the contract files <paths>, this card, and the repository (where a file is, what an existing convention is)
@@ -151,7 +160,8 @@ The expert (L2) is a read-only high or top-tier subagent. It answers "how should
 - [ ] Verified facts and things-to-verify are separate, with an instruction for mismatches.
 - [ ] Deliverables require real output, `wc -l` of new files, and mutation checks where applicable.
 - [ ] Review briefs carry code and requirements, not your conclusion.
-- [ ] Outsourced work passes all four gate criteria; otherwise reassign in-house.
+- [ ] Outsourced editing passes all four implementation gate criteria; otherwise reassign in-house.
+- [ ] A read-only second opinion uses the separate review route: authorized scope, no edits, evidence required, acceptance in-house.
 - [ ] The task's flow is on its card, and the brief names the card and the escalation target.
 - [ ] Every external job has a liaison (or the director tracks it), and its ids go on the card at dispatch.
 - [ ] The next step depends on this result? Then dispatch in the foreground or plan how you will be notified.

@@ -2,7 +2,7 @@
 
 External teams are other vendors' agents that the host harness reaches through a channel: a **CLI** run headless, a **plugin** that wraps a CLI, a protocol server such as **ACP** (Agent Client Protocol) driven by a small client, or an **MCP server** that exposes the agent as tools. They are cheap or strong, never tire of bulk work, and a different model family catches different mistakes. They cannot ask questions mid-run, do not share your context, and each job has a fixed start-up cost.
 
-Only work that passes the outsourcing gate ([SKILL.md](../SKILL.md), "Breakdown, flows and the outsourcing gate") goes to them. How to call Codex CLI, agy and OpenCode, wrappers, timeouts, resume and each team's fallback ladder: skill `cli-agent-delegation`.
+Editing work must pass the outsourcing gate ([SKILL.md](../SKILL.md), "Breakdown, flows and the outsourcing gate"). Authorized read-only second opinions can inspect sensitive code without an edit lease; use a strong model at high effort and keep acceptance in-house ([verification.md](verification.md), "Sensitive work: two independent reviews"). How to call Codex CLI, agy and OpenCode, wrappers, timeouts, resume and each team's fallback ladder: skill `cli-agent-delegation`.
 
 ## The external roster
 
@@ -78,14 +78,14 @@ An agent behind MCP is called as a tool of the host, so the call is synchronous 
 
 A liaison is an **L3, low-tier, low-effort** in-house subagent assigned to one external job, or to one external team for a series of sequential jobs. It spends cheap tokens on waiting, routine checks and simple answers, so the director's and the experts' contexts only see results and real questions.
 
-Raise the liaison to mid tier when its acceptance checks require reading code (docs-against-code syncs, test backfills that must follow patterns).
+Keep mechanical collection and command execution at low tier. If factual checks require reading code, use a mid-tier liaison or a separate in-house reviewer; semantic acceptance of generated tests belongs to that reviewer, at the module's risk floor.
 
 ### What the liaison does
 
 1. **Dispatch** the job exactly as the frozen brief and the card say (team, model, effort, sandbox, lease, timeout), or take over a job id the director already started. Write the job and conversation ids to the card immediately.
-2. **Wait** with bounded waits (below). No log reading while the job runs unless it failed.
+2. **Wait** with bounded waits (below). No log reading while the job runs unless it failed. A wait slice ending is not job completion: wait again while the job is healthy and within its timeout. Never end the liaison task merely because dispatch succeeded; finish after collection and checks, or escalate explicitly with job state, ids and the next action.
 3. **Collect**: the final reply, then the truth: `git status --short` and `git diff --stat` against the lease.
-4. **Check** with the acceptance commands from the card; for content work, the mechanical checks (identical key sets, placeholders and escapes preserved, order kept).
+4. **Check** with the acceptance commands from the card, even if the external report says they passed; for content work, the mechanical checks (identical key sets, placeholders and escapes preserved, order kept). The brief names which checks run externally and which run in-house. A refused command is pending, not passed: run it in an authorized in-house environment or escalate the gap without loosening the external sandbox. Passing commands is a handoff to independent review, not semantic acceptance.
 5. **Answer straightforward questions.** External agents report blockers in their final reply ("stopped: the key list has no entry for X"). If the answer is already in the brief, the contract, the card or a repository fact the liaison can look up, it answers by continuing the same job with the answer quoted from its source.
 6. **Rework once** for mechanical failures: continue the same job with the concrete failure output.
 7. **Report** to the card holder above it at real transitions only: dispatched, returned, accepted or rework, escalated. Keep the card's status and log current; the liaison is the holder of its job's card. For user-facing changes, end the report with `E2E: pending director` and the flows to walk; the liaison never runs them.

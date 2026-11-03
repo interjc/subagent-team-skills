@@ -2,6 +2,20 @@
 
 Lessons from several real web and mobile projects, each one either a mistake that cost time or a practice that proved itself. Product details are removed; the lessons are not.
 
+## Four-week delegation audit (2026-11)
+
+The repository report *Field report: four weeks of delegation in one project (2026-10 to 2026-11)* reviewed 194 in-house agents and 60 external jobs in one mobile-and-services monorepo. These are observational results: work was assigned by risk, some outcome labels were inferred, and the sample does not establish a model ranking or a causal benefit from effort settings. Model names below are dated examples as of 2026-11.
+
+| Observation | Decision it supports |
+|---|---|
+| Seven Codex CLI `gpt-6.1-sol` · high read-only reviews of billing and auth all produced useful, confirmed defects; 21 of 72 in-house reviews returned blockers, with only one finding rebutted with evidence | Retain senior in-house review and add another-vendor review on risky work; reproduce claims rather than counting votes |
+| Known rework: Opus 5.5 20/30; Sonnet 5.5 12/18, on differently assigned work | Budget review-and-fix rounds by risk; equal observed rates do not make tiers interchangeable |
+| Of 49 low-effort Haiku 5.5 liaisons, 42 delivered cleanly, 3 had gaps, 2 correctly escalated and 2 failed by returning immediately after dispatch | Keep the relay cheap; put waiting and collection in its explicit completion criteria |
+| Above-high implementation effort still left review findings; small specified edits at medium were quick | Use medium/high for implementation; send unresolved design questions to an expert |
+| Sandboxed workers could not run some acceptance commands; a large generated test file passed commands without an in-house content review | Assign in-house execution capacity and independent semantic review, including for tests |
+
+The audit reinforces existing separation of duties; it does not justify outsourcing sensitive implementation, removing review for stronger authors or claiming every channel is verified. Current support levels remain in [external-teams.md](external-teams.md); dispatch rules in [model-tiers.md](model-tiers.md), review closure in [verification.md](verification.md), and the method in [SKILL.md](../SKILL.md).
+
 ## Pace and authorization
 
 - Once the user authorizes continuous work, gather decisions toward the end: hard questions go to the strongest model, undecidable ones to *Open questions*, and the user gets one list at the end. Interrupting the user repeatedly costs more than a wrong, reversible small decision.

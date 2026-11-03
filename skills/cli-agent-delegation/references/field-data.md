@@ -1,6 +1,18 @@
 # Field data
 
-Measured outsourcing runs from real projects (2026-10). Model names were current at the time.
+Measured outsourcing runs from real projects (2026-10 to 2026-11), plus explicitly labelled wrapper verification runs. Model names were current at the time. The operating rules are in [SKILL.md](../SKILL.md).
+
+## Four-week audit (2026-11)
+
+The repository report *Field report: four weeks of delegation in one project (2026-10 to 2026-11)* covers 60 external jobs in 74 runs, plus 16 earlier agy jobs whose acceptance was not recorded. It is one project's observational sample, not a randomized model comparison: risk drove assignments, some outcomes were inferred, and a worker reporting done is not verified acceptance.
+
+- **Review value:** seven Codex CLI `gpt-6.1-sol` · high reviews of billing and auth all found useful, confirmed defects. This supports another-vendor read-only review alongside in-house senior review, not external implementation of sensitive logic. See [read-only-reviews.md](read-only-reviews.md).
+- **Effort:** above-high implementation runs still needed review fixes; small specified edits at medium were fast. Use medium/high for implementation and route unresolved design questions in-house; these unlike tasks do not prove a causal speed or quality difference.
+- **Liaison completion:** 49 low-tier liaisons included 42 clean deliveries and two failures that returned immediately after dispatch. Require a collected result and mechanical checks, or an explicit escalation, before final delivery ([liaison-and-hosts.md](liaison-and-hosts.md)).
+- **Verification:** sandbox refusals moved acceptance execution to the in-house layer. One generated test file passed commands without independent content review. Plan both authorized in-house execution and semantic review of cases and expected values.
+- **Failure classification:** effort resets, sandbox refusal and resume timeouts were environment failures. Preserve state and report the missing evidence; do not infer model incapability or loosen permissions.
+
+Historical job outcomes do not replace a channel's admission checks. Current OpenCode wrapper verification remains the separately scoped evidence below; other teams' support levels are stated in [SKILL.md](../SKILL.md).
 
 ## agy (fast tier, `gemini-3.8-flash-high`)
 
