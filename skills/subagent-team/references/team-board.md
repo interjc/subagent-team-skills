@@ -31,17 +31,20 @@ docs/agent-team/
     └── T3.a.md     # one card per sub-task or external job
 ```
 
-`progress.md`, `decisions.md` and the conventions for writing them (absolute dates, separate committed / pushed / deployed facts, the `<pending-commit>` placeholder, never-rewritten decisions) follow skill `agent-handover`. If a project already keeps these elsewhere (for example `docs/<program>/progress.md`), point the board index at them instead of creating duplicates: one authoritative home per kind of record.
+`progress.md`, `decisions.md` and the conventions for writing them (absolute dates, separate committed / pushed / deployed facts, the `<pending-commit>` placeholder, never-rewritten decisions) follow skill `agent-handover`. If a project already keeps these elsewhere (for example `docs/<program>/progress.md`), point the board index at them instead of creating duplicates: one authoritative home per kind of record. The same holds for decisions already numbered in a design doc: `decisions.md` links to them rather than copying them. A program with its own progress file keeps acceptance numbers there; the board's `progress.md` then carries only the session choice, the next-up queue across programs and links.
 
 Create the skeleton with the helper (never overwrites; the board must be a subdirectory, never the project root):
 
 ```bash
 node <this skill's directory>/scripts/team-board.mjs init --root <project root>
 node <this skill's directory>/scripts/team-board.mjs new --root <project root> --id T3 --title "Settings page" --flow designed --holder lead-T3
-node <this skill's directory>/scripts/team-board.mjs status --root <project root>
+node <this skill's directory>/scripts/team-board.mjs set --root <project root> --id T3 --status committed
+node <this skill's directory>/scripts/team-board.mjs status --root <project root> --strict
 ```
 
-`status` prints one JSON object: task counts by status, every `[open]` question with its target (and how many wait for the human), and warnings for drift: a card missing from the index, an index status that disagrees with the card, a card without a holder, an unknown status, or `AGENTS.md` not linking to the board. Exit codes: `0` ok (warnings allowed), `1` usage, `2` no board, `3` card already exists, `4` file system error. Without Node.js, create the same files by hand from the templates below; `progress.md` and `decisions.md` follow skill `agent-handover` (its entry templates).
+`set` changes a card's status, the matching index row and the card's log in one step, so the two never disagree; use it at every transition instead of editing the status by hand. `status` prints one JSON object: task counts by status, every `[open]` question with its target (and how many wait for the human), and warnings for drift: a card missing from the index, an index status that disagrees with the card, a card without a holder, an unknown or ambiguous status (`done` says neither "accepted" nor "committed"), `AGENTS.md` not linking to the board, or a `lessons.md` row "promoted to" something that is not a file in the repository (such as an agent's local memory). With `--strict` any warning fails the run. Exit codes: `0` ok (warnings allowed), `1` usage, `2` no board, `3` card already exists, `4` file system error, `5` warnings under `--strict`, `6` card not found or has no Status line.
+
+**Close-out.** Before the final report or the last commit of a run, run `status --strict` and fix what it reports. A real board was found with every card at `done`, the index still at `planned` and the completed log naming tasks that had no card: the script reported all of it, but nobody ran it. Without Node.js, create the same files by hand from the templates below; `progress.md` and `decisions.md` follow skill `agent-handover` (its entry templates).
 
 ## Index and lessons templates
 
@@ -122,7 +125,8 @@ When to write (the director, or whoever the lease names):
 
 | Trigger | Write |
 |---|---|
-| The user corrects the process or states a preference ("always ask before outsourcing auth tests") | a `lessons.md` row with the date and the user's words, verbatim; if it is a project-wide rule, the rule itself in `AGENTS.md` and a "promoted to" link in the row |
+| The user prefers a channel or model for now ("use OpenCode's GPT models for now") | the session choice line in `progress.md`; nothing in `AGENTS.md` ([user-overrides.md](user-overrides.md)) |
+| The user corrects the process or states a lasting preference ("always ask before outsourcing auth tests") | a `lessons.md` row with the date and the user's words, verbatim; if it is a project-wide rule, the rule itself in `AGENTS.md` and a "promoted to" link in the row |
 | The user decides a product or design question | `decisions.md` entry plus a summary line in `progress.md` |
 | An escalation reveals that a brief or contract was missing something | `lessons.md` row; fix the template or the contract |
 | An outsourced job fails twice or turns out not to pay off | `lessons.md` row, and adjust the roster row for that team |

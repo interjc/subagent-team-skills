@@ -4,7 +4,7 @@ description: Run multi-file, multi-phase coding work as a small software organis
 license: MIT with Commons Clause v1.0 (see LICENSE)
 compatibility: Built for Claude Code (primary) and Codex (secondary); other hosts are unverified. The method itself needs nothing but a harness that can spawn subagents. The optional helper scripts need Node.js 18+ (24 recommended) and git; run scripts/env-check.cjs at the start of a session.
 metadata:
-  version: "0.3.4"
+  version: "0.3.5"
 ---
 
 # Subagent Team
@@ -27,6 +27,7 @@ This page holds the decisions you make on every task. Read a reference when you 
 | open or update the team board, or wire it into `AGENTS.md` | [references/team-board.md](references/team-board.md) |
 | review or accept work | [references/verification.md](references/verification.md), [references/reviewer-prompt.md](references/reviewer-prompt.md) |
 | dispatch, continue, stop or audit agents | [references/running-agents.md](references/running-agents.md) |
+| get a user instruction that changes channels, models or a rule, or overrides a floor | [references/user-overrides.md](references/user-overrides.md) |
 | run in Strict mode | [references/strict-mode.md](references/strict-mode.md) |
 | want examples and lessons from real projects | [references/field-notes.md](references/field-notes.md) |
 
@@ -80,7 +81,7 @@ Two principles run through everything:
 - **Pick before every dispatch and every rework round**, and state role, tier, effort and gate result in one line. Defaults drift.
 - **Effort follows how much can only be settled by reasoning**, not the size of the change.
 - **Implementation uses medium or high effort.** Start specified work at mid tier · medium; risky implementation at high tier · high. An unresolved question that seems to need effort above high goes to an L2 `consult` before implementation resumes.
-- **Risk sets a floor**: a review of money, auth, migrations or irreversible data is high or top tier at high effort, on a model other than the author's.
+- **Risk sets a floor**: a review of money, auth, migrations or irreversible data is high or top tier at high effort, on a model other than the author's. Only the user's own words override a floor, and an override carries its compensation ([references/user-overrides.md](references/user-overrides.md)).
 - The project policy decides concrete models; under `auto` you choose and say so. Mapping, role table, dated roster and `scripts/model-roster.mjs`: [references/model-tiers.md](references/model-tiers.md).
 
 ## 4. Breakdown, flows and the outsourcing gate
@@ -105,7 +106,9 @@ Outside `solo`, every code change gets an independent review, execution layers h
 1. **Fully specified**: what to do and which files are decided; no product or architecture decisions remain.
 2. **No risk**: no business logic in billing, payment or auth, no data migrations, concurrency or data-loss paths; a mistake is easy to spot and roll back.
 3. **Objective acceptance**: runnable commands or a checklist anyone can tick.
-4. **Bulk or repetitive**: translations, homogeneous integrations, template fills, snapshot and exhaustive tests, doc syncs, mechanical refactors; or a small pure module with no billing or auth role, a frozen signature and hand-checkable cases.
+4. **Worth the job's overhead**: bulk or repetitive work (translations, homogeneous integrations, template fills, snapshot and exhaustive tests, doc syncs, mechanical refactors), or one bounded unit from a frozen spec that is large enough to amortize the job's start-up cost: a small pure module with no billing or auth role, or a screen or component whose spec fixes every state and layout (loading, empty, error, narrow screens). If the brief costs as much as the edit, keep it in-house.
+
+Before outsourcing a deterministic bulk change (path renames, import moves), ask whether one script with a checked mapping does it; a script is repeatable and reviewable, repeated model edits are not.
 
 **Run the gate on every task** and write the result on its card. In-house is an outcome of the gate, not the default; a long run with external teams on the roster and no external job usually means the gate was never run. Tests *for* a sensitive module may go out; its business code may not. Generated tests still need independent review of what they prove.
 
@@ -113,25 +116,27 @@ Outside `solo`, every code change gets an independent review, execution layers h
 
 ## 5. Workflow (Standard mode)
 
-1. **Design doc and board.** Decision table, architecture, tasks with their flows, assignment table (layer, tier, effort, in-house or which external team), risks. When external teams are involved or the work may span sessions, open the team board with one card per task.
+1. **Plan before code, then review the plan.** A design doc sized to the task (a few lines in the progress record for a small fix, never skipped): decision table, the chosen approach, files touched, tasks with their flows, assignment table (layer, tier, effort, in-house or which external team), risks, and **each path through the change**: for every new state, refusal or error, what it does to callers, polling, retries, cost or audit records and older clients. Review the doc (independently for money, auth or cross-module work) and fix it before any code; when reality differs during implementation, update the doc first, then the code. When external teams are involved or the work may span sessions, open the team board with one card per task.
 2. **Contracts first.** Types, state, interface signatures, component names and props, directory conventions; the type check passes. A shared computation has one named owner.
 3. **Design** (flows with L2): sub-tasks, briefs, leases, acceptance commands; specs going to L4 are frozen. For money, auth and schema work, budget two review-and-fix rounds regardless of implementer tier; this is capacity planning, not a required number of rounds.
 4. **Dispatch.** Every writer owns a lease; one writer per file at a time. Launch independent work, in-house and external, in one message.
 5. **Execute and test** (L3, L4): code with tests and real acceptance output; independent reviewers audit, run and probe.
 6. **Accept** (L2 where in the flow, otherwise L1), then the director integrates: wiring, shared files, dead code.
-7. **Verify.** Type check, lint, tests, then a short targeted pass on the user's running dev server. Never start, stop or restart the user's services; ask them to.
+7. **Verify.** Type check, lint, tests, then a short targeted pass on the user's running dev server once no agent is still writing the files it serves. Never start, stop or restart the user's services; ask them to. Live checks stay shallow unless asked: one call per changed path after a deploy; scheduled paths are pinned in tests, not watched ([references/verification.md](references/verification.md), "How deep live checks go").
 8. **Review across phases** for what phase reviews cannot see: lifecycle ordering between subsystems, module-level caches, leftover dead code and keys.
-9. **Record and commit.** Cards, progress record, lessons, `AGENTS.md`. Commit each verifiable unit where allowed; push, merge or deploy only as the project or the user allows.
+9. **Record and commit.** Cards, progress record, lessons, `AGENTS.md`; run `team-board.mjs status --strict` and fix every warning before the final report. Commit each verifiable unit when its checks pass (rework gets its own commit); push, merge or deploy only as the project or the user allows.
 
 ## 6. External teams and the liaison
 
-External teams are reached through a CLI, a plugin, ACP or an MCP server; the project's roster lists each team, its channel, which external tier each model fills, and whether it may edit or only review. Before trusting an untested team, run one tiny read-only job. When the user asks mid-run to add, drop or check a team, re-check without interrupting running jobs, report one capability table, and update the session choice, roster, queued cards and lessons.
+External teams are reached through a CLI, a plugin, ACP or an MCP server; the project's roster lists each team, its channel, which external tier each model fills, and whether it may edit or only review. Before trusting an untested team, run one tiny read-only job. When the user asks mid-run to add, drop or check a team, re-check without interrupting running jobs, report one capability table, and update the session choice and queued cards.
 
-Every external job gets a **liaison**: an L3, low-tier in-house subagent that dispatches exactly per the frozen brief, records job ids on the card, waits in bounded slices, checks the diff against the lease, runs the acceptance commands, answers only what the brief or repository already settles, and sends one mechanical rework round. Dispatch alone is never a final delivery: the liaison stays until collection and checks are complete, or explicitly escalates a blocker with the job's state and ids. The brief names where each acceptance check runs; a sandbox refusal leaves that check pending for an authorized in-house runner. It escalates every decision and any second failure, and never decides product or architecture, edits code, commits, talks to the user or starts a duplicate job. **External agents cannot run end-to-end checks** (no browser, device or full stack): their acceptance is static checks and unit tests, and the director arranges every end-to-end check for outsourced work, itself or through an in-house agent that has the tools. Without subagents, the director runs the job in the background instead. Roster, adjusting teams, fallbacks, the liaison's full duties and waiting per harness: [references/external-teams.md](references/external-teams.md). Calling Codex, agy, OpenCode and other ACP agents: skill `cli-agent-delegation`.
+**Channel preferences are usually session scope.** "Prefer X now" follows quota and credit expiry and changes again soon: apply it to new dispatches only (running jobs keep their team) and do not write it into `AGENTS.md` unless the user asks for a lasting change. The director still judges each dispatch: when a channel runs out, switch to an agreed same-tier substitute and say so; when a team · model needs content rework twice in a row, move to its stronger model or another team. Scope, substitutes, quality tracking and floors the user may override: [references/user-overrides.md](references/user-overrides.md), [references/external-teams.md](references/external-teams.md).
+
+Every external job gets a **liaison**: an L3 in-house subagent on the host vendor's lowest tier (Haiku under Claude Code) that dispatches exactly per the frozen brief, records job ids on the card, waits in bounded slices, checks the diff against the lease, runs the acceptance commands, answers only what the brief or repository already settles, and sends one mechanical rework round. Dispatch alone is never a final delivery: the liaison stays until collection and checks are complete, or explicitly escalates a blocker with the job's state and ids. The brief names where each acceptance check runs; a sandbox refusal leaves that check pending for an authorized in-house runner. It escalates every decision and any second failure, and never decides product or architecture, edits code, commits, talks to the user or starts a duplicate job. **External agents cannot run end-to-end checks** (no browser, device or full stack): their acceptance is static checks and unit tests, and the director arranges every end-to-end check for outsourced work, itself or through an in-house agent that has the tools. Without subagents, the director runs the job in the background instead. Roster, adjusting teams, fallbacks, the liaison's full duties and waiting per harness: [references/external-teams.md](references/external-teams.md). Calling Codex, agy, OpenCode and other ACP agents: skill `cli-agent-delegation`.
 
 ## 7. Shared state: the team board
 
-Use the host's native mechanism (a shared task list, agent messaging) for live coordination. Use the **board in the repository** (`docs/agent-team/`: index, one card per task or job, progress, decisions, lessons) whenever an external team is involved, the work may span sessions or be handed over, in Strict mode, or when the host has nothing native; then the board is the source of truth. **One holder per card**, the only writer. Open questions are `[open]` items on the asking unit's card, answered in place, never deleted. `scripts/team-board.mjs` runs `init`, `new` and `status`. Layout and card template: [references/team-board.md](references/team-board.md).
+Use the host's native mechanism (a shared task list, agent messaging) for live coordination. Use the **board in the repository** (`docs/agent-team/`: index, one card per task or job, progress, decisions, lessons) whenever an external team is involved, the work may span sessions or be handed over, in Strict mode, or when the host has nothing native; then the board is the source of truth. **One holder per card**, the only writer. Open questions are `[open]` items on the asking unit's card, answered in place, never deleted. `scripts/team-board.mjs` runs `init`, `new`, `set` (card and index status in one step) and `status` (`--strict` fails on drift). Layout and card template: [references/team-board.md](references/team-board.md).
 
 ## 8. Escalation and asking the human
 
@@ -154,8 +159,9 @@ Review procedure, fingerprints, mutation checks and command pitfalls: [reference
 Docs are how the next agent, session or tool runs this process well, so updating them is part of "done":
 
 - `AGENTS.md` → `## Subagent team` holds the policy and links the board index, which links back. Each rule has **one** home; everything else links to it.
-- When the user corrects the process or states a preference, write a dated row in `lessons.md` right away with their words verbatim; a project-wide rule also goes into `AGENTS.md`.
+- When the user corrects the process or states a lasting preference, write a dated row in `lessons.md` right away with their words verbatim; a project-wide rule also goes into `AGENTS.md`. A session-only channel or model preference needs neither.
 - At the end of each phase, note what was redone, which brief was unclear, which tool bit you, which outsourcing paid off. Promote rules into `AGENTS.md`, method improvements into [references/field-notes.md](references/field-notes.md) or your fork.
-- Rules live in the repository, never only in an agent's local memory (skill `agent-handover`).
+- Rules live in the repository, never only in an agent's local memory (skill `agent-handover`); a lesson "promoted to" memory is not promoted.
+- Keep `## Subagent team` to the rules in force: a replaced rule is rewritten in place and the old one goes to `decisions.md` as overturned; verbatim quotes live in `lessons.md` ([references/project-setup.md](references/project-setup.md), "Keeping the section short").
 
 What to write where, and when: [references/team-board.md](references/team-board.md), "Keeping AGENTS.md and the docs cross-referenced".

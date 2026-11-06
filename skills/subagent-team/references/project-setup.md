@@ -13,7 +13,7 @@ If the user prefers a separate file, write it (e.g. `docs/agents/subagent-team.m
 1. Look for the `## Subagent team` section (or the pointer to it). If it has a `Model policy:` line, **use it and do not ask**. If something it names is unavailable (a model was retired, a CLI is not installed), fall back as in the "auto" rules below and tell the user in one line. If it lacks a line that newer versions of this skill add (`Host harness:`, `Team board:`, `External delegation:`, the external-team table), ask only for the missing items, pre-filled.
 2. No section: run the questionnaire before dispatching the first subagent. Solo-mode work ("Start" in [SKILL.md](../SKILL.md)) does not need it.
 3. The user cannot be asked right now (non-interactive run, or they said "don't ask, just go"): write the section with `Model policy: auto` and `Decided: default, not confirmed`, continue, and include the policy in the end-of-task grill-me list.
-4. The user later changes their mind ("use another vendor's model for reviews"): update the section in place, with the date, and add a row to the board's `lessons.md` with the user's words.
+4. The user later changes their mind ("use another vendor's model for reviews") and wants it to last: update the rule in place, with the date, and add a row to the board's `lessons.md` with the user's words. A preference for this session only ("use OpenCode for now") does not go into the section ([user-overrides.md](user-overrides.md)).
 
 ## Detect first, then ask
 
@@ -39,7 +39,7 @@ Use the harness's question tool when there is one (recommended option first; if 
 4. **External teams** (pre-filled from detection): which teams, through which channel (CLI, plugin, ACP, MCP), which model fills external-fast and external-strong, and which may edit files versus review only. "None" is a valid answer. Also: should later sessions ask again at the start which teams to use (`External delegation: ask`, recommended), use this roster without asking (`roster`), or keep everything in-house (`none`)?
 5. **Team board** (recommended: `docs/agent-team/` plus the host's native task list where it has one): where shared state lives ([team-board.md](team-board.md)). Projects that never involve external teams or multiple sessions may choose `native`.
 6. **Never outsourced and shared files** (pre-filled): paths whose business code stays in-house; files only the director writes.
-7. **Commit and push**: may the agent commit after checks pass? Push to which branches, if any? (Default: commit locally, never push without being asked.)
+7. **Commit, push and deploy**: may the agent commit after checks pass? Push to which branches, if any? Deploy changed services after verification, or only when asked, and how deep the post-deploy check goes? (Default: commit locally, never push or deploy without being asked; a post-deploy check is one live call per changed path.)
 
 ## The section to write
 
@@ -53,6 +53,7 @@ Use the harness's question tool when there is one (recommended option first; if 
 - Environment (checked <YYYY-MM-DD>): Node.js <version>, git <version>, Codex CLI <version or none>, Codex plugin <yes or no>, agy <version or none>, agy-staff <yes or no>, OpenCode <version or none>; accepted warnings: <none, or e.g. "Node 22, not upgrading">
 - Team board: docs/agent-team/README.md + native task list   <!-- or: native -->
 - External delegation: ask      <!-- ask (which teams, at each session start) | roster (use the table below) | none (in-house only) -->
+- External order: <e.g. OpenCode (other-vendor models) → agy → Codex CLI>   <!-- lasting order only; session preferences are not written here -->
 
 | Layer | Role | Tier | Model | Effort |
 |---|---|---|---|---|
@@ -74,11 +75,22 @@ Use the harness's question tool when there is one (recommended option first; if 
 - Never outsourced: <paths>
 - Shared files (director only): <paths>
 - Acceptance commands: <type check>, <lint>, <tests> (executable paths)
-- Commit / push: <e.g. commit locally after checks; push only when asked; never merge main>
+- Commit / push / deploy: <e.g. commit locally after checks; push only when asked; never merge main; deploy changed services after verification, or only when asked>
+- Post-deploy check: <e.g. one live call per changed provider or endpoint; deep flows only when asked>
 - Lessons and user adjustments: docs/agent-team/lessons.md
 ```
 
 With `fixed` or `hybrid`, replace `auto` in the rows the user fixed with a concrete model (and effort). Model names in a fixed row are the user's choice; do not "upgrade" them silently when newer models appear. Mention the newer option once, in the end-of-task summary.
+
+## Keeping the section short
+
+The section is read at the start of every session, so it holds **the rules in force today** and nothing else:
+
+- One rule, one line or two, ending with its source: `(user, 2026-11-03)`. The user's verbatim words live in `lessons.md`, whose row links back here.
+- When a rule is replaced or expires, rewrite it in place; do not append "the rule of the 2nd ended early" next to it. The replaced rule goes to `decisions.md` with an "Overturned (date)" note.
+- Team capabilities go in the roster table, the order in the `External order:` line; neither carries history.
+- Do not restate this skill's defaults; write only where the project differs.
+- At the end of a phase, if the section has grown past about 30 lines, move history and quotes out as above.
 
 After writing the section, create the board if the policy names one (`scripts/team-board.mjs init`), and check that the section and the board index link to each other ([team-board.md](team-board.md), "Keeping AGENTS.md and the docs cross-referenced").
 

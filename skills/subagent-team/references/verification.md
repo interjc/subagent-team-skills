@@ -53,6 +53,15 @@ External CLI agents in general cannot run end-to-end checks: they have no browse
 - When an outsourced change touches anything user-facing (UI, routes, API responses, generated copy shown to users), the card records `E2E: pending director` with the flows to walk and their expected results; the liaison or L2 lists them, and the job is accepted but the task is not done.
 - L1 runs those checks itself, or hands them to an in-house agent that actually has the tools (browser, device, the real stack), on the user's running dev server where possible. Batch them: one walkthrough after several jobs land is cheaper than one per job.
 - The final report says which checks the external team ran and which L1 arranged.
+- **Walk only after the writers stop.** Start a live regression once no agent is still editing files the running dev server serves. A hot-reloading server picks up half-written edits, and an error seen during that window (a failed response that never comes back) is unconfirmed until it reproduces on a quiet tree.
+
+## How deep live checks go
+
+Live checks confirm that the change is wired up; the tests already proved its logic. Keep them small unless the user asks for more:
+
+- **After a deploy**, check each changed path once on the live system: one real call per changed provider, endpoint or main model, with the response and the cost record it leaves. Deep flows (ledger forensics, full app walkthroughs, every model of a provider) only when the user asks or the shallow check fails.
+- **Scheduled work** (cron, queues that run on the hour, nightly jobs): do not watch logs or wait for the next run. Pin the scheduled path in a test that calls the handler the scheduler calls, and say in the report that the live run was not observed.
+- Record each live check like any acceptance output: the command or call, the real result, and what it did not cover.
 
 ## Reviewer hygiene
 

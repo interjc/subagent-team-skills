@@ -156,7 +156,7 @@ Claude Code 插件附带两个审核 agent：
 | 脚本 | 作用 |
 |---|---|
 | `skills/subagent-team/scripts/env-check.cjs` | 会话开始时的环境健康检查，覆盖 Node.js（下限 18、推荐 24）、git、宿主 agent 的初步判断、外包团队（Codex CLI 及其插件、agy、agy-staff、OpenCode、其他 agent CLI、项目 MCP server）、团队策略（包括是否询问本次用哪些外包团队）和团队看板。用最保守的语法编写，Node 版本过旧时也能运行，并把问题说清楚 |
-| `skills/subagent-team/scripts/team-board.mjs` | 团队看板：`init` 生成 `docs/agent-team/` 骨架（从不覆盖已有文件），`new` 新建任务卡片并登记到索引，`status` 汇总任务状态和待回答的问题，并报告索引、卡片和 `AGENTS.md` 之间的不一致 |
+| `skills/subagent-team/scripts/team-board.mjs` | 团队看板：`init` 生成 `docs/agent-team/` 骨架（从不覆盖已有文件），`new` 新建任务卡片并登记到索引，`set` 同时修改卡片和索引里的状态，`status` 汇总任务状态和待回答的问题，并报告索引、卡片、`lessons.md` 和 `AGENTS.md` 之间的不一致（加 `--strict` 时有任何不一致即失败） |
 | `skills/subagent-team/scripts/model-roster.mjs` | 从 OpenRouter 的公开模型列表拉取 Anthropic / OpenAI / Google / DeepSeek 的最新模型，附价格和上下文长度，用来把抽象档位映射到当前型号 |
 | `skills/subagent-team/scripts/audit-dispatch.mjs` | 从宿主会话记录中列出本次会话实际跑了什么：每个 subagent 的模型与 effort，以及外包作业。仅限 Claude Code |
 | `skills/cli-agent-delegation/scripts/codex-run.mjs` | 封装 `codex exec` 和 `exec resume`。必须显式传 effort；拒绝 `ultra` 和 `danger-full-access`；支持超时；日志和最终回复写到文件；输出带 session id 的 JSON 摘要 |

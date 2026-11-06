@@ -4,7 +4,7 @@ description: Outsource well-specified bulk coding work to another vendor's agent
 license: MIT with Commons Clause v1.0 (see LICENSE)
 compatibility: Built for Claude Code (primary) and Codex (secondary) as the host; other hosts are unverified. Needs a shell. The helper scripts need Node.js 18+ (24 recommended); external agents need their own CLIs and accounts (Codex CLI, agy, OpenCode). Run scripts/doctor.mjs first.
 metadata:
-  version: "0.3.4"
+  version: "0.3.5"
 ---
 
 # CLI Agent Delegation
@@ -33,6 +33,8 @@ Before the first external job, ask the user one multi-select question: which det
 
 When the user asks to check, add or drop a team ("can Codex take this?", "stop using agy"), follow [references/roster-and-verification.md](references/roster-and-verification.md). Never interrupt running jobs for it.
 
+A preference such as "use OpenCode's GPT models for now" usually follows quota (credits about to expire, a channel used up) and is **session scope**: apply it to new jobs only, leave running jobs on their team, and do not write it into the project's roster unless the user asks for a lasting change. When a channel runs out mid-run, the layer above switches to an agreed same-tier substitute (agree the order when asking which teams may take work); when a team · model needs content rework twice in a row, the next job goes to a stronger model on that channel or to another team.
+
 ## 2. Gate: should this be outsourced at all?
 
 For **implementation**, only when **all four** hold:
@@ -40,9 +42,9 @@ For **implementation**, only when **all four** hold:
 1. **Fully specified**: what to do and which files are decided; no product or architecture decisions remain.
 2. **No risk**: no business code for billing, payment or auth; no data migrations; no concurrency or data-loss paths; mistakes are easy to see and roll back.
 3. **Objective acceptance**: runnable commands, or a checklist anyone can tick (key sets, placeholders, line counts, snapshots).
-4. **Bulk or repetitive**: translations from a frozen key list, mechanical renames, filling in from a template, homogeneous integrations, snapshot and exhaustive tests, doc and README syncs. A small pure module with no billing or auth role, a frozen signature and hand-checkable cases also qualifies.
+4. **Worth the job's overhead**: translations from a frozen key list, mechanical renames, filling in from a template, homogeneous integrations, snapshot and exhaustive tests, doc and README syncs; or one bounded unit from a frozen spec, large enough to amortize the start-up cost: a small pure module with no billing or auth role, a frozen signature and hand-checkable cases, or a screen or component whose spec fixes every state and layout. The live walkthrough of such a screen stays in-house.
 
-If writing the brief costs as much as doing the job (a ten-line edit), do not outsource. Tests and snapshots *for* a sensitive module are fine; the module's business code is not.
+If writing the brief costs as much as doing the job (a ten-line edit), do not outsource. If a deterministic script with a checked mapping can do a bulk change, prefer the script. Tests and snapshots *for* a sensitive module are fine; the module's business code is not.
 
 **Read-only review is a separate route.** An authorized external reviewer may inspect money, auth, schema and irreversible-data code; the implementation risk and bulk criteria do not bar this. Freeze the review scope and revision, prohibit edits, and require findings with triggers and evidence. For sensitive work use another vendor's strong model at high effort alongside an independent in-house senior review, not as its replacement. Reproduce or verify findings before fixing; acceptance stays in-house. If no authorized external reviewer is available, retain one independent in-house senior review and record the missing external opinion; stricter project review gates still apply. Brief and closure procedure: [references/read-only-reviews.md](references/read-only-reviews.md).
 
@@ -61,7 +63,7 @@ If writing the brief costs as much as doing the job (a ten-line edit), do not ou
 
 Implementation uses `medium` or `high`; a question that seems to need effort above high returns to an in-house expert before more code is written. Risky read-only review uses `high`. Choose by role and risk, not by the channel's default or the size of the diff.
 
-Model names are examples from 2026-10. List what is actually available: `agy models`, Codex's `~/.codex/models_cache.json` (the doctor lists it), `opencode-acp-run.mjs probe` in that directory. Do not use agy or OpenCode to call your in-house family (Claude models under a Claude host, GPT under a Codex host): that routes work back home and adds cost, not perspective. **Gemini CLI is deprecated** (merged into agy): recommend agy. Under a Codex host, Codex CLI is in-house, not an external team.
+Model names are examples from 2026-10. List what is actually available: `agy models`, Codex's `~/.codex/models_cache.json` (the doctor lists it), `opencode-acp-run.mjs probe` in that directory. Do not use agy or OpenCode to call your in-house family (Claude models under a Claude host, GPT under a Codex host): that routes work back home and adds cost, not perspective. If the user chooses to anyway (often for a separate quota), follow them; those jobs never count as a second vendor's opinion. **Gemini CLI is deprecated** (merged into agy): recommend agy. Under a Codex host, Codex CLI is in-house, not an external team.
 
 ## 4. Brief
 
@@ -100,7 +102,7 @@ Each team has a preferred channel and a ladder below it. Move down **the same te
 The job's report is a claim. Acceptance is yours (or your liaison's, for the mechanical steps):
 
 1. `git status --short` and `git diff --stat`: did it stay inside the lease?
-2. Run the acceptance commands yourself, even if the external report says they passed. Refused or skipped checks stay pending until an authorized in-house runner executes them; a successful job exit is not proof of acceptance.
+2. Run the acceptance commands yourself, even if the external report says they passed. A job that exits 0 but logged errors (network `ERROR` lines, give-up retries, failed tool calls) is not accepted on its exit code; check its partial edits like any other. Refused or skipped checks stay pending until an authorized in-house runner executes them; a successful job exit is not proof of acceptance.
 3. Content work (translations, copy, examples) is reviewed and edited, not just accepted: key sets identical across languages, `{placeholders}` and escapes such as `\n` preserved, order matching the base file.
 4. Docs work: check every verifiable fact (versions, scripts, paths, environment variables, endpoints).
 5. Arrange independent in-house content review of the diff, including generated tests and snapshots. Check cases and expected values against the frozen requirements; passing tests can mirror a wrong implementation. Routine review uses mid tier · medium; money, auth, schema and irreversible-data review requires high or top tier · high, on a model other than the author's. Small issues: fix them in-house where the flow allows; larger ones: continue the same job with the concrete failure. **Two failed rounds → take it back in-house.** A liaison only relays failures and never edits code.
