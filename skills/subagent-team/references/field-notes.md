@@ -16,6 +16,20 @@ The repository report *Field report: four weeks of delegation in one project (20
 
 The audit reinforces existing separation of duties; it does not justify outsourcing sensitive implementation, removing review for stronger authors or claiming every channel is verified. Current support levels remain in [external-teams.md](external-teams.md); dispatch rules in [model-tiers.md](model-tiers.md), review closure in [verification.md](verification.md), and the method in [SKILL.md](../SKILL.md).
 
+## Lessons from two projects in one week (2026-11)
+
+Collected from the policy sections and boards of a mobile-and-services monorepo and a web SaaS project after a week of daily use.
+
+- **A plan with every path saves a rework round.** Credit enforcement went back for rework over a lost admin cost record and an endless poll at zero balance. Both were paths through the change (an existing caller, a client polling a new refusal) that a path-by-path plan, reviewed before code, would have shown. Plans now list each new state's effect on callers, polling, retries, cost records and old clients ([SKILL.md](../SKILL.md), "Workflow").
+- **The user asked for shallower live checks, twice.** After a provider switch, one live call per provider's main model was enough; ledger forensics and full walkthroughs were not wanted. For a cron path, waiting for the next run cost an hour; a test of the handler proved the same thing ([verification.md](verification.md), "How deep live checks go").
+- **A regression ran while an external job was still editing.** The dev server hot-reloaded half-written files and one failed response never reproduced. Walk after the writers stop.
+- **Channel preferences followed quota.** The external order changed three times in six days (OpenCode first, then last, then first again) as credits neared expiry or ran out, and each change was appended to the policy with its history. The section grew to about 40 dense lines with expired rules beside current ones. Preferences like these are session scope; lasting changes rewrite the rule in place ([user-overrides.md](user-overrides.md), [project-setup.md](project-setup.md), "Keeping the section short").
+- **A user instruction never reached the roster.** A task request named OpenCode's GPT models, the work used them, and the project's roster still listed only the older teams. A roster lists what a team can do; it is updated when a team is verified, not when it is preferred.
+- **The board drifted and nobody ran the check.** Every card said `done` (not a status word), the index still said `planned`, and the completed log named tasks without cards. `team-board.mjs status` printed every warning and returned ok. It now has `set` for transitions and `--strict` for close-out ([team-board.md](team-board.md)).
+- **A lesson was "promoted to" local memory.** The rule existed only on one machine. `status` now flags it.
+- **Floors were overridden by the user, on purpose.** Expert reviews on the same model as the author; Claude models through OpenCode under a Claude host; billing code sent out for three days (ended early after one). Each was the user's call and each needed a compensation (fresh-context review, "not a second vendor", a senior review and an end date), now listed in [user-overrides.md](user-overrides.md).
+- **Mechanical renames went better as a script** with a checked mapping than as repeated model edits; an agy job that exited 0 with network `ERROR` lines in its log was not accepted; and a verified snapshot was committed with `git hash-object` / `git update-index --cacheinfo` while a worker still held the file ([running-agents.md](running-agents.md)).
+
 ## Pace and authorization
 
 - Once the user authorizes continuous work, gather decisions toward the end: hard questions go to the strongest model, undecidable ones to *Open questions*, and the user gets one list at the end. Interrupting the user repeatedly costs more than a wrong, reversible small decision.

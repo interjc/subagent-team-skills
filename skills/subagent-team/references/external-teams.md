@@ -21,7 +21,7 @@ Recorded in the project's `## Subagent team` section ([project-setup.md](project
 
 Rules for every external team:
 
-- **Different family from in-house.** A team that just routes back to your in-house vendor's models adds cost without a second perspective. Pick its other-vendor models.
+- **Different family from in-house.** A team that just routes back to your in-house vendor's models adds cost without a second perspective. Pick its other-vendor models. When the user chooses in-house-family models on an external channel, those jobs are allowed but never count as a second vendor's opinion ([user-overrides.md](user-overrides.md), "Defaults and floors").
 - **Pin the model and effort per job**; never rely on the external tool's defaults, which often come from a personal config file.
 - **Bound every job** with a timeout, and know how to kill it (process group, plugin's cancel command).
 - **Results go to files** (final reply, log, summary) so a liaison or a later session can read them.
@@ -45,7 +45,21 @@ Whatever the value, the user can change the choice at any time.
 1. **Do not interrupt running jobs.** Cancel one only if the user asks, through its own channel, and confirm it stopped. Queued jobs wait until the check is done.
 2. **Check, cheapest first**: `doctor.mjs` (presence, versions, plugins, Codex's default effort); `opencode-acp-run.mjs probe --repo <repo>` for OpenCode (auth methods, models, effort levels, whether the wrapper's permission set applies); the plugin's own check (`/codex:setup`, agy-staff `setup`); then one tiny read-only job for a team or model not used before. A liaison can run these; the director only sees the table.
 3. **Report one table**: team, channel, found and version, signed in, model for external-fast and external-strong, may edit or review only, verified date, and what you recommend.
-4. **Apply**: update the session choice in the board's progress record; if the change should last, update the roster row and its *Status* in the policy; re-run the gate for queued tasks and re-route their cards (team, model, effort); add a `lessons.md` row with the date and the user's words.
+4. **Apply** to new dispatches only: update the session choice in the board's progress record; re-run the gate for queued tasks and re-route their cards (team, model, effort). Running jobs keep their team. Change the roster row and its *Status* in the policy, with a `lessons.md` row carrying the user's words, only when the user asks for a lasting change: "prefer X now" is session scope ([user-overrides.md](user-overrides.md), "How long an instruction lasts").
+
+A roster row records what a team *can* do and whether it is verified; the order in which teams are tried is a separate, short line (`External order:`) that changes only on a lasting instruction. Keep both free of history: an order that was replaced goes to `decisions.md` as overturned, not into the policy.
+
+## Quota and substitutes
+
+Users often steer channels by quota: credits that expire soon get used first, and a channel that has run out needs a substitute. When a channel reports quota, credit or sign-in exhaustion, the director picks a same-tier substitute from the teams allowed this session and records the switch in one line ("OpenCode quota exhausted; T4.b goes to agy `gemini-4-argon` · high"). Agree the substitute order when asking which teams may take work at session start, so the switch needs no question later. Ask only when no agreed substitute exists and the switch would widen the roster.
+
+## Quality of a channel
+
+Track how each team · model performs during the run, on the board's `progress.md` or the cards: accepted first time, accepted after rework, or taken back in-house. Count only content failures (wrong code, missed spec, weak tests); sign-in, quota, sandbox and network failures are availability, not quality.
+
+- **Two jobs in a row on the same team · model need content rework, or one is taken back in-house**: change it for the next job. Move to a stronger model on the same channel (agy flash → `gemini-4-argon`, Codex `medium` → `high`), or to another team of the same tier when the channel's strongest model is already in use. Say the change in the dispatch line.
+- **A team that keeps failing after that** is dropped for the rest of the session, with a `lessons.md` row; drop it from the roster only on the user's word.
+- Rework of a job already running stays with the same session: changing teams applies to new jobs.
 
 ## Fallbacks
 
@@ -76,7 +90,7 @@ An agent behind MCP is called as a tool of the host, so the call is synchronous 
 
 ## The liaison
 
-A liaison is an **L3, low-tier, low-effort** in-house subagent assigned to one external job, or to one external team for a series of sequential jobs. It spends cheap tokens on waiting, routine checks and simple answers, so the director's and the experts' contexts only see results and real questions.
+A liaison is an **L3, low-tier, low-effort** in-house subagent assigned to one external job, or to one external team for a series of sequential jobs. It runs on the host vendor's own lowest tier (for example Haiku under Claude Code; Codex's lightest model under Codex), never on an external channel. It spends cheap tokens on waiting, routine checks and simple answers, so the director's and the experts' contexts only see results and real questions. Every external job has one; without subagents the director runs the job in the background instead.
 
 Keep mechanical collection and command execution at low tier. If factual checks require reading code, use a mid-tier liaison or a separate in-house reviewer; semantic acceptance of generated tests belongs to that reviewer, at the module's risk floor.
 

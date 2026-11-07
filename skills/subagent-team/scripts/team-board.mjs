@@ -4,7 +4,8 @@
 //   team-board.mjs init   [--root <dir>] [--dir <rel>] [--dry-run]
 //   team-board.mjs new    --id <ID> --title <text> [--flow <preset|text>] [--holder <name>]
 //                         [--parent <ID>] [--escalate-to <who>] [--no-index] [--root] [--dir] [--dry-run]
-//   team-board.mjs status [--root <dir>] [--dir <rel>]
+//   team-board.mjs set    --id <ID> --status <status> [--root <dir>] [--dir <rel>] [--dry-run]
+//   team-board.mjs status [--root <dir>] [--dir <rel>] [--strict]
 //
 // The board is plain Markdown in the repository, so every agent and tool can
 // read it: in-house subagents, external CLI agents, a later session, another
@@ -42,13 +43,16 @@ Usage:
   team-board.mjs init   [--root <dir>] [--dir <rel>] [--dry-run]
   team-board.mjs new    --id <ID> --title <text> [--flow <preset|text>] [--holder <name>]
                         [--parent <ID>] [--escalate-to <who>] [--no-index] [--root <dir>] [--dir <rel>] [--dry-run]
-  team-board.mjs status [--root <dir>] [--dir <rel>]
+  team-board.mjs set    --id <ID> --status <status> [--root <dir>] [--dir <rel>] [--dry-run]
+  team-board.mjs status [--root <dir>] [--dir <rel>] [--strict]
 
 Options:
   --root <dir>         Project root (default: current directory).
   --dir <rel>          Board directory relative to the root (default: ${DEFAULT_DIR}).
   --id <ID>            Task id, e.g. T3 or T3.a (letters, digits, . _ -).
   --title <text>       One-line task title.
+  --status <status>    New card status: ${STATUSES.join(', ')}.
+  --strict             Status only: fail when any warnings are found.
   --flow <preset>      ${Object.keys(FLOWS).join(' | ')}, or free text (default: direct).
   --holder <name>      The card's only writer (default: director).
   --parent <ID>        Parent task for a sub-task or external job.
@@ -61,7 +65,8 @@ init never overwrites existing files. It does not edit AGENTS.md: add the
 
 Output: one JSON object on stdout; hints on stderr.
 Exit codes: 0 ok (warnings allowed); 1 usage error; 2 board not found; 3 card already exists;
-4 file system error (for example the board path is a file).
+4 file system error (for example the board path is a file); 5 warnings found under --strict;
+6 card not found or has no Status line.
 `;
 
 export class UsageError extends Error {}
@@ -69,13 +74,17 @@ export class UsageError extends Error {}
 export function parseArgs(argv) {
   const [command, ...rest] = argv;
   if (!command || command === '--help' || command === '-h') return { help: true };
-  if (!['init', 'new', 'status'].includes(command)) throw new UsageError(`unknown command: ${command}`);
+  if (!['init', 'new', 'set', 'status'].includes(command)) throw new UsageError(`unknown command: ${command}`);
   const opts = { command, root: process.cwd(), dir: DEFAULT_DIR, index: true, dryRun: false };
-  const valued = { '--root': 'root', '--dir': 'dir', '--id': 'id', '--title': 'title', '--flow': 'flow', '--holder': 'holder', '--parent': 'parent', '--escalate-to': 'escalateTo' };
+  const valued = { '--root': 'root', '--dir': 'dir', '--id': 'id', '--title': 'title', '--status': 'status', '--flow': 'flow', '--holder': 'holder', '--parent': 'parent', '--escalate-to': 'escalateTo' };
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     if (a === '--help' || a === '-h') return { help: true };
     if (a === '--dry-run') opts.dryRun = true;
+    else if (a === '--strict') {
+      if (command !== 'status') throw new UsageError('--strict is only valid for status');
+      opts.strict = true;
+    }
     else if (a === '--no-index') opts.index = false;
     else if (valued[a]) {
       const v = rest[i + 1];
@@ -88,9 +97,12 @@ export function parseArgs(argv) {
   if (path.isAbsolute(opts.dir) || opts.dir.split(/[\\/]/).includes('..')) throw new UsageError('--dir must be a path inside the root');
   opts.dir = path.posix.normalize(opts.dir.replace(/\\/g, '/')).replace(/\/+$/, '');
   if (opts.dir === '.' || opts.dir === '') throw new UsageError('--dir must be a subdirectory, not the project root (the board would write into the project\'s own README.md)');
-  if (command === 'new') {
+  if (command === 'new' || command === 'set') {
     if (!opts.id || !ID_RE.test(opts.id)) throw new UsageError('--id is required: letters, digits, ".", "_" or "-", starting with a letter');
     if (/^readme$/i.test(opts.id)) throw new UsageError('--id README is reserved');
+  }
+  if (command === 'set' && !STATUSES.includes(opts.status)) throw new UsageError(`--status is required and must be one of: ${STATUSES.join(', ')}`);
+  if (command === 'new') {
     if (!opts.title || !opts.title.trim()) throw new UsageError('--title is required');
     if (opts.parent && !ID_RE.test(opts.parent)) throw new UsageError('--parent must be a task id');
   }
@@ -324,6 +336,85 @@ export function newCard(opts) {
 
 const stripComments = (s) => s.replace(/<!--[\s\S]*?-->/g, '');
 
+// Keep offsets and line endings intact while hiding commented-out Markdown.
+const maskComments = (s) => s.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\r\n]/g, ' '));
+
+export function setCardStatus(text, status, date) {
+  const lines = text.split('\n');
+  const visible = maskComments(text).split('\n');
+  const section = visible.findIndex((line) => /^## /.test(line));
+  const headerEnd = section < 0 ? lines.length : section;
+  const i = visible.findIndex((line, n) => n < headerEnd && /^-\s*Status:/i.test(line));
+  if (i < 0) return null;
+  const from = parseCard(text).status;
+  if (from === status) return { text, from, changed: false, logged: false };
+  const match = lines[i].match(/^(-\s*Status:[ \t]*)(.*?)([ \t]*(?:<!--[\s\S]*?-->[ \t]*)?\r?)$/i);
+  lines[i] = `${match[1]}${status}${match[3]}`;
+  const log = visible.findIndex((line) => /^##\s+Log\s*$/i.test(line));
+  if (log >= 0) {
+    let end = log + 1;
+    while (end < lines.length && !/^## /.test(visible[end])) end++;
+    while (end > log + 1 && !lines[end - 1].trim()) end--;
+    lines.splice(end, 0, `- ${date} status: ${from} → ${status}${text.includes('\r\n') ? '\r' : ''}`);
+  }
+  return { text: lines.join('\n'), from, changed: true, logged: log >= 0 };
+}
+
+export function setIndexStatus(text, id, status) {
+  const lines = text.split('\n');
+  const visible = maskComments(text).split('\n');
+  const i = visible.findIndex((line) => parseIndex(line).some((row) => row.file === `tasks/${id}.md`));
+  if (i < 0) return null;
+  const lastPipe = visible[i].lastIndexOf('|');
+  const previousPipe = visible[i].lastIndexOf('|', lastPipe - 1);
+  const oldCell = lines[i].slice(previousPipe + 1, lastPipe);
+  const leading = oldCell.match(/^\s*/)[0];
+  const trailing = oldCell.match(/\s*$/)[0];
+  lines[i] = lines[i].slice(0, previousPipe + 1) + leading + status + trailing + lines[i].slice(lastPipe);
+  return lines.join('\n');
+}
+
+export function setStatus(opts) {
+  const boardDir = path.join(opts.root, opts.dir);
+  const indexFile = path.join(boardDir, 'README.md');
+  if (!fs.existsSync(indexFile)) return { exit: 2, result: { ok: false, error: `no board at ${toPosix(opts.dir)}; run init first` } };
+  const cardRel = `tasks/${opts.id}.md`;
+  const cardFile = path.join(boardDir, cardRel);
+  if (!fs.existsSync(cardFile)) return { exit: 6, result: { ok: false, error: `${cardRel} does not exist; create it with new` } };
+  const card = setCardStatus(fs.readFileSync(cardFile, 'utf8'), opts.status, today());
+  if (!card) return { exit: 6, result: { ok: false, error: `${cardRel} has no Status line` } };
+  const warnings = [];
+  const originalIndex = fs.readFileSync(indexFile, 'utf8');
+  const indexText = setIndexStatus(originalIndex, opts.id, opts.status);
+  if (indexText === null) warnings.push(`README.md has no row for ${cardRel}; add it by hand`);
+  // A stale index row is repaired even when the card already has the status.
+  const indexUpdated = indexText !== null && indexText !== originalIndex;
+  if (!opts.dryRun) {
+    if (indexUpdated) fs.writeFileSync(indexFile, indexText);
+    if (card.changed) fs.writeFileSync(cardFile, card.text);
+  }
+  return { exit: 0, result: { ok: true, command: 'set', dryRun: opts.dryRun, card: toPosix(path.join(opts.dir, cardRel)), from: card.from, to: opts.status, changed: card.changed || indexUpdated, cardUpdated: card.changed, indexUpdated, logged: card.logged, warnings } };
+}
+
+export function lessonsWarnings(text) {
+  const warnings = [];
+  let promoted = -1;
+  for (const line of stripComments(text).split('\n')) {
+    if (!/^\s*\|/.test(line)) { promoted = -1; continue; }
+    const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split(/(?<!\\)\|/).map((c) => c.trim());
+    const header = cells.findIndex((c) => /^promoted to$/i.test(c));
+    if (header >= 0) { promoted = header; continue; }
+    if (promoted < 0 || cells.every((c) => /^:?-+:?$/.test(c))) continue;
+    const value = cells[promoted] || '';
+    if (/^(?:|—|-|n\/a)$/i.test(value)) continue;
+    const prefix = `lessons.md row ${cells[0]}: `;
+    const repositoryLink = [...value.matchAll(/\]\(([^)]+)\)/g)].some((match) => !/^https?:\/\//i.test(match[1].trim()));
+    if (/\bmemory\b/i.test(value)) warnings.push(prefix + 'promoted to local agent memory; rules live in the repository (write the rule into AGENTS.md and link it)');
+    else if (!/\b(?:AGENTS|CLAUDE)\.md\b/i.test(value) && !repositoryLink) warnings.push(prefix + '"Promoted to" has no link to a file in the repository');
+  }
+  return warnings;
+}
+
 export function parseCard(text) {
   const clean = stripComments(text.replace(/\r\n/g, '\n'));
   const lines = clean.split('\n');
@@ -371,7 +462,7 @@ export function parseIndex(text) {
   return rows;
 }
 
-export function boardStatus({ root, dir }) {
+export function boardStatus({ root, dir, strict }) {
   const boardDir = path.join(root, dir);
   const indexFile = path.join(boardDir, 'README.md');
   if (!fs.existsSync(indexFile)) return { exit: 2, result: { ok: false, error: `no board at ${toPosix(dir)}; run init first` } };
@@ -387,6 +478,7 @@ export function boardStatus({ root, dir }) {
     const id = card.id || f.replace(/\.md$/, '');
     if (card.id && card.id !== f.replace(/\.md$/, '')) warnings.push(`${rel}: heading id "${card.id}" differs from the file name`);
     if (!card.status) warnings.push(`${rel}: no "Status:" line`);
+    else if (/^(done|complete|completed|finished|closed)$/i.test(card.status)) warnings.push(`${rel}: status "${card.status}" is ambiguous: use "accepted" (checks and review passed) or "committed" (in git); push and deploy state go in progress.md`);
     else if (!STATUSES.includes(card.status)) warnings.push(`${rel}: unknown status "${card.status}" (use ${STATUSES.join(', ')})`);
     if (!card.holder) warnings.push(`${rel}: no "Holder:" line (every card needs exactly one writer)`);
     const row = index.find((r) => r.file === rel);
@@ -399,14 +491,17 @@ export function boardStatus({ root, dir }) {
   if (!fs.existsSync(path.join(root, policy))) warnings.push(`${policy} does not exist: create it with a "## Subagent team" section that links to the board`);
   else if (!policyMentionsBoard(root, policy, dir)) warnings.push(`${policy} does not mention ${toPosix(dir)}: add "- Team board: ${toPosix(dir)}/README.md" to its "## Subagent team" section`);
   if (!/\]\([^)]*(AGENTS|CLAUDE)\.md\)/.test(indexText)) warnings.push(`README.md does not link back to ${policy}`);
+  const lessonsFile = path.join(boardDir, 'lessons.md');
+  if (fs.existsSync(lessonsFile)) warnings.push(...lessonsWarnings(fs.readFileSync(lessonsFile, 'utf8')));
   const openQuestions = tasks.flatMap((t) => t.openQuestions.map((q) => ({ task: t.id, ...q })));
   const byStatus = {};
   for (const t of tasks) byStatus[t.status || 'unknown'] = (byStatus[t.status || 'unknown'] || 0) + 1;
   const active = tasks.filter((t) => !['committed', 'cancelled'].includes(t.status)).map((t) => t.id);
   return {
-    exit: 0,
+    exit: strict && warnings.length ? 5 : 0,
     result: {
-      ok: true, command: 'status', dir: toPosix(dir), policyFile: policy,
+      ok: !(strict && warnings.length), command: 'status', dir: toPosix(dir), policyFile: policy,
+      ...(strict === undefined ? {} : { strict }),
       counts: { tasks: tasks.length, active: active.length, openQuestions: openQuestions.length, forHuman: openQuestions.filter((q) => /human|user/i.test(q.to || '')).length, byStatus },
       openQuestions, tasks, warnings,
     },
@@ -433,6 +528,7 @@ function main(argv) {
       if (!result.policyLinked) console.error(`hint: add this line to the "## Subagent team" section of ${result.policyFile}:\n  ${result.pointer}`);
       out = { exit: 0, result };
     } else if (opts.command === 'new') out = newCard(opts);
+    else if (opts.command === 'set') out = setStatus(opts);
     else out = boardStatus(opts);
   } catch (err) {
     if (!err || !err.code) throw err;
