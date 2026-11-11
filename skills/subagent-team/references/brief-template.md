@@ -96,7 +96,7 @@ The liaison (L3, low tier) tracks one external job, or one team's sequential job
 ```markdown
 ## Job
 Card: <docs/agent-team/tasks/<ID>.md> (you are its holder; keep Status, Job, Log and Questions current)
-External team: <team> via <CLI | plugin | MCP>; model <id>; effort <level>; sandbox <read-only | workspace-write>
+External team: <team> via <CLI | plugin | MCP>; model <id>; effort <level>; sandbox <read-only | workspace-write>; confidentiality <full | standard | restricted>; must not open: <confidential paths, or "none">
 Frozen brief for the external agent: <path> (do not change it; continuations quote from it)
 Workspace: <absolute path>; lease of the job: <paths>; must not touch: <paths>
 Running at the same time in this workspace: <jobs and their paths, or "none"> (their changes in `git status` are not yours to report or reject)
@@ -122,12 +122,13 @@ At the job timeout, report partial results and the resumable id; do not restart 
 ## Escalate to <L2 name | L1> (message + `[open]` question on the card), then wait
 - Any decision the brief does not make; contradictions in the spec
 - A second failed round; changes outside the lease; a resumable timeout; the team unavailable
+- Quota or credit exhaustion: report the error text, the reset time if given, job state and ids, and the partial diff. Do not retry, do not wait for the reset, do not switch teams: escalate and stop
 
 ## Never
 Edit code, commit, talk to the user, start a second job for the same work, widen the lease.
 
 ## Report (at transitions only: dispatched, returned, accepted / rework, escalated)
-One line each: job id, verdict, changed files, acceptance numbers, open questions, and for user-facing changes "E2E: pending director" with the flows to walk.
+One line each: job id, verdict, changed files, acceptance numbers, open questions, quota signals (usage figures, rate-limit or retry warnings, reset time quoted exactly, or "none"), and for user-facing changes "E2E: pending director" with the flows to walk.
 ```
 
 ## Reviewer brief

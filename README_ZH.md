@@ -61,7 +61,7 @@
 | Grok Build、Cursor、Pi 以及 [ACP Registry](https://agentclientprotocol.com/get-started/registry) 里的其他 agent | ACP | 尚未用于实际工作。已在 Grok Build 和 Cursor 上验证会话建立。Gemini CLI 已并入 agy，视为弃用，请用 agy。[接入指南](skills/cli-agent-delegation/references/acp-agents.md)借鉴了 [T3 Code](https://github.com/pingdotgg/t3code) 支持多种 agent 的做法，给出准入检查、权限策略和常见陷阱 |
 | 其他 CLI，以及通过 MCP 暴露的 agent | CLI / MCP | 未测试。skill 给出接入新 CLI 的检查步骤，先跑一个只读小任务验证再用 |
 
-会话开始时，agent 会问你检测到的外包团队里哪些可以接活（或者直接读项目策略里的选择）；之后只要你开口（"Codex 能审这个吗？""加上 OpenCode""别再用 agy 了"），它就会重新核实并调整。每个团队都有降级路线：先换同一团队的其他通道，再换同档位的其他团队，最后收回内部。
+会话开始时，agent 会问你检测到的外包团队里哪些可以接活（或者直接读项目策略里的选择）；之后只要你开口（"Codex 能审这个吗？""加上 OpenCode""别再用 agy 了"），它就会重新核实并调整。每个团队都有降级路线：先换同一团队的其他通道，再换同档位的其他团队，最后收回内部。外包期间，agent 会按「通道 · 模型」记一份额度台账：某个模型的额度用完，就换到另一个通道上同档位的平替模型；外部全部用尽，再回到内部的平替模型；同时记下额度恢复的时间（查不到就问你）。如果某个通道额度还很富余，或者额度快到期，它会问你要不要优先消耗，以及这个安排只管本次会话还是长期有效。每个外包团队能看到多少代码也由你决定：agent 会逐个团队向你确认保密等级，长期有效的答案存在项目里的一个文件中，默认不进 git，你要求时才纳入版本管理。
 
 ## 安装
 

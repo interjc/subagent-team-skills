@@ -20,7 +20,7 @@ When the host can run subagents with shell access, give each external job (or ea
 
 - The same loop works for `agy-run.mjs` and `opencode-acp-run.mjs`. Use a **fresh `--out-dir` for every round** (first run, each rework, each resume): the wrappers write `summary.json` only at the end, so a reused directory would end the wait at once.
 - It checks the lease, runs acceptance commands and checks content structure as described in "Acceptance" in [SKILL.md](../SKILL.md), then sends one rework round for mechanical failures with the concrete output. The brief names each check's execution owner and environment. If a command was refused externally, run it where authorized in-house or leave it pending and escalate; never count a refusal as a pass or loosen the external permissions. Blockers in the final reply are answered only when the answer is already in the brief or the repository; everything else, and any second failure, goes back to whoever assigned the job. Independent in-house review still judges content, especially generated test cases and expected values.
-- When the team is unavailable (auth, quota, network), the liaison reports it and does not switch teams on its own: the layer above picks the fallback (Channels and fallbacks in [SKILL.md](../SKILL.md)).
+- When the team is unavailable (auth, quota, network), the liaison reports it and does not switch teams on its own: the layer above picks the fallback (Channels and fallbacks in [SKILL.md](../SKILL.md)). For quota it reports the error text and any reset time exactly as printed, with no retry and no waiting for the reset. Every report after a job returns lists the quota signals seen (usage or cost figures, rate-limit or retry warnings), or "none" ([quota.md](quota.md)).
 
 ## Host notes
 
