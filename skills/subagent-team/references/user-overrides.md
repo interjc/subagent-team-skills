@@ -15,13 +15,14 @@ When the wording is unclear, treat it as session scope and say once in the end-o
 ## Which work it touches
 
 - **New dispatches only.** Jobs and subagents already running keep their team, model and effort; do not cancel or restart them to follow the new instruction. Queued work that has not been dispatched is re-routed: re-run the gate and update its card.
-- A rework round continues with the agent that did the first round unless the instruction is about that agent's quality ([external-teams.md](external-teams.md), "Quality of a channel").
+- A rework round continues with the agent that did the first round unless the instruction is about that agent's quality ([external-teams.md](external-teams.md), "Quality of a channel"), or its channel · model ran out of quota ([quota.md](quota.md)).
 
 ## Judgment the director keeps
 
 An instruction sets a preference, not a script. The director still decides each dispatch:
 
-- **A channel runs out** (quota, credits, sign-in, model retired): pick a substitute of the same tier from the teams allowed this session, say the switch in one line, and record it on the card. Agree the substitute order early when you can: when asking which teams may take work at session start, also ask "if X runs out, use Y?". Ask the user before a switch only when no agreed substitute exists and the only option would widen the session's roster.
+- **A channel runs out** (quota, credits, sign-in, model retired): pick a substitute of the same tier from the teams allowed this session, say the switch in one line, and record it on the card. Agree the substitute order early when you can: when asking which teams may take work at session start, also ask "if X runs out, use Y?". Ask the user before a switch only when no agreed substitute exists and the only option would widen the session's roster. When every allowed external option for the tier is out, come back to the in-house substitute; record the reset time and return after it ([quota.md](quota.md)).
+- **A channel has plenty left, or credits about to expire**: this is the user's choice, not the director's. Ask whether to spend it first and whether that is for this session or lasting; a spend-first rule reorders the teams that fit a job and never bypasses the gate or a tier ([quota.md](quota.md), "Spending a channel first").
 - **A channel keeps delivering poor work**: move it to a stronger model on the same channel, or to another team ([external-teams.md](external-teams.md), "Quality of a channel").
 - **The preference does not fit the job** (the preferred channel cannot reach the needed tier, or the job fails the gate): follow the gate, and say why in the dispatch line.
 

@@ -174,6 +174,13 @@ Back to the [board](README.md). Dates are absolute (YYYY-MM-DD). Acceptance numb
 
 ## Next-up queue
 
+## Channel quota
+
+<!-- session state, not policy: one row per external channel and model whose quota matters; resets as an absolute time with zone -->
+
+| Channel · model | State | Checked | Resets | Source | Substitute |
+|---|---|---|---|---|---|
+
 ## User decisions
 
 <!-- numbered summary; the full record is in decisions.md -->

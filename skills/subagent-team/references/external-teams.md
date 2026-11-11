@@ -26,6 +26,7 @@ Rules for every external team:
 - **Bound every job** with a timeout, and know how to kill it (process group, plugin's cancel command).
 - **Results go to files** (final reply, log, summary) so a liaison or a later session can read them.
 - **A resumable id** (session, conversation, job id) is recorded on the card the moment the job starts.
+- **The user sets what each team may read.** Every channel · model has a confidentiality level the user confirms (`full`, `standard`, `restricted`, `none`); a team the user works with daily may be trusted fully, while free or promotional models on a gateway may log or train on what they receive and start at `restricted` or `none`. Never raise a level yourself; plenty of free quota is not a reason to. Levels, the questions and where the answer is kept: [confidentiality.md](confidentiality.md).
 - **No end-to-end testing.** External agents generally cannot drive a browser, device or the full stack. Their acceptance is static checks and unit tests; the director arranges end-to-end checks after acceptance ([verification.md](verification.md), "End-to-end checks for outsourced work").
 
 ## Choosing and adjusting external teams
@@ -51,7 +52,9 @@ A roster row records what a team *can* do and whether it is verified; the order 
 
 ## Quota and substitutes
 
-Users often steer channels by quota: credits that expire soon get used first, and a channel that has run out needs a substitute. When a channel reports quota, credit or sign-in exhaustion, the director picks a same-tier substitute from the teams allowed this session and records the switch in one line ("OpenCode quota exhausted; T4.b goes to agy `gemini-4-argon` · high"). Agree the substitute order when asking which teams may take work at session start, so the switch needs no question later. Ask only when no agreed substitute exists and the switch would widen the roster.
+Users often steer channels by quota: credits that expire soon get used first, and a channel that has run out needs a substitute. Quota belongs to a channel · model pair, so the director keeps a small **quota ledger** for the session (state, when it was checked, when it resets, the substitute) and reads it before each batch of dispatches.
+
+When one runs out, the director switches down the ladder in [quota.md](quota.md) (another allowed channel first, in-house last) and says so in one line ("OpenCode quota exhausted; T4.b goes to agy `gemini-4-argon` · high"); spending a plentiful or expiring quota first is the user's call. Agree the substitute order when asking which teams may take work at session start, so a switch needs no question later. The ledger, watching, the ladder, reset times, in-house substitutes per tier and the questions to ask: [quota.md](quota.md).
 
 ## Quality of a channel
 
@@ -102,14 +105,14 @@ Keep mechanical collection and command execution at low tier. If factual checks 
 4. **Check** with the acceptance commands from the card, even if the external report says they passed; for content work, the mechanical checks (identical key sets, placeholders and escapes preserved, order kept). The brief names which checks run externally and which run in-house. A refused command is pending, not passed: run it in an authorized in-house environment or escalate the gap without loosening the external sandbox. Passing commands is a handoff to independent review, not semantic acceptance.
 5. **Answer straightforward questions.** External agents report blockers in their final reply ("stopped: the key list has no entry for X"). If the answer is already in the brief, the contract, the card or a repository fact the liaison can look up, it answers by continuing the same job with the answer quoted from its source.
 6. **Rework once** for mechanical failures: continue the same job with the concrete failure output.
-7. **Report** to the card holder above it at real transitions only: dispatched, returned, accepted or rework, escalated. Keep the card's status and log current; the liaison is the holder of its job's card. For user-facing changes, end the report with `E2E: pending director` and the flows to walk; the liaison never runs them.
+7. **Report** to the card holder above it at real transitions only: dispatched, returned, accepted or rework, escalated. Each report after a job returns includes the quota signals it saw (usage figures, rate-limit or retry warnings, any reset time, quoted exactly), or "none" ([quota.md](quota.md)). Keep the card's status and log current; the liaison is the holder of its job's card. For user-facing changes, end the report with `E2E: pending director` and the flows to walk; the liaison never runs them.
 
 ### What the liaison escalates (to L2, or L1 if the flow has no L2)
 
 - anything that needs a decision the brief does not already make, or a contradiction in the spec
 - the second failed round (the layer above decides whether to take the work in-house)
 - changes outside the lease, or a request to widen it
-- a resumable timeout, partial results, or the external team being unavailable (quota, auth, network)
+- a resumable timeout, partial results, or the external team being unavailable (quota, auth, network); for quota, with the error text and the reset time if the channel gave one, with no retry and no waiting for the reset
 - anything touching a never-outsourced path
 
 The liaison never decides product or architecture, never edits code itself (only its card), never commits, never talks to the user, and never starts a second job for the same work while one is running.

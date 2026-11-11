@@ -4,7 +4,7 @@ description: Outsource well-specified bulk coding work to another vendor's agent
 license: MIT with Commons Clause v1.0 (see LICENSE)
 compatibility: Built for Claude Code (primary) and Codex (secondary) as the host; other hosts are unverified. Needs a shell. The helper scripts need Node.js 18+ (24 recommended); external agents need their own CLIs and accounts (Codex CLI, agy, OpenCode). Run scripts/doctor.mjs first.
 metadata:
-  version: "0.3.5"
+  version: "0.3.6"
 ---
 
 # CLI Agent Delegation
@@ -23,17 +23,18 @@ This page holds the decisions that apply to every team: gate, team choice, brief
 | hand a job to a liaison, wait on it, or adapt to a host | [references/liaison-and-hosts.md](references/liaison-and-hosts.md) |
 | send a read-only second opinion, especially on sensitive code | [references/read-only-reviews.md](references/read-only-reviews.md) |
 | answer "which teams may take work?" or re-verify a team | [references/roster-and-verification.md](references/roster-and-verification.md) |
+| watch quota, switch when a channel or model runs out, or spend one channel first | [references/quota.md](references/quota.md) |
 | judge timings, token costs and past lessons | [references/field-data.md](references/field-data.md) |
 
 ## 1. Start
 
 Script paths are relative to this skill's directory. Run `node scripts/doctor.mjs` once per session: it reports the Node version, Codex CLI (and its default effort), agy and agy-staff, OpenCode, and the Codex plugin. Without Node, check `codex --version`, `agy --version` and `opencode --version` by hand. Report blockers to the user; install only with their consent.
 
-Before the first external job, ask the user one multi-select question: which detected teams may take work in this session (each with its channel and what it would do), or none. Skip it when `subagent-team` already asked, the project policy says `External delegation: roster` or `none`, or the run is non-interactive; then state the choice in one line and record it where the team keeps state.
+Before the first external job, ask the user one multi-select question: which detected teams may take work in this session (each with its channel and what it would do), or none. With it, confirm how far each team is trusted with the code (`full`, `standard`, `restricted`, `none`): that is the user's call, recorded for the session or, when lasting, in a project file kept out of git by default ([references/roster-and-verification.md](references/roster-and-verification.md), "How far each team is trusted"). Skip it when `subagent-team` already asked, the project policy says `External delegation: roster` or `none`, or the run is non-interactive; then state the choice in one line and record it where the team keeps state.
 
 When the user asks to check, add or drop a team ("can Codex take this?", "stop using agy"), follow [references/roster-and-verification.md](references/roster-and-verification.md). Never interrupt running jobs for it.
 
-A preference such as "use OpenCode's GPT models for now" usually follows quota (credits about to expire, a channel used up) and is **session scope**: apply it to new jobs only, leave running jobs on their team, and do not write it into the project's roster unless the user asks for a lasting change. When a channel runs out mid-run, the layer above switches to an agreed same-tier substitute (agree the order when asking which teams may take work); when a team · model needs content rework twice in a row, the next job goes to a stronger model on that channel or to another team.
+A preference such as "use OpenCode's GPT models for now" usually follows quota (credits about to expire, a channel used up) and is **session scope**: apply it to new jobs only, leave running jobs on their team, and do not write it into the project's roster unless the user asks for a lasting change. Watch quota while jobs run: when a channel · model runs out, the layer above switches to the same-tier model on another allowed channel (agree the order when asking which teams may take work), comes in-house once every external option is out, and records the reset time; spending a plentiful quota first is the user's choice ([references/quota.md](references/quota.md)). When a team · model needs content rework twice in a row, the next job goes to a stronger model on that channel or to another team.
 
 ## 2. Gate: should this be outsourced at all?
 
