@@ -10,7 +10,7 @@ It installs nothing and reports:
 
 - **Hard requirements**: Node.js 22 or newer for the helper scripts, and git. **The user's version wins**: any Node.js at or above 22 that the user runs, or that the project pins, is used as it is; 24 or newer is only the choice for a new install, through nvm. It also reports the project's pin, whether nvm is installed, and whether the running Node.js is nvm's.
 - **Host harness hint**: which agent this session probably runs in, from environment variables. A hint to confirm, never a decision ([host-harness.md](host-harness.md)).
-- **Optional external teams**: Codex CLI and OpenAI's Codex plugin, agy and the agy-staff plugin, OpenCode (reachable through ACP), other agent CLIs on `PATH` (Pi, Grok), MCP servers in the project's `.mcp.json`.
+- **Optional external teams**: Codex CLI and OpenAI's Codex plugin, agy (warned when it is too old for its ACP server, `agy acp`, 1.5.0+) and the agy-staff plugin, OpenCode (reachable through ACP), other agent CLIs on `PATH` (Pi, Grok), MCP servers in the project's `.mcp.json`.
 - **Project policy and team board**: whether `## Subagent team` exists, records the host, and links a board.
 
 Exit `0` means ready, possibly with warnings; `2` means blocked. If `node` itself is missing, the command fails with "not found": treat that as a failed Node check ("Getting Node.js", below).
@@ -48,5 +48,6 @@ When Node.js is missing or older than 22:
 | Node.js 22+ | The method needs no scripts. Map tiers from the harness's model list and the vendor pages ([model-tiers.md](model-tiers.md)); write board files by hand from [team-board.md](team-board.md); for external teams, `cli-agent-delegation` lists the raw CLI commands. |
 | git | Not workable for team mode: leases, diffs, reviews and commits rely on it. Stay in Solo mode until git is installed. |
 | An external CLI | Go down that team's fallback ladder, then to another team of the same tier, then in-house (`cli-agent-delegation`, "Channels and fallbacks"). |
-| agy-staff plugin | Use `agy-run.mjs` or the raw `agy` CLI (skill `cli-agent-delegation`). |
+| agy-staff plugin | Nothing lost for jobs: they go through `agy-acp-run.mjs` (skill `cli-agent-delegation`); only its persona prompts are missing. Offer to install it. |
+| agy 1.5.0+ (`agy acp`) | Tell the user agy jobs would fall back to print mode, where writes skip every permission check, and offer to run `agy update`; until then `agy-run.mjs` with the risk stated. |
 | Codex plugin | Nothing lost for jobs: `codex-run.mjs` is the job channel; reviews run through it in `read-only`. |

@@ -1,6 +1,6 @@
 # Other ACP agents: what T3 Code does, and what carries over
 
-[T3 Code](https://github.com/pingdotgg/t3code) (MIT, `pingdotgg/t3code`) is a control surface that drives Claude Code, Codex, Cursor, Grok Build, OpenCode, Pi, Antigravity and any agent in the ACP Registry from one UI. Its integration design is the most worked-out public answer to "how do we support many agent CLIs without a special case per tool". This page records what we learned from its docs (internals, provider guides, permission modes), checks the parts that matter against real agents, and turns them into a procedure for adding an ACP agent as an external team.
+[T3 Code](https://github.com/pingdotgg/t3code) (MIT, `pingdotgg/t3code`) is a control surface that drives Claude Code, Codex, Cursor, Grok Build, OpenCode, Pi, Antigravity, Kiro, Muse Code, fx and any agent in the ACP Registry from one UI. Its FAQ says it stays within the agents' terms because everything outside its vendor-built integrations uses official ACP bindings, and it declines to build account switchers because they risk bans; those rules are in [compliance.md](compliance.md). Its integration design is the most worked-out public answer to "how do we support many agent CLIs without a special case per tool". This page records what we learned from its docs (internals, provider guides, permission modes), checks the parts that matter against real agents, and turns them into a procedure for adding an ACP agent as an external team.
 
 **Status (2026-11):** the T3 Code part comes from its documentation and the shared ACP adapter source, not from running it. The field check below ran the handshake (and, where signed in, session setup) against three installed agents. **No job has been run** on any agent other than the ones with their own page ([codex.md](codex.md), [agy.md](agy.md), [opencode-acp.md](opencode-acp.md)). Treat every agent here as *not tested for work* until the admission checklist passes.
 
@@ -10,7 +10,7 @@
 |---|---|
 | Use T3 Code itself as our dispatch channel? | **No, optional at most.** It is a GUI plus server product ("very early", mostly closed to contributions), its CLI hands a job to the project's default model and permission mode (initial default: *Full access*), and its documented CLI has no per-call model, effort or sandbox flags. Fine for a user who already runs it; not a channel the skill can rely on. |
 | Borrow its design? | **Yes.** ACP as the one generic channel, the ACP Registry as discovery, a per-agent "flavor" only when the spec leaves a gap, honest capability reporting, and an admission checklist. |
-| Is a generic ACP runner feasible? | **Yes**, with three agent-specific parts that cannot be generic: how to make the agent read-only, how to set effort, how to continue a session (see "Building a generic runner"). The protocol core of `scripts/opencode-acp-run.mjs` is reusable as it is. |
+| Is a generic ACP runner feasible? | **Yes**, with three agent-specific parts that cannot be generic: how to make the agent read-only, how to set effort, how to continue a session (see "Building a generic runner"). The protocol core now lives in `scripts/acp-core.mjs`, shared by the OpenCode and agy wrappers. |
 | Does it cover more tools? | The Registry listed 43 agents on 2026-11 (Gemini CLI, now deprecated here; Grok Build, Cursor, Codex and Claude adapters, Goose, Kimi, Qwen Code, Mistral Vibe, Copilot, Junie, Kilo, Pi and more). Fetch the current list: `curl https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json`. |
 
 ## How T3 Code supports many agents
@@ -28,13 +28,14 @@
 
 ## Field check, 2026-11
 
-Run with the wrapper's own `AcpClient` (unchanged), in an empty scratch directory, `initialize` then `session/new`, no prompt sent:
+Run with the wrapper's own `AcpClient` (unchanged), in an empty scratch directory, `initialize` then `session/new`, no prompt sent. agy has its own page and runner, so its row is there for comparison:
 
 | Agent | Launch | `authMethods` | `agentCapabilities.sessionCapabilities` | `session/new` |
 |---|---|---|---|---|
 | Gemini CLI 0.63.0 (deprecated, see below) | `gemini --acp` | `oauth-personal`, `gemini-api-key`, `vertex-ai`, `gateway` | none (`loadSession: true`) | failed, not signed in: plain message "API key is missing or not configured", no `auth_required` |
 | Grok Build 1.0.52 | `grok agent stdio` | `grok.com` | `list`, `resume`, `close` | first run not signed in: "Authentication required"; after sign-in succeeded: **no modes**, options `model` (4 models) and `reasoning_effort` (`xhigh`, `high`, `medium`, `low`; **default `xhigh`**) |
 | Cursor agent 2026.10.01 | `agent acp` | `cursor_login` | `list` only (`loadSession: true`) | succeeded; modes `agent`, `plan`, `ask`; 47 models |
+| agy 1.5.14 (2026-11-22; [agy.md](agy.md)) | `agy acp` | `oauth-personal`, `oauth-business`, `gemini-api-key`, `agent-platform` | `resume`, `close`, `load`, `list`, `additionalDirectories` | succeeded; modes `default`, `accept-edits`, `auto`, `plan`; options `model` (9), `thought_level` (`low` to `xhigh`, default `high`), `mode`. Small read-only, write and resume jobs were then run through `agy-acp-run.mjs` |
 
 What this shows:
 
@@ -49,7 +50,7 @@ What this shows:
 
 ## Deprecated: Gemini CLI
 
-Gemini CLI has been merged into the Antigravity CLI (`agy`). Do not offer it as an external team; use agy ([agy.md](agy.md): the agy-staff plugin or `scripts/agy-run.mjs`), which reaches the same Gemini models. Only when the user insists on Gemini CLI, treat it like any new ACP agent: run the checklist below first, and say in the roster that it is deprecated. Its Registry entry may still exist; that does not make it a recommended team. The Registry also lists a separate Google Antigravity ACP entry; we have not checked it, and agy's headless modes remain the tested route.
+Gemini CLI has been merged into the Antigravity CLI (`agy`). Do not offer it as an external team; use agy ([agy.md](agy.md): `scripts/agy-acp-run.mjs` over `agy acp`), which reaches the same Gemini models. Only when the user insists on Gemini CLI, treat it like any new ACP agent: run the checklist below first, and say in the roster that it is deprecated. Its Registry entry may still exist; that does not make it a recommended team. The Registry also lists a Google Antigravity ACP entry; we use the `agy acp` server of the agy the user already installed, which is the same official server, rather than a Registry download.
 
 ## Admission checklist for a new ACP agent
 
@@ -86,14 +87,13 @@ Each applies to a headless runner too:
 - **Probes must not start sessions** except in an empty scratch directory and when you ask for it. `session/new` can start hooks and MCP servers in a real repository.
 - **Never self-update an agent CLI** from a job. Updates belong to the installer that owns the binary.
 
-## Building a generic runner (not done yet)
+## Building a generic runner (partly done)
 
-`scripts/opencode-acp-run.mjs` already contains the generic parts: `AcpClient` (JSON-RPC framing), process-group start and kill, a session-update tracker, timeout with cancel then kill, JSON summary. What stops it from running other agents today:
+`scripts/acp-core.mjs` holds the generic parts: `AcpClient` (JSON-RPC framing), `startAgent` with any launch command and arguments, process-group stop and kill, a session-update tracker, the reject-by-default permission answer. Two wrappers sit on it, each with its own flavor: `opencode-acp-run.mjs` (read-only through an injected agent in `OPENCODE_CONFIG_CONTENT`, a separate effort option) and `agy-acp-run.mjs` (read-only through the native `default` mode, `accept-edits` for writes, a `thought_level` option, credential variables stripped). What still stops a single runner for every agent:
 
-- `startAgent` always launches `<bin> acp`; the command and arguments must come from a flavor.
-- Read-only enforcement is OpenCode-specific (an injected agent in `OPENCODE_CONFIG_CONTENT`). Other agents need their own: a native mode (`ask`, `plan`, ...), or nothing, in which case edit jobs only.
-- It assumes `model` and a separate `effort` option; Cursor encodes effort in the model id.
+- Read-only enforcement differs per agent: an injected agent (OpenCode), a native mode (`default` on agy, `ask` or `plan` on Cursor), or nothing (Grok), in which case edit jobs only.
+- Both assume `model` plus a separate effort option (`effort` or `thought_level`); Cursor encodes effort in the model id.
 - Resume uses `session/resume` only; Gemini and Cursor offer `loadSession`.
 - The auth-error test is OpenCode- and Grok-shaped.
 
-Suggested shape if we build it: an `acp-run.mjs` with the generic core, a small flavor table (launch command, how to reach read-only, where effort lives, how to resume, auth-failure pattern), `probe` doing the handshake only, and the OpenCode injection kept as one flavor. Test it offline with a fake ACP agent like the existing fake `opencode`, then run the admission checklist once per real agent. Until then, use a hand-written client or the agent's own headless CLI after the same checklist.
+Next step if more agents need it: one `acp-run.mjs` with a flavor table (launch command, how to reach read-only, where effort lives, how to resume, auth-failure pattern) over `acp-core.mjs`, `probe` doing the handshake only. Test it offline with a fake ACP agent like the existing fake `opencode` and fake `agy acp`, then run the admission checklist once per real agent. Until then, write a small flavor wrapper on `acp-core.mjs`, or use the agent's own headless CLI after the same checklist, with the non-ACP risk stated.

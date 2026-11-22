@@ -24,6 +24,11 @@ if (argv[0] === '--version') {
   process.stdout.write('agy 1.4.2\n');
   process.exit(0);
 }
+// agy 1.4.x has no ACP server (it shipped in 1.5.0).
+if (argv[0] === 'acp') {
+  process.stderr.write('unknown command "acp" for "agy"\n');
+  process.exit(2);
+}
 if (argv[0] === 'models') {
   process.stdout.write('gemini-3.8-flash-low\ngemini-3.8-flash-medium\ngemini-3.8-flash-high\n');
   process.exit(0);

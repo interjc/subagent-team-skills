@@ -50,6 +50,8 @@ Exhaustion is an availability failure, not a quality one: it does not count agai
 | 2 | Another model of the same tier on the same channel, when it has its own allowance | A drop below the job's tier is not a ladder step: state it, and use it only for work the weaker model can carry. |
 | 3 | **In-house**, when every allowed external option for that tier is out | The table below. The flow changes from `outsource` to `direct`; no liaison is needed. |
 
+Never a step: another account or subscription of the same vendor used to get round the limit, or a proxy that pools accounts. That puts the user's accounts at risk. A separate account the user set up and listed in the compute plan is its own channel, chosen by the user (`cli-agent-delegation`, `references/compliance.md`).
+
 In-house substitutes for an external tier:
 
 | External tier | In-house substitute |

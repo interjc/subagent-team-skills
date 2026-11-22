@@ -55,11 +55,13 @@ L4  外部チーム        翻訳、一括編集、テストの補充、セカ�
 
 | 外部チーム | 接続方法 | 状況 |
 |---|---|---|
-| **agy**（Google Antigravity） | CLI、または [agy-staff](https://github.com/keli-wen/agy-staff) プラグイン | 実プロジェクトで使用。ラッパースクリプト同梱 |
+| **agy**（Google Antigravity） | ACP（`agy acp`、agy 1.5.0 以上）。brief は [agy-staff](https://github.com/keli-wen/agy-staff) のペルソナを借用。print モードはリスクを伝えたうえでのフォールバックのみ | 実プロジェクトで使用。ACP ラッパー同梱。agy 1.5.14 で読み取り専用・書き込み・再開の小さなジョブにより確認済み |
 | **Codex CLI** | CLI（`codex exec`）、または OpenAI による Claude Code 向け [Codex プラグイン](https://github.com/openai/codex-plugin-cc) | CLI は実プロジェクトで使用。ラッパースクリプト同梱。プラグインはドキュメントとソースに基づき、レビュー用と第二の経路として扱います |
 | **OpenCode** | [ACP](https://opencode.ai/v2/docs/cli/acp/)（`opencode acp`） | ラッパースクリプト同梱：モデルと effort の固定、既定ですべて拒否する権限セット、タイムアウト、再開。OpenCode 2.2.5 で小さなジョブにより確認済み。実プロジェクトではまだ未使用 |
 | Grok Build、Cursor、Pi、そのほか [ACP Registry](https://agentclientprotocol.com/get-started/registry) の agent | ACP | 実作業では未テスト。セッション確立は Grok Build と Cursor で確認済み。Gemini CLI は agy に統合されたため非推奨で、agy を使います。[導入ガイド](skills/cli-agent-delegation/references/acp-agents.md)は [T3 Code](https://github.com/pingdotgg/t3code) が多数の agent に対応する方法を参考に、受け入れチェック、権限ポリシー、よくある落とし穴をまとめています |
 | その他の CLI、MCP 経由で公開された agent | CLI / MCP | 未テスト。新しい CLI をつなぐためのチェックリストがあり、まず小さな読み取り専用ジョブで検証してから使います |
+
+**ACP を優先します。** 外部 agent は、公式の ACP サーバーがあればそれを通して呼び出します。ACP サーバーのない Codex は自身の CLI を使います。ジョブが ACP を使えない場合（`agy acp` のない古い agy など）、agent は派遣の前にそのリスクを伝えます。古い agent CLI やプラグインを見つけたら、アップグレードの実行を提案し、同意を得てから実行します。agy-staff のようなプラグインからはロールプロンプトとジョブの規律を借り、呼び出し自体は ACP のままです。アカウントとサインインはあなたのものです：アカウントの共有やローテーション、環境にたまたまある API キー、コミュニティ製のブリッジは使いません。ルール：[compliance.md](skills/cli-agent-delegation/references/compliance.md)。
 
 **外部コンピュートプランは agent のメモリではなく、ローカルファイルに置かれます**。どのチーム・モデル・effort がどの仕事（翻訳、一括編集、コード読解の同期、セカンドオピニオンのレビュー）を担当するか、それぞれのフォールバック順序、いつ使ってよいか（平日のみ、夜間、特定の日付でクレジットが切れるまで）、そのクォータ、そしてすべてのジョブのログ（結果、所要時間、トークン数、費用、日別および時間別）は、マシン上のすべてのプロジェクト向けに `~/.subagent-team/` に、プロジェクトごとの差分は git で無視される `.agent-team/` に保存されます。agent がこれについて尋ねるのは**一度だけ**です。プランが存在しない場合、検出した内容と最新のモデルランキング（OpenRouter の価格と LMArena の Code Arena スコア）から下書きを作成し、1 つのダイアログであなたが確認または編集して、保存先（全体、このプロジェクト、またはこのセッションのみ）を指定します。その後はプランに従って自動でルーティングし、変更があった場合（お使いの CLI がより新しいモデルに対応した、クォータエラー後のフォールバックなど）は**通知**したうえで、反対がなければそのまま進めます。数日ごとに確認用のプランを表示します。あなたが変更を求めるたびに尋ねられる質問は 1 つだけです：「このセッション、このプロジェクト、それとも全体ですか？」。ランキング入りした新しいモデルが CLI にない場合は、更新コマンドを提示し、実行前に確認します。詳細：[compute-config.md](skills/subagent-team/references/compute-config.md)。
 
@@ -141,7 +143,7 @@ docs/agent-team/
 | Skill | 内容 | 読み込まれる場面 |
 |---|---|---|
 | [`subagent-team`](skills/subagent-team/SKILL.md)（コア） | ホスト agent の検出と確認、初回のチームポリシー、4 層と層 / ティアの区別、タスク分割とタスクごとのフロー、外注の基準と窓口役、チームボードと `AGENTS.md` / `docs/` の相互参照、モード（solo / standard / strict）、指示書テンプレート、実行可能な検証と 3 段階のレビュー、層ごとのエスカレーション、agent の再利用とスロット制限、Claude Code と Codex の違い | タスクが複数のファイルや段階にまたがるとき。作業の分割、フローの選択、委任、モデルや effort の選択、指示書の作成、外部作業の追跡、委任結果のレビュー、教訓の記録、ユーザーに聞くべきか迷うとき |
-| [`cli-agent-delegation`](skills/cli-agent-delegation/SKILL.md) | OpenAI Codex CLI（ラッパー、または OpenAI の Codex プラグイン）、Google Antigravity（`agy`。[agy-staff](https://github.com/keli-wen/agy-staff) の有無は問わない）、ACP 経由の OpenCode への外注：使うチームをユーザーと決め、求めに応じて再確認すること、どの作業をどのチームに渡すか、安全なラッパー、フォールバックの順序、追跡、再開、受け入れ、実測データ。窓口役による上限付きの待機。ACP Registry のほかの ACP agent を導入するためのガイド、その他の CLI や MCP をつなぐためのチェックリスト | 仕様が固まった大量作業を他社の agent に渡すとき、または使える外部 agent を確かめたいとき |
+| [`cli-agent-delegation`](skills/cli-agent-delegation/SKILL.md) | ACP 経由での Google Antigravity（`agy acp`。brief は [agy-staff](https://github.com/keli-wen/agy-staff) のペルソナを借用）と OpenCode、および OpenAI Codex CLI（ラッパー、または OpenAI の Codex プラグイン）への外注：ACP 優先とコンプライアンスのルール、アップグレードの提案、使うチームをユーザーと決め、求めに応じて再確認すること、どの作業をどのチームに渡すか、安全なラッパー、フォールバックの順序、追跡、再開、受け入れ、実測データ。窓口役による上限付きの待機。ACP Registry のほかの ACP agent を導入するためのガイド、その他の CLI や MCP をつなぐためのチェックリスト | 仕様が固まった大量作業を他社の agent に渡すとき、または使える外部 agent を確かめたいとき |
 | [`agent-handover`](skills/agent-handover/SKILL.md) | 進捗記録、タスクカードと教訓、ローカルメモリではなくリポジトリに置くルール、コミットハッシュのプレースホルダー、決定記録、引き渡しと引き継ぎのチェックリスト | 作業を受け入れた後、セッションが終わりそうなとき、agent やツールを切り替えるとき、他人の作業を引き継ぐとき |
 
 Claude Code プラグインに同梱される agent：`team-reviewer`（通常の変更、medium effort）と `team-reviewer-deep`（リスクの高い変更や複数モジュールにまたがる変更、high effort）。どちらも指示によって読み取り専用とされ、編集や書き込みのツールを持ちません。ただしテストを実行するために Bash は残しており、Bash でもファイルは書けるので、必要に応じて作業ツリーのフィンガープリントを照合してください（`verification.md` を参照）。
@@ -150,15 +152,16 @@ Claude Code プラグインに同梱される agent：`team-reviewer`（通常�
 
 | スクリプト | 用途 |
 |---|---|
-| `skills/subagent-team/scripts/env-check.cjs` | セッション開始時の環境ヘルスチェック：Node.js（下限 22、推奨 24 以上、nvm）、git、ホスト agent の推測、外部チーム（Codex CLI とそのプラグイン、agy、agy-staff、OpenCode、その他の agent CLI、プロジェクトの MCP サーバー）、プロジェクトのチームポリシー（どの外部チームを使うか尋ねるかどうかを含む）とチームボード。保守的な構文で書かれているため、古い Node でも動作して問題を説明できます。 |
+| `skills/subagent-team/scripts/env-check.cjs` | セッション開始時の環境ヘルスチェック：Node.js（下限 22、推奨 24 以上、nvm）、git、ホスト agent の推測、外部チーム（Codex CLI とそのプラグイン、agy と `agy acp` の有無、agy-staff、OpenCode、その他の agent CLI、プロジェクトの MCP サーバー）、プロジェクトのチームポリシー（どの外部チームを使うか尋ねるかどうかを含む）とチームボード。保守的な構文で書かれているため、古い Node でも動作して問題を説明できます。 |
 | `skills/subagent-team/scripts/team-board.mjs` | チームボード：`init` は `docs/agent-team/` の骨格を作り（既存ファイルは上書きしない）、`new` はタスクカードとその索引行を追加し、`set` はカードと索引行の状態を同時に変更し、`status` はタスクの状態と未回答の質問を集計して、索引・カード・`lessons.md`・`AGENTS.md` の食い違いを報告します（`--strict` を付けると食い違いがあれば失敗します）。 |
 | `skills/subagent-team/scripts/model-roster.mjs` | OpenRouter の公開モデル一覧から、Anthropic / OpenAI / Google / DeepSeek の最新モデルを価格とコンテキスト長付きで一覧表示します。`--arena` で LMArena の Code Arena リーダーボードの性能（キー不要）を追加し、`--save` で `compute-config.mjs` 向けのランキングを保存します。抽象ティアを現在のモデルに対応づけるのに使います。 |
 | `skills/subagent-team/scripts/compute-config.mjs` | ローカルファイルにある外部コンピュートプラン（全体とプロジェクト単位を統合）：`show`（プラン、要レビュー、ランキング鮮度、クォータの注記）、`set` / `route` / `schedule`（役割ごとのチーム・モデル・effort、フォールバック、時間枠）、`resolve --role <role>`（今誰がジョブを引き受けるかとその理由）、`quota`、`record` および `usage`（初回合格率を含む日別・時間別のジョブログ）、`check-models`（経路上の新しいモデル、または更新が必要な CLI）。ロック付きで書き込みます。プロジェクトのディレクトリは git の管理外に置かれます。 |
 | `skills/subagent-team/scripts/audit-dispatch.mjs` | ハーネスのトランスクリプトから、セッションで実際に何が動いたかを一覧表示します（各 agent のモデルと effort、および外部ジョブ）。Claude Code のみ。 |
 | `skills/cli-agent-delegation/scripts/codex-run.mjs` | `codex exec` / `exec resume` を、effort の明示指定を必須にして実行します。`ultra` と `danger-full-access` を拒否し、タイムアウトに対応し、ログと最終回答をファイルに書き、session id 付きの JSON サマリーを出力します。 |
-| `skills/cli-agent-delegation/scripts/agy-run.mjs` | agy-staff プラグインがない場合に `agy` をヘッドレスで実行します。モデル id を検証し、Claude / GPT モデルへの回り道を拒否し、`--write` を制限なしモードに対応させ、conversation id による継続に対応します。 |
+| `skills/cli-agent-delegation/scripts/agy-acp-run.mjs` | agy の公式 ACP サーバー `agy acp` のクライアントです。`run` はモデルと思考レベルを固定し、読み取り専用ジョブには agy の `default` モード、編集には `accept-edits` を使い、すべての権限リクエストを拒否し、正直に自分の名前を名乗り、環境にある Google の認証情報を取り除き、1.5.0 より古い agy を拒否し、タイムアウトと再開に対応し、JSON の要約を出力します。`probe` はハンドシェイクのみで、`--session-check` を付けると空のディレクトリでモードとモデルを一覧表示します。ACP のコア（`acp-core.mjs`）を OpenCode のラッパーと共有します。 |
+| `skills/cli-agent-delegation/scripts/agy-run.mjs` | ACP のない agy 向けのフォールバック：`agy -p` を print モードで実行し、実行のたびにそのリスクを警告します。モデル id を検証し、Claude / GPT モデルへの回り道を拒否し、`--write` を制限なしモードに対応させ、conversation id による継続に対応します。 |
 | `skills/cli-agent-delegation/scripts/opencode-acp-run.mjs` | `opencode acp` 用の ACP クライアント。`run` はモデルと effort を固定し、読み取り・許可した編集・許可リストのシェルコマンド以外をすべて拒否する OpenCode agent を注入します。権限リクエストはすべて却下するので承認待ちで止まりません。タイムアウトと再開に対応し、JSON サマリーを出力します。`probe` はトークンを使わずに OpenCode のモデルと effort レベルを一覧します。 |
-| `skills/cli-agent-delegation/scripts/doctor.mjs` | 読み取り専用の環境レポート：CLI の有無とバージョン、Codex のデフォルト effort の落とし穴、使えるモデル、agy-staff と Codex プラグインのインストール状況、`opencode acp` が使えるか。 |
+| `skills/cli-agent-delegation/scripts/doctor.mjs` | 読み取り専用の環境レポート：CLI の有無とバージョン、Codex のデフォルト effort の落とし穴、使えるモデル、agy-staff（バージョン付き。`--check-updates` で最新リリースと比較）と Codex プラグイン、`agy acp` と `opencode acp` が使えるか、そして提案できるアップグレードの一覧と正確なコマンド。 |
 
 ## 初回利用：チームポリシーを決める
 
@@ -190,7 +193,8 @@ npm run check     # frontmatter、リンク、バージョンの一致、レビ�
 
 ## 謝辞
 
-- Keli Wen による [agy-staff](https://github.com/keli-wen/agy-staff)：このリポジトリが推奨する agy プラグインで、他のワーカー CLI をラップする際のお手本でもあります。
+- Keli Wen による [agy-staff](https://github.com/keli-wen/agy-staff)：このリポジトリがペルソナとジョブの規律を借りている agy プラグインで、他のワーカー CLI をラップする際のお手本でもあります。
+- [T3 Code](https://github.com/pingdotgg/t3code)：ACP を優先する provider 設計とアカウントのルールが、導入ガイドとコンプライアンスのルールの土台になりました。
 - [anthropics/skills](https://github.com/anthropics/skills) と [Agent Skills 仕様](https://agentskills.io/specification)。
 
 ## 作者

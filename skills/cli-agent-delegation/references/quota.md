@@ -29,6 +29,7 @@ Quota exhaustion is availability, not quality; it does not count toward "two fai
 3. Switch, staying in the job's tier, and say it in one line on the job's record:
    - the same-tier model on **another allowed channel** (the table in "Channels and fallbacks", "Team unavailable");
    - then another same-tier model on the same channel when it has its own allowance (a drop below the job's tier is not a ladder step: state it, and use it only for work the weaker model can carry);
+   - never another account or subscription of the same vendor to get round the limit, and never a proxy that pools them: that risks the user's accounts ([compliance.md](compliance.md)). A separate account the user set up and listed in the compute plan is its own channel, not a way round;
    - then **in-house**, once every allowed external option for that tier is out: a cheap in-house model for purely mechanical work, the in-house mid tier otherwise.
 4. A read-only second opinion has no in-house substitute: an in-house review is not another vendor's opinion. Keep the in-house senior review, record the missing external opinion, and for money, auth, schema or irreversible-data work ask the user whether to wait for the reset.
 

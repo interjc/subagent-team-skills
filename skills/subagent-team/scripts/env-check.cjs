@@ -223,6 +223,36 @@ function readInstalledPlugins(env) {
   }
 }
 
+// `agy acp`, the official ACP server, shipped in agy 1.5.0; 1.5.12 or newer is recommended.
+var AGY_ACP_MIN = [1, 5, 0];
+var AGY_RECOMMENDED = [1, 5, 12];
+
+function semver(text) {
+  var m = /(\d+)\.(\d+)\.(\d+)/.exec(String(text || ''));
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+function older(a, b) {
+  for (var i = 0; i < 3; i++) {
+    if (a[i] !== b[i]) return a[i] < b[i];
+  }
+  return false;
+}
+
+function agyCheck(agy) {
+  if (!agy.found) {
+    return { id: 'agy', status: 'info', detail: 'agy not found (optional external team, external-fast).', fix: 'Optional: install Google Antigravity CLI (https://antigravity.google/docs/cli/install), then sign in once with `agy`.' };
+  }
+  var v = semver(agy.output);
+  if (v && older(v, AGY_ACP_MIN)) {
+    return { id: 'agy', status: 'warn', detail: 'agy: ' + agy.output + ' has no official ACP server (`agy acp`, 1.5.0+): agy jobs would fall back to print mode, where writes skip every permission check.', fix: 'Update agy (`agy update`); the agent may run it after the user agrees.' };
+  }
+  if (v && older(v, AGY_RECOMMENDED)) {
+    return { id: 'agy', status: 'ok', detail: 'agy: ' + agy.output + ' (ACP available; ' + AGY_RECOMMENDED.join('.') + ' or newer recommended: `agy update`).' };
+  }
+  return { id: 'agy', status: 'ok', detail: 'agy: ' + agy.output + (v ? ' (ACP available)' : '') };
+}
+
 function findAgyStaff(env) {
   return readInstalledPlugins(env).indexOf('agy-staff') !== -1;
 }
@@ -325,13 +355,11 @@ function checkExternal(env) {
   }
   var agyBin = env.AGY_BIN || 'agy';
   var agy = probe(agyBin, ['--version']);
-  checks.push(agy.found
-    ? { id: 'agy', status: 'ok', detail: 'agy: ' + agy.output }
-    : { id: 'agy', status: 'info', detail: 'agy not found (optional external team, external-fast).', fix: 'Optional: install Google Antigravity CLI (https://antigravity.google/docs/cli/install), then sign in once with `agy`.' });
+  checks.push(agyCheck(agy));
   var staff = findAgyStaff(env);
   checks.push(staff
-    ? { id: 'agy-staff', status: 'ok', detail: 'agy-staff plugin installed (Claude Code).' }
-    : { id: 'agy-staff', status: 'info', detail: 'agy-staff plugin not found in Claude Code.', fix: 'Optional, if you use agy: `claude plugin marketplace add keli-wen/agy-staff && claude plugin install agy@agy-staff` (otherwise the raw agy CLI works).' });
+    ? { id: 'agy-staff', status: 'ok', detail: 'agy-staff plugin installed (Claude Code): borrow its personas and job discipline, but dispatch agy through ACP (agy-acp-run.mjs); its own companion runs print mode.' }
+    : { id: 'agy-staff', status: 'info', detail: 'agy-staff plugin not found in Claude Code.', fix: 'Optional, if you use agy (the agent may run it after the user agrees): `claude plugin marketplace add keli-wen/agy-staff && claude plugin install agy@agy-staff`. Jobs still go through ACP (agy-acp-run.mjs).' });
   return checks;
 }
 

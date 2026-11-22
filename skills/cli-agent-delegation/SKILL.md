@@ -1,10 +1,10 @@
 ---
 name: cli-agent-delegation
-description: Outsource well-specified bulk coding work to another vendor's agent through its CLI, a plugin, ACP or an MCP server. Covers OpenAI Codex CLI (codex exec, or OpenAI's Codex plugin for Claude Code), Google Antigravity (agy, with or without the agy-staff plugin) and OpenCode through its Agent Client Protocol server (opencode acp), with fallback ladders, plus onboarding other agents through ACP and its Registry (Grok Build, Cursor, Pi; Gemini CLI is deprecated, use agy). Asks the user which external teams to use and re-checks their capabilities on request. Use this when handing translations, mechanical refactors, test or snapshot backfills, doc syncs or a second-opinion review to an external agent; when running codex, agy or opencode headless; when choosing between them or falling back from one to another; when the user asks which external agents are available or wants to add, drop or verify one; when a liaison dispatches, waits on, resumes or accepts their jobs; or when a dispatch plugin is missing or broken.
+description: Outsource well-specified bulk coding work to another vendor's agent, through its official ACP server wherever one exists. Covers Google Antigravity (agy acp, briefs from the agy-staff personas), OpenCode (opencode acp), OpenAI Codex CLI (codex exec, or OpenAI's Codex plugin), fallback ladders, and onboarding other ACP Registry agents (Grok Build, Cursor, Pi; Gemini CLI is deprecated, use agy). Warns when a call cannot use ACP, keeps accounts and sign-in with the user, and offers to upgrade outdated agent CLIs and plugins. Use this when handing translations, mechanical refactors, test or snapshot backfills, doc syncs or a second-opinion review to an external agent; when running agy, codex or opencode headless or choosing between them; when the user asks which external agents are available or wants to add, drop, verify or upgrade one; when a liaison dispatches, waits on, resumes or accepts their jobs; or when a dispatch plugin is missing or broken.
 license: MIT with Commons Clause v1.0 (see LICENSE)
 compatibility: Built for Claude Code (primary) and Codex (secondary) as the host; other hosts are unverified. Needs a shell. The helper scripts need Node.js 22+ (24 or newer recommended, through nvm); external agents need their own CLIs and accounts (Codex CLI, agy, OpenCode). Run scripts/doctor.mjs first.
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
 ---
 
 # CLI Agent Delegation
@@ -16,7 +16,8 @@ This page holds the decisions that apply to every team: gate, team choice, brief
 | You are about to... | Read |
 |---|---|
 | run Codex CLI, or use OpenAI's Codex plugin | [references/codex.md](references/codex.md) |
-| run agy, or use the agy-staff plugin | [references/agy.md](references/agy.md) |
+| decide how a call may be made (ACP first, accounts, sign-in, upgrades, other skills' plugins) | [references/compliance.md](references/compliance.md) |
+| run agy (`agy acp`), or use the agy-staff plugin's personas | [references/agy.md](references/agy.md) |
 | run OpenCode through ACP | [references/opencode-acp.md](references/opencode-acp.md) |
 | add or check any other ACP agent (Grok Build, Cursor, Registry agents) | [references/acp-agents.md](references/acp-agents.md) |
 | add a non-ACP CLI or an MCP-fronted agent | [references/other-agents.md](references/other-agents.md) |
@@ -29,7 +30,7 @@ This page holds the decisions that apply to every team: gate, team choice, brief
 
 ## 1. Start
 
-Script paths are relative to this skill's directory. Run `node scripts/doctor.mjs` once per session: it reports the Node version, Codex CLI (and its default effort), agy and agy-staff, OpenCode, and the Codex plugin. Without Node, check `codex --version`, `agy --version` and `opencode --version` by hand. Report blockers to the user; install only with their consent.
+Script paths are relative to this skill's directory. Run `node scripts/doctor.mjs` once per session (`--check-updates` adds a release check for agy-staff): it reports the Node version, Codex CLI (and its default effort), agy (version and whether its official ACP server `agy acp` exists), agy-staff and its version, OpenCode and `opencode acp`, and the Codex plugin, plus an `upgrades` list with exact commands. Without Node, check `codex --version`, `agy --version` and `opencode --version` by hand. Report blockers to the user. **When an agent CLI or plugin is outdated, tell the user at once and offer to run the upgrade; run it only after a yes** ([references/compliance.md](references/compliance.md)).
 
 **The compute plan lives in local files, not in memory.** Which team · model · effort takes which role, each one's fallback chain, its time windows, quota and a log of past jobs are kept in `compute.json` and `compute-usage.jsonl`: globally in `~/.subagent-team/` (or `$SUBAGENT_TEAM_HOME`), overridden per project by `.agent-team/` in the main checkout, which stays out of git. With `subagent-team` installed, its `scripts/compute-config.mjs` reads and writes them (`show`, `resolve --role <role>`, `record`); otherwise edit the JSON by hand ([references/compute-plan.md](references/compute-plan.md)). Ask about compute only when no plan exists: draft one from the doctor, the channels' model lists and a current model ranking, confirm it once, and ask whether to keep it globally, for this project or this session. After that, route by the plan, announce changes you make in one line and go ahead unless the user objects; every change the user asks for gets the same scope question.
 
@@ -56,18 +57,18 @@ If writing the brief costs as much as doing the job (a ten-line edit), do not ou
 
 | Work | Choice | Why |
 |---|---|---|
-| Translations, bulk copy, mechanical replacement, filling in from a template | agy, fast tier (e.g. `gemini-3.8-flash-high`; `-medium` for purely mechanical), or OpenCode with a cheap fast model | Cheapest. agy has about five minutes of fixed overhead per job, so bigger batches pay off more. |
-| Large homogeneous implementation from a fixed spec | agy, strong tier (e.g. `gemini-4-argon-medium`/`-high`), Codex at `medium`, or OpenCode with a strong model | Needs steadier reasoning but no decisions |
+| Translations, bulk copy, mechanical replacement, filling in from a template | agy, fast tier (e.g. `gemini-3.8-flash` · `high`; `medium` for purely mechanical), or OpenCode with a cheap fast model | Cheapest. agy has about five minutes of fixed overhead per job, so bigger batches pay off more. |
+| Large homogeneous implementation from a fixed spec | agy, strong tier (e.g. `gemini-4-argon` · `medium`/`high`), Codex at `medium`, or OpenCode with a strong model | Needs steadier reasoning but no decisions |
 | Small, bounded code edits with a frozen spec | An external model around the in-house mid tier, at `medium`, if the gate and brief cost justify it | Stronger implementation effort does not remove the need for review |
 | Syncs that require reading the code to get right (docs against code, tests following existing patterns) | Codex at `high` | Reads code on its own initiative and checks facts; modest token use |
-| Read-only second opinion on a diff or plan | Codex: the plugin's `/codex:review` or `/codex:adversarial-review`, or `codex-run.mjs` in `read-only`; agy's reviewer persona; OpenCode read-only | Another vendor covers blind spots. The verdict stays with your in-house reviewer. |
+| Read-only second opinion on a diff or plan | Codex: the plugin's `/codex:review` or `/codex:adversarial-review`, or `codex-run.mjs` in `read-only`; agy over ACP in read-only mode with agy-staff's reviewer prompt; OpenCode read-only | Another vendor covers blind spots. The verdict stays with your in-house reviewer. |
 | A model family none of the others reach (DeepSeek, GLM, Mistral, Kimi, Qwen) | OpenCode through ACP, or another ACP agent after its admission checklist | OpenCode routes to many providers; its tier is the model's tier |
 
-**agy always means picking one of two levels** (the plugin and the CLI alike): a strong model at about your in-house mid tier (e.g. Gemini 4 Argon, roughly Claude Sonnet 5.5), or a flash model one step below that is cheaper and holds up over long batches (e.g. Gemini 3.8 Flash). Name the level at every dispatch. Rules for choosing and escalating: [agy.md](references/agy.md), "Choosing the model: two levels".
+**agy always means picking one of two levels** (every channel alike): a strong model at about your in-house mid tier (e.g. Gemini 4 Argon, roughly Claude Sonnet 5.5), or a flash model one step below that is cheaper and holds up over long batches (e.g. Gemini 3.8 Flash). Name the level at every dispatch. Rules for choosing and escalating: [agy.md](references/agy.md), "Choosing the model: two levels".
 
 Implementation uses `medium` or `high`; a question that seems to need effort above high returns to an in-house expert before more code is written. Risky read-only review uses `high`. Choose by role and risk, not by the channel's default or the size of the diff.
 
-Model names are examples from 2026-10. List what is actually available: `agy models`, Codex's `~/.codex/models_cache.json` (the doctor lists it), `opencode-acp-run.mjs probe` in that directory. Do not use agy or OpenCode to call your in-house family (Claude models under a Claude host, GPT under a Codex host): that routes work back home and adds cost, not perspective. If the user chooses to anyway (often for a separate quota), follow them; those jobs never count as a second vendor's opinion. **Gemini CLI is deprecated** (merged into agy): recommend agy. Under a Codex host, Codex CLI is in-house, not an external team.
+Model names are examples from 2026-10. List what is actually available: `agy-acp-run.mjs probe --session-check --repo <empty dir>` (or `agy models`), Codex's `~/.codex/models_cache.json` (the doctor lists it), `opencode-acp-run.mjs probe` in that directory. Do not use agy or OpenCode to call your in-house family (Claude models under a Claude host, GPT under a Codex host): that routes work back home and adds cost, not perspective. If the user chooses to anyway (often for a separate quota), follow them; those jobs never count as a second vendor's opinion. **Gemini CLI is deprecated** (merged into agy): recommend agy. Under a Codex host, Codex CLI is in-house, not an external team.
 
 ## 4. Brief
 
@@ -86,16 +87,18 @@ The wrappers need Node.js 22+ and no dependencies; each refuses an older Node wi
 
 ## 5. Channels and fallbacks
 
+**ACP first.** Call a team through its official ACP server whenever it has one (agy, OpenCode, Registry agents); Codex, which has none, through its own headless CLI. When a job has to go another way, name the risk in the dispatch line and on the card. When you also use another skill or plugin for an agent (agy-staff's personas, for example), borrow its prompts and job discipline but keep the call on ACP. Never use community bridges, shared or rotated accounts, ambient credentials or a disguised client identity ([references/compliance.md](references/compliance.md)).
+
 Each team has a preferred channel and a ladder below it. Move down **the same team's** ladder when the problem is the channel (plugin missing or broken, no Node for the wrapper). Move to **another team of the same tier** when the team itself is unavailable (not signed in, quota, network, model retired). The last step is always in-house.
 
 | Team | Preferred | Next | Without Node.js 22+ | Team unavailable |
 |---|---|---|---|---|
 | Codex CLI | `scripts/codex-run.mjs` for jobs; the Codex plugin's review commands for read-only second opinions | the plugin's `task` runtime with explicit `--model` and `--effort` | raw `codex exec` ([codex.md](references/codex.md)) | OpenCode or agy with a strong model, else in-house |
-| agy | agy-staff plugin | `scripts/agy-run.mjs` | raw `agy -p` ([agy.md](references/agy.md)) | OpenCode with a fast model or Codex at `medium`, else in-house |
+| agy | `scripts/agy-acp-run.mjs` (`agy acp`, agy 1.5.0+), briefs built from agy-staff's personas | print mode, risk stated: agy-staff's runner, or `scripts/agy-run.mjs`; offer `agy update` first | raw `agy -p` ([agy.md](references/agy.md)) | OpenCode with a fast model or Codex at `medium`, else in-house |
 | OpenCode | `scripts/opencode-acp-run.mjs` | the same with `--agent <project agent>` if the injected agent is not picked up | raw `opencode run --standalone` with the agent injected by hand ([opencode-acp.md](references/opencode-acp.md)) | Codex or agy for the same tier, else in-house |
 
 - A fallback team must still be another vendor than your in-house team, and fit the job's tier (an external-strong job does not drop to a flash model without saying so).
-- **Never answer a refusal with looser permissions**: no `danger-full-access`, no retrying agy `--write` with other flags, no `--allow-shell '*'`. Ask the user, or use a channel with a real sandbox or allow-list.
+- **Never answer a refusal with looser permissions**: no `danger-full-access`, no print-mode `--write` or `auto` mode after a rejected ACP request, no `--allow-shell '*'`. Ask the user, or use a channel with a real sandbox or allow-list.
 - Say the switch in one line ("Codex quota exhausted; T4.b goes to OpenCode `<model>` · high") and record it on the job's card.
 - Two failed rounds on the same work → take it back in-house, whichever team did them.
 - Pin model and effort on every call; never inherit a tool's personal defaults. Bound every job with a timeout.
@@ -119,4 +122,4 @@ When the host can run subagents with shell access, give each external job to a c
 
 The liaison must not finish after dispatch or when one wait slice expires. It stays until the final result is collected and mechanical checks are complete, or explicitly escalates a blocker with job state, ids and the next action. A timeout or unavailable team is an escalation, not permission to resume or switch teams on its own.
 
-Claude Code is the primary host and the one this was tested with (background `Bash` plus completion notifications). Codex is the secondary host. Other hosts that can run shell commands are *unverified*. Status by team: Codex CLI and agy are used in real projects; OpenCode through ACP was checked against OpenCode 2.2.5 on small jobs; every other agent is *not tested for work*.
+Claude Code is the primary host and the one this was tested with (background `Bash` plus completion notifications). Codex is the secondary host. Other hosts that can run shell commands are *unverified*. Status by team: Codex CLI and agy are used in real projects (agy in print mode; its ACP channel was checked against agy 1.5.14 on small read-only, write and resume jobs on 2026-11-22); OpenCode through ACP was checked against OpenCode 2.2.5 on small jobs; every other agent is *not tested for work*.

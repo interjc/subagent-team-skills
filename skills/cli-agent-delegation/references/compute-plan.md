@@ -20,7 +20,7 @@ The project file overrides the global one per resource field, per routing role a
   "timezone": "Asia/Shanghai",
   "review": { "lastReviewed": "2026-11-22", "everyDays": 7 },
   "resources": {
-    "agy-flash": { "team": "agy", "channel": "agy-staff", "model": "gemini-3.8-flash-high", "effort": "high",
+    "agy-flash": { "team": "agy", "channel": "agy-acp-run.mjs", "model": "gemini-3.8-flash", "effort": "high",
                    "tier": "external-fast", "roles": ["bulk"], "fallback": ["opencode-fast", "in-house:mid:medium"] },
     "codex-strong": { "team": "codex", "channel": "codex-run.mjs", "model": "gpt-6.2-sol", "effort": "high",
                       "tier": "external-strong", "roles": ["code-sync", "review"], "fallback": ["agy-argon"] },
@@ -42,7 +42,7 @@ With `subagent-team` installed: `compute-config.mjs show` (effective plan, revie
 
 ## Asking and telling
 
-- **Initialization is the only interview**: when no plan exists in either scope. Pre-fill it from `doctor.mjs`, each channel's model list (`agy models`, Codex's `models_cache.json`, `opencode-acp-run.mjs probe`) and a current ranking; confirm roles, model · effort, fallbacks, windows, confidentiality and quota in one dialog; ask where to keep it (global, project, session).
+- **Initialization is the only interview**: when no plan exists in either scope. Pre-fill it from `doctor.mjs`, each channel's model list (`agy-acp-run.mjs probe --session-check` in an empty directory, or `agy models`; Codex's `models_cache.json`, `opencode-acp-run.mjs probe`) and a current ranking; confirm roles, model · effort, fallbacks, windows, confidentiality and quota in one dialog; ask where to keep it (global, project, session).
 - **After that, decide and tell**: route by the plan; a change you make on your own judgement (a newer model on the channel, a fallback after a quota error, a stronger model after repeated rework) is announced in one line and applied unless the user objects. Every few days (the plan's `everyDays`) post a short review notice of the plan and what changed, then continue.
 - **Every change the user asks for** gets one scope question: this session, this project, or globally.
 
@@ -51,4 +51,4 @@ With `subagent-team` installed: `compute-config.mjs show` (effective plan, revie
 A model ranking with performance and price comes from `subagent-team`'s `model-roster.mjs --arena --save` (OpenRouter prices plus LMArena's Code Arena scores, no key); without it, look up a current coding leaderboard and the vendors' model pages by web search, and note the date. Then compare it with what each channel lists (`compute-config.mjs check-models --available codex=<file> --available agy=<file>`):
 
 - A newer model of the same family that the channel already offers: switch the plan with a one-line notice.
-- A ranked model of the team's vendor that the channel does not list: the CLI is probably out of date. Tell the user the update command (Codex CLI: `npm install -g @openai/codex@latest`, or the package manager it came from; agy and OpenCode: their own update commands, *unverified* here) and ask before running it for them. Re-run `doctor.mjs` afterwards.
+- A ranked model of the team's vendor that the channel does not list: the CLI is probably out of date. Tell the user the update command (Codex CLI: `npm install -g @openai/codex@latest`, or the package manager it came from; agy: `agy update`; OpenCode: `opencode upgrade`) and offer to run it; run it only after the user agrees ([compliance.md](compliance.md)). Re-run `doctor.mjs` afterwards.

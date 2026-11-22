@@ -9,7 +9,7 @@ Codex has been used as the main session with this method, less extensively than 
 | Spawn a subagent (cold start) | `spawn_agent` |
 | Continue an existing subagent with its context | `followup_task` |
 | List agents | *unverified* |
-| Run an external CLI agent (agy) | shell, requesting escalated execution when the sandbox blocks the CLI's network or local ports |
+| Run an external CLI agent (agy) | shell, through its ACP wrapper (`agy-acp-run.mjs`), requesting escalated execution when the sandbox blocks the CLI's network or local ports; agy-staff's print-mode runner only as a stated fallback |
 | Native task list / shared memory | none known (*unverified*); use the board in the repository ([team-board.md](team-board.md)) |
 | Detect the host | `CODEX_SANDBOX`, `CODEX_SANDBOX_NETWORK_DISABLED` in the shell environment (*unverified*); confirm with the user |
 | Skill discovery | Codex can install skills and plugins (`codex plugin marketplace add <repo>`, then `codex plugin add <plugin>@<marketplace>`); skills that live only inside a project are found reliably when `AGENTS.md` links to them |

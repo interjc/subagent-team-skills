@@ -43,8 +43,8 @@ Paths are relative to this skill's directory; pass `--root <project>` when runni
 **Time windows ("time-sliced use").** Typical uses: a company plan usable on weekdays only; an off-peak price at night (`prefer` the discounted model 00:00-08:00); credits that expire (`prefer ... until=2026-11-30`); a channel to spare during the day when the user works in it interactively (`avoid` 09:00-19:00). Days are the days a window starts on: `fri 22:00-08:00` covers Friday night until Saturday 08:00. Times carry an offset (`2026-11-30T19:00+08:00`); a date alone (`until=2026-11-30`, `--resets 2026-12-01`, `--expires 2026-11-30`) is a whole local day in the window's or the plan's zone.
 
 ```bash
-node scripts/compute-config.mjs set agy-flash --scope global --team agy --channel agy-staff \
-  --model gemini-3.8-flash-high --effort high --tier external-fast --roles bulk \
+node scripts/compute-config.mjs set agy-flash --scope global --team agy --channel agy-acp-run.mjs \
+  --model gemini-3.8-flash --effort high --tier external-fast --roles bulk \
   --fallback opencode-fast,in-house:mid:medium
 node scripts/compute-config.mjs schedule add night-discount --scope global \
   --when "00:00-08:00 tz=Asia/Shanghai" --prefer opencode-fast --roles bulk

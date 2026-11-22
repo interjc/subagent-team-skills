@@ -69,7 +69,7 @@ Use the harness's question tool when there is one (recommended option first; if 
 
 | External team | Channel | Tiers it can fill | May edit? | Status |
 |---|---|---|---|---|
-| <e.g. agy> | <plugin agy-staff, or CLI> | external-fast, external-strong | yes | <verified YYYY-MM-DD> |
+| <e.g. agy> | ACP (agy-acp-run.mjs; agy-staff personas in briefs) | external-fast, external-strong | yes, edits only (no commands) | <verified YYYY-MM-DD> |
 | <e.g. Codex CLI> | CLI (codex-run.mjs); plugin for reviews | external-strong | yes | <verified YYYY-MM-DD> |
 | <e.g. OpenCode> | ACP (opencode-acp-run.mjs) | the tier of its configured model | yes, allow-listed shell | <verified YYYY-MM-DD> |
 

@@ -86,6 +86,7 @@ External agents only know the brief and cannot ask follow-up questions.
 - **No end-to-end steps**: acceptance is static checks and unit or snapshot tests only. Do not ask for browser, device, dev-server or full-stack checks; the director arranges those after acceptance ([verification.md](verification.md), "End-to-end checks for outsourced work").
 - **No decisions**: "If anything falls outside this spec, stop and explain it in your final reply; do not decide."
 - **Prohibitions**: state-changing git operations (read-only status/diff is fine); installing packages, builds, dev servers, database commands; reading `.env*`; editing outside the lease.
+- **Over ACP, write the brief so that no action is ever denied.** agy stops its turn at the first rejected request: say "Do not run any shell commands; the checks run elsewhere", and in a read-only job "Do not create or edit any file". The checks then run in-house.
 - **Report**: files changed and why, uncertain spots, problems noticed but not fixed.
 - **Questions go in the final reply**: "If you are blocked, stop and list each question with what you tried; your liaison will answer and continue this job."
 
@@ -96,7 +97,7 @@ The liaison (L3, low tier) tracks one external job, or one team's sequential job
 ```markdown
 ## Job
 Card: <docs/agent-team/tasks/<ID>.md> (you are its holder; keep Status, Job, Log and Questions current)
-External team: <team> via <CLI | plugin | MCP>; model <id>; effort <level>; sandbox <read-only | workspace-write>; confidentiality <full | standard | restricted>; must not open: <confidential paths, or "none">
+External team: <team> via <ACP | CLI | plugin | MCP> (not ACP: <the risk, stated to the user>); model <id>; effort <level>; sandbox <read-only | workspace-write>; confidentiality <full | standard | restricted>; must not open: <confidential paths, or "none">
 Frozen brief for the external agent: <path> (do not change it; continuations quote from it)
 Workspace: <absolute path>; lease of the job: <paths>; must not touch: <paths>
 Running at the same time in this workspace: <jobs and their paths, or "none"> (their changes in `git status` are not yours to report or reject)

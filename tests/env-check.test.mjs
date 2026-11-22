@@ -14,6 +14,7 @@ const envCheck = require(SCRIPT);
 let tmp;
 let fakeCodex;
 let fakeAgy;
+let fakeAgyAcp;
 
 before(() => {
   tmp = makeTempDir('env-check-test-');
@@ -21,6 +22,7 @@ before(() => {
   fs.mkdirSync(bin);
   fakeCodex = makeFakeBin(bin, 'codex', 'fake-codex.mjs');
   fakeAgy = makeFakeBin(bin, 'agy', 'fake-agy.mjs');
+  fakeAgyAcp = makeFakeBin(bin, 'agy-acp', 'fake-agy-acp.mjs');
 });
 
 after(() => removeDir(tmp));
@@ -72,7 +74,7 @@ test('runChecks: ready with optional tools present and a policy in the repo root
   const dir = project('ready', { 'AGENTS.md': '## Subagent team\n- Model policy: auto\n- Host harness: Claude Code\n- Team board: native\n- External delegation: roster   <!-- ask | roster | none -->\n' });
   fs.mkdirSync(path.join(dir, 'sub'));
   const r = envCheck.runChecks({ root: path.join(dir, 'sub') },
-    { ...noOthers(), CODEX_BIN: fakeCodex, AGY_BIN: fakeAgy, HOME: tmp, CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg') }, 'v24.1.0');
+    { ...noOthers(), CODEX_BIN: fakeCodex, AGY_BIN: fakeAgyAcp, HOME: tmp, CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg') }, 'v24.1.0');
   assert.equal(r.status, 'ready');
   assert.equal(fs.realpathSync(r.projectRoot), fs.realpathSync(dir), 'policy is looked up at the git top level');
   assert.equal(r.policy.modelPolicy, 'auto');
@@ -89,7 +91,7 @@ test('runChecks: ready with optional tools present and a policy in the repo root
   fs.mkdirSync(path.join(dir, '.agent-team'));
   fs.writeFileSync(path.join(dir, '.agent-team', 'compute.json'), '{"schema":1}\n');
   const r2 = envCheck.runChecks({ root: path.join(dir, 'sub') },
-    { ...noOthers(), CODEX_BIN: fakeCodex, AGY_BIN: fakeAgy, HOME: tmp, CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg') }, 'v24.1.0');
+    { ...noOthers(), CODEX_BIN: fakeCodex, AGY_BIN: fakeAgyAcp, HOME: tmp, CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg') }, 'v24.1.0');
   assert.equal(r2.compute.projectFound, true);
   assert.deepEqual(r2.next.slice(1), [
     'Compute plan found (project): run scripts/compute-config.mjs show and route by it; ask nothing about compute unless it reports a review is due (then notify and proceed).',
@@ -319,4 +321,23 @@ test('doctor recommends the recommended Node version only below it', () => {
   for (const v of ['v22.1.0', 'v23.0.0', 'v24.1.0', 'v26.0.0']) {
     assert.ok(!recommend({ ...base, nodeVersion: v }).some((r) => /Node\.js/.test(r)), `no Node.js advice on ${v}: the user's version is used`);
   }
+});
+
+test('runChecks: an agy without ACP is a warning with the update as fix; 1.5.x below 1.5.12 is ok with a note', () => {
+  const dir = project('agy-old');
+  const r = envCheck.runChecks({ root: dir }, { ...noOthers(), CODEX_BIN: fakeCodex, AGY_BIN: fakeAgy, HOME: tmp, CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg') }, 'v24.1.0');
+  const agy = r.checks.find((c) => c.id === 'agy');
+  assert.equal(agy.status, 'warn');
+  assert.match(agy.detail, /has no official ACP server/);
+  assert.match(agy.fix, /agy update/);
+  process.env.FAKE_AGY_VERSION = '1.5.3';
+  let mid;
+  try {
+    mid = envCheck.runChecks({ root: dir }, { ...noOthers(), CODEX_BIN: fakeCodex, AGY_BIN: fakeAgyAcp, HOME: tmp, CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg') }, 'v24.1.0');
+  } finally {
+    delete process.env.FAKE_AGY_VERSION;
+  }
+  const a2 = mid.checks.find((c) => c.id === 'agy');
+  assert.equal(a2.status, 'ok');
+  assert.match(a2.detail, /1\.5\.12 or newer recommended/);
 });
