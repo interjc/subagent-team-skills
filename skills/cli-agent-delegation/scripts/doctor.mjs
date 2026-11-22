@@ -16,10 +16,10 @@ import { pathToFileURL } from 'node:url';
 
 // Hard minimum: below it, built-ins these scripts rely on (global fetch,
 // process-group handling as tested) are missing or untested. Recommended: 24.
-export const MIN_NODE_MAJOR = 18;
+export const MIN_NODE_MAJOR = 22;
 if (Number(process.versions.node.split('.')[0]) < MIN_NODE_MAJOR) {
   console.error(`doctor.mjs: Node.js >= ${MIN_NODE_MAJOR} is required (found v${process.versions.node}). ` +
-    'Install Node.js 24 LTS (e.g. `nvm install 24`), or use the raw commands in SKILL.md, "Channels and fallbacks".');
+    'Use Node.js 22 or newer: a version the project pins or nvm already has (`nvm use <version>`), else install 24 with nvm (`nvm install 24 && nvm use 24`; native installers only without nvm), or use the raw commands in SKILL.md, "Channels and fallbacks".');
   process.exit(1);
 }
 
@@ -240,9 +240,9 @@ export const RECOMMENDED_NODE_MAJOR = 24;
 
 export function recommend({ codex, agy, opencode = null, nodeVersion = process.version }) {
   const recs = [];
-  const major = Number(String(nodeVersion).replace(/^v/, '').split('.')[0]);
-  if (major < RECOMMENDED_NODE_MAJOR) {
-    recs.push(`Node.js ${nodeVersion} meets the minimum (${MIN_NODE_MAJOR}); ${RECOMMENDED_NODE_MAJOR} is recommended (e.g. \`nvm install ${RECOMMENDED_NODE_MAJOR}\`).`);
+  // The scripts refuse Node.js below the minimum; at or above it, the user's version is used as it is.
+  if (Number(String(nodeVersion).replace(/^v/, '').split('.')[0]) < MIN_NODE_MAJOR) {
+    recs.push(`Node.js ${nodeVersion} is below the minimum ${MIN_NODE_MAJOR}: with the user's consent, install the project's pinned version if it is ${MIN_NODE_MAJOR} or newer, else ${RECOMMENDED_NODE_MAJOR}, through nvm (\`nvm install ${RECOMMENDED_NODE_MAJOR} && nvm use ${RECOMMENDED_NODE_MAJOR}\`; a native install only without nvm).`);
   }
   if (!codex.present) recs.push(`Codex CLI not found (${codex.bin}): install it (npm install -g @openai/codex) or set CODEX_BIN.`);
   else if (codex.error) recs.push(`Codex CLI found but \`${codex.bin} --version\` failed: ${codex.error}.`);

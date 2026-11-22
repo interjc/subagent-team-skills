@@ -2,9 +2,9 @@
 name: cli-agent-delegation
 description: Outsource well-specified bulk coding work to another vendor's agent through its CLI, a plugin, ACP or an MCP server. Covers OpenAI Codex CLI (codex exec, or OpenAI's Codex plugin for Claude Code), Google Antigravity (agy, with or without the agy-staff plugin) and OpenCode through its Agent Client Protocol server (opencode acp), with fallback ladders, plus onboarding other agents through ACP and its Registry (Grok Build, Cursor, Pi; Gemini CLI is deprecated, use agy). Asks the user which external teams to use and re-checks their capabilities on request. Use this when handing translations, mechanical refactors, test or snapshot backfills, doc syncs or a second-opinion review to an external agent; when running codex, agy or opencode headless; when choosing between them or falling back from one to another; when the user asks which external agents are available or wants to add, drop or verify one; when a liaison dispatches, waits on, resumes or accepts their jobs; or when a dispatch plugin is missing or broken.
 license: MIT with Commons Clause v1.0 (see LICENSE)
-compatibility: Built for Claude Code (primary) and Codex (secondary) as the host; other hosts are unverified. Needs a shell. The helper scripts need Node.js 18+ (24 recommended); external agents need their own CLIs and accounts (Codex CLI, agy, OpenCode). Run scripts/doctor.mjs first.
+compatibility: Built for Claude Code (primary) and Codex (secondary) as the host; other hosts are unverified. Needs a shell. The helper scripts need Node.js 22+ (24 or newer recommended, through nvm); external agents need their own CLIs and accounts (Codex CLI, agy, OpenCode). Run scripts/doctor.mjs first.
 metadata:
-  version: "0.3.6"
+  version: "0.4.0"
 ---
 
 # CLI Agent Delegation
@@ -23,6 +23,7 @@ This page holds the decisions that apply to every team: gate, team choice, brief
 | hand a job to a liaison, wait on it, or adapt to a host | [references/liaison-and-hosts.md](references/liaison-and-hosts.md) |
 | send a read-only second opinion, especially on sensitive code | [references/read-only-reviews.md](references/read-only-reviews.md) |
 | answer "which teams may take work?" or re-verify a team | [references/roster-and-verification.md](references/roster-and-verification.md) |
+| read or change the user's compute plan (model and effort per role, fallbacks, time windows), log a job, or check for newer models | [references/compute-plan.md](references/compute-plan.md) |
 | watch quota, switch when a channel or model runs out, or spend one channel first | [references/quota.md](references/quota.md) |
 | judge timings, token costs and past lessons | [references/field-data.md](references/field-data.md) |
 
@@ -30,11 +31,13 @@ This page holds the decisions that apply to every team: gate, team choice, brief
 
 Script paths are relative to this skill's directory. Run `node scripts/doctor.mjs` once per session: it reports the Node version, Codex CLI (and its default effort), agy and agy-staff, OpenCode, and the Codex plugin. Without Node, check `codex --version`, `agy --version` and `opencode --version` by hand. Report blockers to the user; install only with their consent.
 
+**The compute plan lives in local files, not in memory.** Which team · model · effort takes which role, each one's fallback chain, its time windows, quota and a log of past jobs are kept in `compute.json` and `compute-usage.jsonl`: globally in `~/.subagent-team/` (or `$SUBAGENT_TEAM_HOME`), overridden per project by `.agent-team/` in the main checkout, which stays out of git. With `subagent-team` installed, its `scripts/compute-config.mjs` reads and writes them (`show`, `resolve --role <role>`, `record`); otherwise edit the JSON by hand ([references/compute-plan.md](references/compute-plan.md)). Ask about compute only when no plan exists: draft one from the doctor, the channels' model lists and a current model ranking, confirm it once, and ask whether to keep it globally, for this project or this session. After that, route by the plan, announce changes you make in one line and go ahead unless the user objects; every change the user asks for gets the same scope question.
+
 Before the first external job, ask the user one multi-select question: which detected teams may take work in this session (each with its channel and what it would do), or none. With it, confirm how far each team is trusted with the code (`full`, `standard`, `restricted`, `none`): that is the user's call, recorded for the session or, when lasting, in a project file kept out of git by default ([references/roster-and-verification.md](references/roster-and-verification.md), "How far each team is trusted"). Skip it when `subagent-team` already asked, the project policy says `External delegation: roster` or `none`, or the run is non-interactive; then state the choice in one line and record it where the team keeps state.
 
 When the user asks to check, add or drop a team ("can Codex take this?", "stop using agy"), follow [references/roster-and-verification.md](references/roster-and-verification.md). Never interrupt running jobs for it.
 
-A preference such as "use OpenCode's GPT models for now" usually follows quota (credits about to expire, a channel used up) and is **session scope**: apply it to new jobs only, leave running jobs on their team, and do not write it into the project's roster unless the user asks for a lasting change. Watch quota while jobs run: when a channel · model runs out, the layer above switches to the same-tier model on another allowed channel (agree the order when asking which teams may take work), comes in-house once every external option is out, and records the reset time; spending a plentiful quota first is the user's choice ([references/quota.md](references/quota.md)). When a team · model needs content rework twice in a row, the next job goes to a stronger model on that channel or to another team.
+A preference such as "use OpenCode's GPT models for now" usually follows quota (credits about to expire, a channel used up): recommend **session scope** when you ask its scope, apply it to new jobs only, and leave running jobs on their team. Watch quota while jobs run: when a channel · model runs out, the layer above switches along that resource's fallback chain to the same-tier model on another allowed channel, comes in-house once every external option is out, and records the state and reset time in the plan's quota ledger; spending a plentiful quota first is the user's choice ([references/quota.md](references/quota.md)). When a team · model needs content rework twice in a row, the next job goes to a stronger model on that channel or to another team.
 
 ## 2. Gate: should this be outsourced at all?
 
@@ -79,13 +82,13 @@ Write the brief to a file in your scratch directory (start from `subagent-team`'
 - **Prohibitions**: no state-changing git operations (read-only `git status` / `git diff` is fine), no installs, builds, dev servers or database commands, no reading `.env*`, nothing outside the lease.
 - **Report**: files changed and why, uncertain spots, problems noticed but not fixed.
 
-The wrappers need Node.js 18+ and no dependencies; each refuses an older Node with a clear message. Without Node, use the team's raw command (in its reference page).
+The wrappers need Node.js 22+ and no dependencies; each refuses an older Node with a clear message. Without Node, use the team's raw command (in its reference page).
 
 ## 5. Channels and fallbacks
 
 Each team has a preferred channel and a ladder below it. Move down **the same team's** ladder when the problem is the channel (plugin missing or broken, no Node for the wrapper). Move to **another team of the same tier** when the team itself is unavailable (not signed in, quota, network, model retired). The last step is always in-house.
 
-| Team | Preferred | Next | Without Node.js 18+ | Team unavailable |
+| Team | Preferred | Next | Without Node.js 22+ | Team unavailable |
 |---|---|---|---|---|
 | Codex CLI | `scripts/codex-run.mjs` for jobs; the Codex plugin's review commands for read-only second opinions | the plugin's `task` runtime with explicit `--model` and `--effort` | raw `codex exec` ([codex.md](references/codex.md)) | OpenCode or agy with a strong model, else in-house |
 | agy | agy-staff plugin | `scripts/agy-run.mjs` | raw `agy -p` ([agy.md](references/agy.md)) | OpenCode with a fast model or Codex at `medium`, else in-house |

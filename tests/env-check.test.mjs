@@ -36,17 +36,21 @@ function project(name, files = {}, { git = true } = {}) {
 const missing = (name) => path.join(tmp, 'nope', name);
 const noOthers = () => ({ OPENCODE_BIN: missing('opencode'), PI_BIN: missing('pi'), GROK_BIN: missing('grok') });
 
-test('checkNode: error below the minimum, warning below recommended, ok at recommended', () => {
+test('checkNode: error below the minimum, the user\'s version is ok at or above it', () => {
   const { MIN_NODE_MAJOR, RECOMMENDED_NODE_MAJOR, checkNode } = envCheck;
-  assert.equal(MIN_NODE_MAJOR, 18);
+  assert.equal(MIN_NODE_MAJOR, 22);
   assert.equal(RECOMMENDED_NODE_MAJOR, 24);
   const low = checkNode('v16.20.2');
   assert.equal(low.status, 'error');
-  assert.match(low.detail, /below the minimum 18/);
+  assert.match(low.detail, /below the minimum 22/);
   assert.match(low.fix, /nvm install 24/);
+  assert.match(low.fix, /consent/);
   assert.match(low.fix, /fallbacks in references\/environment-check\.md/);
-  assert.equal(checkNode('v18.0.0').status, 'warn');
-  assert.equal(checkNode('v22.22.0').status, 'warn');
+  assert.equal(checkNode('v18.0.0').status, 'error');
+  assert.equal(checkNode('v20.19.0').status, 'error');
+  assert.equal(checkNode('v22.0.0').status, 'ok');
+  assert.equal(checkNode('v22.22.0').status, 'ok');
+  assert.equal(checkNode('v23.3.0').status, 'ok');
   assert.equal(checkNode('v24.1.0').status, 'ok');
   assert.equal(checkNode('v26.0.0').status, 'ok');
 });
@@ -79,15 +83,76 @@ test('runChecks: ready with optional tools present and a policy in the repo root
   assert.equal(r.policy.externalDelegation, 'roster');
   assert.deepEqual(r.next, [
     'External delegation: roster (from the policy): use the roster as recorded and say so in one line; re-check only when the user asks.',
+    'Compute plan: none yet: draft one (teams, model and effort per role, fallbacks, windows) and confirm it once, asking whether to keep it globally, for this project or for this session (references/compute-config.md).',
+  ]);
+  assert.equal(r.compute.globalFound, false);
+  fs.mkdirSync(path.join(dir, '.agent-team'));
+  fs.writeFileSync(path.join(dir, '.agent-team', 'compute.json'), '{"schema":1}\n');
+  const r2 = envCheck.runChecks({ root: path.join(dir, 'sub') },
+    { ...noOthers(), CODEX_BIN: fakeCodex, AGY_BIN: fakeAgy, HOME: tmp, CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg') }, 'v24.1.0');
+  assert.equal(r2.compute.projectFound, true);
+  assert.deepEqual(r2.next.slice(1), [
+    'Compute plan found (project): run scripts/compute-config.mjs show and route by it; ask nothing about compute unless it reports a review is due (then notify and proceed).',
     'Environment ready and policy found: proceed.',
   ]);
+  assert.match(envCheck.formatReport(r2), /Compute plan: .*\.agent-team/);
+});
+
+test('findCompute: SUBAGENT_TEAM_HOME, else a dedicated ~/.subagent-team', () => {
+  const dir = project('compute-paths');
+  assert.equal(envCheck.findCompute({ SUBAGENT_TEAM_HOME: path.join(tmp, 'sth') }, dir).global, path.join(tmp, 'sth', 'compute.json'));
+  assert.equal(envCheck.findCompute({ HOME: tmp }, dir).global, path.join(tmp, '.subagent-team', 'compute.json'));
+  assert.equal(envCheck.findCompute({ HOME: tmp, XDG_CONFIG_HOME: path.join(tmp, 'xdg') }, dir).global, path.join(tmp, '.subagent-team', 'compute.json'), 'XDG is not used');
+});
+
+test('nvm: found through NVM_DIR or ~/.nvm, install hints are nvm-first and ask for consent', () => {
+  const home = path.join(tmp, 'nvm-home');
+  fs.mkdirSync(home, { recursive: true });
+  const none = envCheck.findNvm({ HOME: home });
+  assert.deepEqual(none, { found: false, dir: path.join(home, '.nvm'), versions: [] });
+  const noNvmHint = envCheck.nodeInstallHint(none);
+  assert.match(noNvmHint, /consent/);
+  assert.match(noNvmHint, /install nvm/);
+  assert.ok(noNvmHint.indexOf('nvm') < noNvmHint.indexOf('natively'), 'nvm comes before a native install');
+  fs.mkdirSync(path.join(home, '.nvm'));
+  fs.writeFileSync(path.join(home, '.nvm', 'nvm.sh'), '# fake\n');
+  const found = envCheck.findNvm({ HOME: home });
+  assert.equal(found.found, true);
+  assert.match(envCheck.nodeInstallHint(found), /^With the user's consent: `nvm install 24 && nvm use 24`/);
+  const custom = path.join(tmp, 'custom-nvm');
+  fs.mkdirSync(custom, { recursive: true });
+  fs.writeFileSync(path.join(custom, 'nvm.sh'), '# fake\n');
+  assert.deepEqual(envCheck.findNvm({ HOME: home, NVM_DIR: custom }), { found: true, dir: custom, versions: [] });
+  assert.deepEqual(envCheck.findNvm({ HOME: path.join(tmp, 'elsewhere'), NVM_DIR: path.join(tmp, 'nope') }).found, false);
+  // checkNvm: info only when nvm exists but this Node.js is not nvm's.
+  assert.deepEqual(envCheck.checkNvm(none, '/usr/local/bin/node'), []);
+  assert.deepEqual(envCheck.checkNvm(found, path.join(found.dir, 'versions', 'node', 'v24.1.0', 'bin', 'node')), []);
+  const shadow = envCheck.checkNvm(found, '/opt/homebrew/bin/node');
+  assert.equal(shadow.length, 1);
+  assert.equal(shadow[0].id, 'nvm');
+  assert.equal(shadow[0].status, 'info');
+  assert.match(shadow[0].fix, /nvm use 24/);
+  assert.match(envCheck.checkNvm(found, '/opt/homebrew/bin/node', { major: 26 })[0].fix, /nvm use 26/);
+  assert.deepEqual(envCheck.checkNvm(found, ''), []);
+  // runChecks wires it in through opts.execPath.
+  const dir = project('nvm-wired');
+  const env = { CODEX_BIN: missing('codex'), AGY_BIN: missing('agy'), HOME: home, ...noOthers() };
+  const r = envCheck.runChecks({ root: dir, execPath: '/opt/homebrew/bin/node' }, env, 'v24.1.0');
+  assert.ok(r.checks.some((c) => c.id === 'nvm' && c.status === 'info'));
+  const old = envCheck.runChecks({ root: dir }, env, 'v20.1.0');
+  const nodeCheck = old.checks.find((c) => c.id === 'node');
+  assert.equal(nodeCheck.status, 'error');
+  assert.match(nodeCheck.fix, /nvm install 24/);
 });
 
 test('runChecks: asks which external teams to use unless the policy says roster or none', () => {
   const dir = project('ask', { 'AGENTS.md': '## Subagent team\n- Model policy: auto\n- Host harness: Codex\n- Team board: native\n' });
   const env = { ...noOthers(), CODEX_BIN: fakeCodex, AGY_BIN: missing('agy'), HOME: tmp, CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg') };
   const r = envCheck.runChecks({ root: dir }, env, 'v24.1.0');
-  assert.deepEqual(r.next, ['External teams available (codex): ask the user which may take work this session, pre-selecting the policy roster (references/environment-check.md, step 5). Policy "External delegation: roster" or "none" skips this question.']);
+  assert.deepEqual(r.next, [
+    'External teams available (codex): ask the user which may take work this session, pre-selecting the policy roster (references/environment-check.md, step 5). Policy "External delegation: roster" or "none" skips this question.',
+    'Compute plan: none yet: draft one (teams, model and effort per role, fallbacks, windows) and confirm it once, asking whether to keep it globally, for this project or for this session (references/compute-config.md).',
+  ]);
   fs.writeFileSync(path.join(dir, 'AGENTS.md'), '## Subagent team\n- Model policy: auto\n- Host harness: Codex\n- Team board: native\n- External delegation: none\n');
   const r2 = envCheck.runChecks({ root: dir }, env, 'v24.1.0');
   assert.match(r2.next[0], /External delegation: none \(from the policy\): keep all work in-house/);
@@ -125,9 +190,53 @@ test('runChecks: blocked when git is missing; missing optional CLIs are only inf
 
 test('runChecks: warns outside a git repository and on a non-recommended Node', () => {
   const dir = project('nogit', {}, { git: false });
-  const r = envCheck.runChecks({ root: dir }, { CODEX_BIN: missing('codex'), AGY_BIN: missing('agy'), HOME: tmp }, 'v20.1.0');
+  const r = envCheck.runChecks({ root: dir }, { CODEX_BIN: missing('codex'), AGY_BIN: missing('agy'), HOME: tmp }, 'v22.1.0');
   assert.equal(r.status, 'ready-with-warnings');
-  assert.deepEqual(r.checks.filter((c) => c.status === 'warn').map((c) => c.id).sort(), ['git-repo', 'node']);
+  assert.deepEqual(r.checks.filter((c) => c.status === 'warn').map((c) => c.id).sort(), ['git-repo']);
+});
+
+test('Node.js version precedence: project pin, then running, then nvm, then recommended', () => {
+  const { findNodePin, nodeTarget, checkNodePin } = envCheck;
+  const nvmDir = path.join(tmp, 'nvm-versions');
+  for (const v of ['v20.10.0', 'v22.16.0', 'v23.11.1', 'v23.2.0']) fs.mkdirSync(path.join(nvmDir, 'versions', 'node', v), { recursive: true });
+  fs.writeFileSync(path.join(nvmDir, 'nvm.sh'), '# fake\n');
+  const nvm = envCheck.findNvm({ NVM_DIR: nvmDir });
+  assert.deepEqual(nvm.versions, ['v23.11.1', 'v23.2.0', 'v22.16.0', 'v20.10.0']);
+  const pin = (name, files) => findNodePin(project(name, files, { git: false }));
+  assert.equal(pin('pin-none', {}), null);
+  assert.deepEqual(pin('pin-nvmrc', { '.nvmrc': 'v23.4.0\n' }), { file: '.nvmrc', value: 'v23.4.0', major: 23 });
+  assert.deepEqual(pin('pin-nodever', { '.node-version': '22\n' }), { file: '.node-version', value: '22', major: 22 });
+  assert.deepEqual(pin('pin-volta', { 'package.json': '{"volta":{"node":"26.1.0"}}' }), { file: 'package.json volta.node', value: '26.1.0', major: 26 });
+  assert.deepEqual(pin('pin-lts', { '.nvmrc': 'lts/*\n' }), { file: '.nvmrc', value: 'lts/*', major: null });
+  // A pin of 22 or newer wins, even over a newer running Node.js.
+  assert.deepEqual(nodeTarget('v26.0.0', { file: '.nvmrc', value: '23', major: 23 }, nvm), { major: 23, source: 'project (.nvmrc)', installed: true });
+  // Otherwise the running version, if it meets the minimum.
+  assert.deepEqual(nodeTarget('v22.3.0', null, nvm), { major: 22, source: 'running', installed: true });
+  assert.deepEqual(nodeTarget('v25.0.0', { file: '.nvmrc', value: '18', major: 18 }, nvm), { major: 25, source: 'running', installed: false });
+  // Then the newest version nvm already has; then the recommended version.
+  assert.deepEqual(nodeTarget('v20.1.0', null, nvm), { major: 23, source: 'nvm', installed: true });
+  assert.deepEqual(nodeTarget('v20.1.0', null, { found: false, dir: 'x', versions: [] }), { major: 24, source: 'recommended', installed: false });
+  // Hints: nvm use when already installed, install only otherwise.
+  const err = envCheck.checkNode('v20.1.0', nvm, null);
+  assert.equal(err.status, 'error');
+  assert.match(err.fix, /^`nvm use 23` \(already installed/);
+  assert.match(envCheck.checkNode('v20.1.0', nvm, { file: '.nvmrc', value: '26', major: 26 }).fix, /consent: `nvm install 26 && nvm use 26`/);
+  // Pin notices are information only.
+  assert.deepEqual(checkNodePin('v23.1.0', { file: '.nvmrc', value: '23', major: 23 }, nvm), []);
+  const differ = checkNodePin('v26.0.0', { file: '.nvmrc', value: '24', major: 24 }, nvm);
+  assert.equal(differ[0].status, 'info');
+  assert.match(differ[0].fix, /nvm use 24` after `nvm install 24`/);
+  const low = checkNodePin('v26.0.0', { file: '.nvmrc', value: '18', major: 18 }, nvm);
+  assert.equal(low[0].status, 'info');
+  assert.match(low[0].fix, /Keep the project's pin; .*nvm exec 26/);
+  assert.deepEqual(checkNodePin('v26.0.0', { file: '.nvmrc', value: 'lts/*', major: null }, nvm), []);
+  // runChecks reports the pin and the target, and never warns about a supported version.
+  const dir = project('pin-run', { '.nvmrc': '23\n' });
+  const r = envCheck.runChecks({ root: dir }, { CODEX_BIN: missing('codex'), AGY_BIN: missing('agy'), NVM_DIR: nvmDir, HOME: tmp, ...noOthers() }, 'v22.1.0');
+  assert.equal(r.nodePin.major, 23);
+  assert.deepEqual(r.nodeTarget, { major: 23, source: 'project (.nvmrc)', installed: true });
+  assert.equal(r.checks.find((c) => c.id === 'node').status, 'ok');
+  assert.equal(r.checks.find((c) => c.id === 'node-pin').status, 'info');
 });
 
 test('detectHost reads harness environment variables as hints', () => {
@@ -192,7 +301,7 @@ test('CLI: report, --json, exit codes and usage errors', () => {
   const json = runScript(SCRIPT, ['--root', dir, '--json'], { env });
   assert.equal(json.status, 0);
   assert.equal(json.json.policy.modelPolicy, 'fixed');
-  assert.equal(json.json.minNode, 18);
+  assert.equal(json.json.minNode, 22);
   const blocked = runScript(SCRIPT, ['--root', dir, '--json'], { env: { ...env, GIT_BIN: missing('git') } });
   assert.equal(blocked.status, 2);
   assert.equal(blocked.json.status, 'blocked');
@@ -200,11 +309,14 @@ test('CLI: report, --json, exit codes and usage errors', () => {
   assert.equal(runScript(SCRIPT, ['--bogus'], { env }).status, 1);
   const help = runScript(SCRIPT, ['--help'], { env });
   assert.equal(help.status, 0);
-  assert.match(help.stdout, /Node\.js >= 18/);
+  assert.match(help.stdout, /Node\.js >= 22/);
+  assert.match(help.stdout, /nvm/);
 });
 
 test('doctor recommends the recommended Node version only below it', () => {
   const base = { codex: { present: true, bin: 'codex', defaultModel: 'm' }, agy: { present: true, bin: 'agy', agyStaff: { installed: true, companionExists: true } } };
-  assert.ok(recommend({ ...base, nodeVersion: 'v22.1.0' }).some((r) => /24 is recommended/.test(r)));
-  assert.ok(!recommend({ ...base, nodeVersion: 'v24.1.0' }).some((r) => /recommended \(e\.g/.test(r)));
+  assert.ok(recommend({ ...base, nodeVersion: 'v20.1.0' }).some((r) => /below the minimum 22/.test(r) && /nvm install 24/.test(r)));
+  for (const v of ['v22.1.0', 'v23.0.0', 'v24.1.0', 'v26.0.0']) {
+    assert.ok(!recommend({ ...base, nodeVersion: v }).some((r) => /Node\.js/.test(r)), `no Node.js advice on ${v}: the user's version is used`);
+  }
 });

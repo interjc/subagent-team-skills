@@ -126,8 +126,10 @@ When to write (the director, or whoever the lease names):
 | Trigger | Write |
 |---|---|
 | The user prefers a channel or model for now ("use OpenCode's GPT models for now") | the session choice line in `progress.md`; nothing in `AGENTS.md` ([user-overrides.md](user-overrides.md)) |
+| The user sets a team's model, effort, role, fallback or time window for this project or globally | the compute files (`compute-config.mjs`, git-ignored or in the user's config directory); nothing in `AGENTS.md` or tracked records ([compute-config.md](compute-config.md)) |
 | The user says how far an external team is trusted | this session: the level only, on the session choice line in `progress.md`; lasting: the confidentiality file, git-ignored by default, with no `lessons.md` row while it is git-ignored ([confidentiality.md](confidentiality.md)) |
-| A channel · model runs out, is found low or plentiful, or its reset time becomes known | the "Channel quota" table in `progress.md` (state, checked, resets as an absolute time, source, substitute); the switch itself in one line on the card ([quota.md](quota.md)) |
+| A channel · model runs out, is found low or plentiful, or its reset time becomes known | the quota ledger in the global compute file (`compute-config.mjs quota`); the switch itself in one line on the card ([quota.md](quota.md)) |
+| An external job finishes, is reworked or taken back in-house | one `compute-config.mjs record` line (outcome, minutes, tokens, cost); the card keeps the job's own log |
 | The user corrects the process or states a lasting preference ("always ask before outsourcing auth tests") | a `lessons.md` row with the date and the user's words, verbatim; if it is a project-wide rule, the rule itself in `AGENTS.md` and a "promoted to" link in the row |
 | The user decides a product or design question | `decisions.md` entry plus a summary line in `progress.md` |
 | An escalation reveals that a brief or contract was missing something | `lessons.md` row; fix the template or the contract |

@@ -18,10 +18,10 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 // Hard minimum shared by every script in these skills. Recommended: 24.
-export const MIN_NODE_MAJOR = 18;
+export const MIN_NODE_MAJOR = 22;
 if (Number(process.versions.node.split('.')[0]) < MIN_NODE_MAJOR) {
   console.error(`team-board.mjs: Node.js >= ${MIN_NODE_MAJOR} is required (found v${process.versions.node}). ` +
-    'Install Node.js 24 LTS (e.g. `nvm install 24`), or create the files by hand from references/team-board.md.');
+    'Use Node.js 22 or newer: a version the project pins or nvm already has (`nvm use <version>`), else install 24 with nvm (`nvm install 24 && nvm use 24`; native installers only without nvm), or create the files by hand from references/team-board.md.');
   process.exit(1);
 }
 
@@ -174,12 +174,10 @@ Back to the [board](README.md). Dates are absolute (YYYY-MM-DD). Acceptance numb
 
 ## Next-up queue
 
-## Channel quota
+## Session choice
 
-<!-- session state, not policy: one row per external channel and model whose quota matters; resets as an absolute time with zone -->
-
-| Channel · model | State | Checked | Resets | Source | Substitute |
-|---|---|---|---|---|---|
+<!-- this session only: external teams allowed, confidentiality levels in use, "for now" preferences.
+     The compute plan, quota ledger and usage log live in the local compute files (compute-config.mjs show), not here. -->
 
 ## User decisions
 

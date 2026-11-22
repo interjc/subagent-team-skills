@@ -14,6 +14,7 @@ export const SCRIPTS = {
   opencodeAcpRun: path.join(ROOT, 'skills', 'cli-agent-delegation', 'scripts', 'opencode-acp-run.mjs'),
   doctor: path.join(ROOT, 'skills', 'cli-agent-delegation', 'scripts', 'doctor.mjs'),
   modelRoster: path.join(ROOT, 'skills', 'subagent-team', 'scripts', 'model-roster.mjs'),
+  computeConfig: path.join(ROOT, 'skills', 'subagent-team', 'scripts', 'compute-config.mjs'),
 };
 
 export function makeTempDir(prefix = 'sts-test-') {

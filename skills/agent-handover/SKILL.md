@@ -4,7 +4,7 @@ description: Keep multi-agent coding work resumable at any moment. Record progre
 license: MIT with Commons Clause v1.0 (see LICENSE)
 compatibility: Built for Claude Code (primary) and Codex (secondary); other hosts are unverified. Needs only a repository it can write to.
 metadata:
-  version: "0.3.6"
+  version: "0.4.0"
 ---
 
 # Agent Handover
@@ -41,6 +41,7 @@ Adapt the names to the project; the separation is what matters. Projects that us
 | `AGENTS.md` | Project-wide hard rules, an index of skills, a link to the entry index | Progress |
 | Skills | Reusable methods and process rules | Project state |
 | Local agent memory | Pointers only | Any rule, decision or constraint |
+| Local configuration files (e.g. the user's external compute plan and quota ledger kept by `subagent-team`, git-ignored or in the user's config directory) | The user's machine- or account-specific settings, read by every session | Project rules, progress |
 
 Acceptance numbers are written **once**, in the completed log. Everything else references them.
 

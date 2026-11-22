@@ -61,7 +61,9 @@
 | Grok Build、Cursor、Pi 以及 [ACP Registry](https://agentclientprotocol.com/get-started/registry) 里的其他 agent | ACP | 尚未用于实际工作。已在 Grok Build 和 Cursor 上验证会话建立。Gemini CLI 已并入 agy，视为弃用，请用 agy。[接入指南](skills/cli-agent-delegation/references/acp-agents.md)借鉴了 [T3 Code](https://github.com/pingdotgg/t3code) 支持多种 agent 的做法，给出准入检查、权限策略和常见陷阱 |
 | 其他 CLI，以及通过 MCP 暴露的 agent | CLI / MCP | 未测试。skill 给出接入新 CLI 的检查步骤，先跑一个只读小任务验证再用 |
 
-会话开始时，agent 会问你检测到的外包团队里哪些可以接活（或者直接读项目策略里的选择）；之后只要你开口（"Codex 能审这个吗？""加上 OpenCode""别再用 agy 了"），它就会重新核实并调整。每个团队都有降级路线：先换同一团队的其他通道，再换同档位的其他团队，最后收回内部。外包期间，agent 会按「通道 · 模型」记一份额度台账：某个模型的额度用完，就换到另一个通道上同档位的平替模型；外部全部用尽，再回到内部的平替模型；同时记下额度恢复的时间（查不到就问你）。如果某个通道额度还很富余，或者额度快到期，它会问你要不要优先消耗，以及这个安排只管本次会话还是长期有效。每个外包团队能看到多少代码也由你决定：agent 会逐个团队向你确认保密等级，长期有效的答案存在项目里的一个文件中，默认不进 git，你要求时才纳入版本管理。
+**你的外部算力方案保存在本地文件中，而不是存在 agent 的记忆里**。哪个团队 · 模型 · effort 接哪种活（翻译、批量改动、读代码同步、第二意见审核）、各自的降级路线、何时可以使用（仅限工作日、夜间、直到额度在某天到期）、各自的额度以及每项任务的日志（结果、耗时、token、费用，按天和按小时统计），都会为你机器上的所有项目保存在 `~/.subagent-team/` 中；针对单个项目的差异，则保存在被 git 忽略的 `.agent-team/` 里。agent 对此只问**一次**：没有方案时，它会根据检测到的情况和一份最新的模型榜单（OpenRouter 价格加上 LMArena 的 Code Arena 评分）起草一份，让你在一个对话框中确认或修改，并指定保存位置（全局、当前项目或仅本次会话）。此后它会自行按方案路由，并在做出改动时**告知**你（例如你的 CLI 现已支持更新的模型、额度报错后的降级），只要你没反对就直接继续；每隔几天它还会展示方案供你快速过目。之后你提出的每项改动它都只问一句：仅本次会话、当前项目，还是全局？当上榜的新模型在你的 CLI 中缺失时，它会告诉你更新命令，并在运行前询问。详情见 [compute-config.md](skills/subagent-team/references/compute-config.md)。
+
+只要你开口（"Codex 能审这个吗？""加上 OpenCode""别再用 agy 了"），随时可以重新核实并调整团队。每个团队都有降级路线：先换同一团队的其他通道，再换同档位的其他团队，最后收回内部。当某个通道 · 模型额度用尽时，agent 会将其及恢复时间记入额度台账（查不到就问你），沿着降级路线切换；外部全部用尽后再收回内部，待恢复后再切回。如果某个通道额度还很富余，或者额度快到期，它会问你要不要优先消耗。每个外包团队能看到多少代码也由你决定：agent 会逐个团队向你确认保密等级，长期有效的答案存在项目里的一个文件中，默认不进 git，你要求时才纳入版本管理。
 
 ## 安装
 
@@ -94,8 +96,8 @@ codex plugin add subagent-team@subagent-team-skills
 
 **环境要求**：方法本身没有任何依赖。可选的辅助脚本也不依赖任何包，但需要：
 
-- **Node.js 18 及以上**（硬性下限，在 Node 18 / 20 / 22 / 24 上实测通过）。版本更低时，脚本会给出明确提示并拒绝运行。
-- **Node.js 24**（推荐版本，写在 [`.nvmrc`](.nvmrc) 里）。
+- **Node.js 22 及以上**（硬性下限，在 Node 22 / 24 上实测通过）。版本更低时，脚本会给出明确提示并拒绝运行。
+- **以你自己的 Node.js 为准**：你当前使用的版本，或项目指定的版本（`.nvmrc`、`.node-version`、`volta.node`）只要在 22 及以上，就直接使用。**Node.js 24 及以上**（写在 [`.nvmrc`](.nvmrc) 里）只用于新装，优先用 **nvm** 安装，不想用 nvm 时才装原生版本。如果电脑上没有 Node.js，agent 会先征得你同意，再用 nvm 帮你安装。
 - **git**。
 
 核心 skill 在会话开始时会先做一次**环境健康检查**（`env-check.cjs`），报告这几件事：
@@ -103,7 +105,7 @@ codex plugin add subagent-team@subagent-team-skills
 - 阻塞项和警告，每一条都附上修复命令；
 - 宿主 agent 的初步判断（需要你确认）；
 - 有哪些外包团队可用：Codex CLI 及其插件、agy 和 agy-staff、OpenCode，`PATH` 上的其他 agent CLI，项目 `.mcp.json` 里的 MCP server；
-- 项目里是否已经有团队策略和团队看板。
+- 项目里是否已经有团队策略、团队看板和外部算力方案。
 
 agent 只有在你同意之后才会安装东西，装完会重新检查。如果你不想装，就按文档里写好的替代方案继续。
 
@@ -155,9 +157,10 @@ Claude Code 插件附带两个审核 agent：
 
 | 脚本 | 作用 |
 |---|---|
-| `skills/subagent-team/scripts/env-check.cjs` | 会话开始时的环境健康检查，覆盖 Node.js（下限 18、推荐 24）、git、宿主 agent 的初步判断、外包团队（Codex CLI 及其插件、agy、agy-staff、OpenCode、其他 agent CLI、项目 MCP server）、团队策略（包括是否询问本次用哪些外包团队）和团队看板。用最保守的语法编写，Node 版本过旧时也能运行，并把问题说清楚 |
+| `skills/subagent-team/scripts/env-check.cjs` | 会话开始时的环境健康检查，覆盖 Node.js（下限 22、推荐 24 及以上、nvm）、git、宿主 agent 的初步判断、外包团队（Codex CLI 及其插件、agy、agy-staff、OpenCode、其他 agent CLI、项目 MCP server）、团队策略（包括是否询问本次用哪些外包团队）和团队看板。用最保守的语法编写，Node 版本过旧时也能运行，并把问题说清楚 |
 | `skills/subagent-team/scripts/team-board.mjs` | 团队看板：`init` 生成 `docs/agent-team/` 骨架（从不覆盖已有文件），`new` 新建任务卡片并登记到索引，`set` 同时修改卡片和索引里的状态，`status` 汇总任务状态和待回答的问题，并报告索引、卡片、`lessons.md` 和 `AGENTS.md` 之间的不一致（加 `--strict` 时有任何不一致即失败） |
-| `skills/subagent-team/scripts/model-roster.mjs` | 从 OpenRouter 的公开模型列表拉取 Anthropic / OpenAI / Google / DeepSeek 的最新模型，附价格和上下文长度，用来把抽象档位映射到当前型号 |
+| `skills/subagent-team/scripts/model-roster.mjs` | 从 OpenRouter 的公开模型列表拉取 Anthropic / OpenAI / Google / DeepSeek 的最新模型，附价格和上下文长度；`--arena` 加入 LMArena 的 Code Arena 排行榜表现（无需 key），`--save` 保存排行供 `compute-config.mjs` 使用。用来把抽象档位映射到当前型号 |
+| `skills/subagent-team/scripts/compute-config.mjs` | 本地文件中的外部算力方案（全局与按项目合并）：`show`（方案、待复核项、排行时效、额度备注）、`set` / `route` / `schedule`（每个角色的团队 · 模型 · effort、降级、时间窗口）、`resolve --role <role>`（当前由谁接活及原因）、`quota`、`record` 与 `usage`（带一次通过率的任务日志，按天和按小时统计）、`check-models`（某通道上的更新模型，或需要更新的 CLI）。加锁写入；项目目录不进 git |
 | `skills/subagent-team/scripts/audit-dispatch.mjs` | 从宿主会话记录中列出本次会话实际跑了什么：每个 subagent 的模型与 effort，以及外包作业。仅限 Claude Code |
 | `skills/cli-agent-delegation/scripts/codex-run.mjs` | 封装 `codex exec` 和 `exec resume`。必须显式传 effort；拒绝 `ultra` 和 `danger-full-access`；支持超时；日志和最终回复写到文件；输出带 session id 的 JSON 摘要 |
 | `skills/cli-agent-delegation/scripts/agy-run.mjs` | 没装 agy-staff 时直接 headless 调用 `agy`。会校验模型 id；拒绝绕道调用 Claude / GPT 模型；`--write` 对应不受限模式；可以按 conversation id 续做 |
@@ -176,7 +179,7 @@ Claude Code 插件附带两个审核 agent：
    - `fixed`：由你为每个档位指定模型和 effort。
    - `hybrid`：部分角色固定，其余 auto。
 3. **成本偏好**：均衡 / 省钱 / 质量优先
-4. **外包团队**：用哪些、通过什么方式接入（CLI / 插件 / ACP / MCP）、各自哪个模型对应 external-fast 和 external-strong 档位、哪些可以改文件、哪些只做审核，以及以后每次会话开始时是否再问一遍用哪些团队
+4. **外包团队**：用哪些、通过什么方式接入（CLI / 插件 / ACP / MCP）、哪些可以改文件、哪些只做审核，以及以后每次会话开始时是否再问一遍用哪些团队。如果你还没有算力方案，同一个对话框还会确认起草好的方案（每个角色的模型和 effort、降级、时间窗口）及保存位置。
 5. **团队看板**：推荐 `docs/agent-team/` 加宿主的原生任务列表
 6. **不外包的路径与共享文件**：例如计费、支付、鉴权；语言文件、文档索引
 7. **提交与推送规则**

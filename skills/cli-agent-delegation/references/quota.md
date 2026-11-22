@@ -4,7 +4,7 @@ Detail behind the quota paragraph in "Start" and "Channels and fallbacks" in [SK
 
 ## Keep a ledger
 
-One small table where the team keeps session state (a progress record or the main session's notes), never in the project policy:
+Quota belongs to the account, so the ledger is the `quota` object of the global compute plan, `~/.subagent-team/compute.json` ([compute-plan.md](compute-plan.md)); with `subagent-team` installed, `compute-config.mjs quota <id> --state exhausted --resets <time> --source "error text"` writes it. Never in the project policy, a progress record or agent memory. As a table:
 
 | Channel · model | State | Checked | Resets | Source | Substitute |
 |---|---|---|---|---|---|
@@ -36,8 +36,8 @@ Ask the user before switching only when no substitute was agreed and the switch 
 
 ## Coming back
 
-Once a recorded reset time has passed, the next suitable job may go back to that channel · model and doubles as the probe; if it fails on quota again, record the new time. With no reset time, ask the user once and keep the channel out until they answer. Do not poll or hold work waiting for a reset unless the user asks; jobs already running on the substitute finish there. At session end, leave the rows that still matter (exhausted with a future reset, credit expiry dates) in the progress record so the next session starts from them.
+Once a recorded reset time has passed, the next suitable job may go back to that channel · model and doubles as the probe; if it fails on quota again, record the new time. With no reset time, ask the user once and keep the channel out until they answer. Do not poll or hold work waiting for a reset unless the user asks; jobs already running on the substitute finish there. The ledger file outlives the session, so the next session starts from it; record every quota event there as it happens, and log the job with outcome `quota`.
 
 ## Spending a channel first
 
-When a channel has plenty left, or credits that expire soon, the user may want it used before the others. That is their choice: ask, do not infer it from a full ledger. A spend-first or spare preference reorders the teams that fit a job; it never sends out work that fails the gate, never drops a job below its tier silently, and never replaces a review. Ask its scope with it: for this session it lives in the ledger; as a lasting rule it goes into the project policy's team order with its date; "until a date" or "while the credits last" is lasting with that end condition and is removed when it ends. Unclear wording means this session only. Plenty of free quota is no reason to send a private repository to a model the user has not cleared for it ([roster-and-verification.md](roster-and-verification.md), "How far each team is trusted").
+When a channel has plenty left, or credits that expire soon, the user may want it used before the others. That is their choice: ask, do not infer it from a full ledger. A spend-first or spare preference reorders the teams that fit a job; it never sends out work that fails the gate, never drops a job below its tier silently, and never replaces a review. Ask its scope with it: for this session it lives in the session's choice; as a lasting rule it becomes a schedule rule in the compute plan that prefers that resource (project or global, as the user says); "until a date" or "while the credits last" is the same rule with an `until` date, removed with a one-line notice when it ends. Unclear wording means this session only. Plenty of free quota is no reason to send a private repository to a model the user has not cleared for it ([roster-and-verification.md](roster-and-verification.md), "How far each team is trusted").

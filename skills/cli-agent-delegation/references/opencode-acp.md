@@ -90,7 +90,7 @@ node scripts/opencode-acp-run.mjs run --repo /abs/repo --session ses_... --promp
 
 ## Fallback: `opencode run` without Node.js
 
-Without Node.js 18+, inject the same agent by hand and use `opencode run`. `--standalone` is required, or the shared background service will not see the injected agent ("Agent not found"):
+Without Node.js 22+, inject the same agent by hand and use `opencode run`. `--standalone` is required, or the shared background service will not see the injected agent ("Agent not found"):
 
 ```bash
 cd /abs/repo && OPENCODE_CONFIG_CONTENT='{"agents":{"subagent-team-readonly":{"description":"read-only delegate","mode":"primary","permissions":[

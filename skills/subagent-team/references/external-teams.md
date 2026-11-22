@@ -6,7 +6,7 @@ Editing work must pass the outsourcing gate ([SKILL.md](../SKILL.md), "Breakdown
 
 ## The external roster
 
-Recorded in the project's `## Subagent team` section ([project-setup.md](project-setup.md)), one row per team. Like in-house agents, external teams have tiers: **external-fast** (cheap, fast, mechanical work) and **external-strong** (reads code, steadier on large homogeneous work, second opinions). One team often offers both tiers through different models or effort levels.
+What each team *can* do (channel, may it edit, verified when) is recorded in the project's `## Subagent team` section ([project-setup.md](project-setup.md)), one row per team. What the user has decided each one *does* (model and effort per role, fallbacks, time windows, order) is the compute plan in local files ([compute-config.md](compute-config.md)), since it depends on the user's accounts and quota rather than on the project. Like in-house agents, external teams have tiers: **external-fast** (cheap, fast, mechanical work) and **external-strong** (reads code, steadier on large homogeneous work, second opinions). One team often offers both tiers through different models or effort levels.
 
 | Team | Channel | Tiers it can fill | Status in these skills |
 |---|---|---|---|
@@ -46,19 +46,19 @@ Whatever the value, the user can change the choice at any time.
 1. **Do not interrupt running jobs.** Cancel one only if the user asks, through its own channel, and confirm it stopped. Queued jobs wait until the check is done.
 2. **Check, cheapest first**: `doctor.mjs` (presence, versions, plugins, Codex's default effort); `opencode-acp-run.mjs probe --repo <repo>` for OpenCode (auth methods, models, effort levels, whether the wrapper's permission set applies); the plugin's own check (`/codex:setup`, agy-staff `setup`); then one tiny read-only job for a team or model not used before. A liaison can run these; the director only sees the table.
 3. **Report one table**: team, channel, found and version, signed in, model for external-fast and external-strong, may edit or review only, verified date, and what you recommend.
-4. **Apply** to new dispatches only: update the session choice in the board's progress record; re-run the gate for queued tasks and re-route their cards (team, model, effort). Running jobs keep their team. Change the roster row and its *Status* in the policy, with a `lessons.md` row carrying the user's words, only when the user asks for a lasting change: "prefer X now" is session scope ([user-overrides.md](user-overrides.md), "How long an instruction lasts").
+4. **Apply** to new dispatches only: ask the scope (session, project, global) unless the user's words settle it; session → the session choice in the board's progress record; project or global → the compute plan (`compute-config.mjs set` / `route` / `remove`). Re-run the gate for queued tasks and re-route their cards (team, model, effort). Running jobs keep their team. A verified capability change (a team now signed in, a channel that can no longer edit) updates the roster row and its *Status* in the policy.
 
-A roster row records what a team *can* do and whether it is verified; the order in which teams are tried is a separate, short line (`External order:`) that changes only on a lasting instruction. Keep both free of history: an order that was replaced goes to `decisions.md` as overturned, not into the policy.
+A roster row records what a team *can* do and whether it is verified; the order and the responsibilities live in the compute plan. Keep both free of history.
 
 ## Quota and substitutes
 
-Users often steer channels by quota: credits that expire soon get used first, and a channel that has run out needs a substitute. Quota belongs to a channel · model pair, so the director keeps a small **quota ledger** for the session (state, when it was checked, when it resets, the substitute) and reads it before each batch of dispatches.
+Users often steer channels by quota: credits that expire soon get used first, and a channel that has run out needs a substitute. Quota belongs to a channel · model pair on the user's account, so the director keeps a **quota ledger** in the global compute file (state, when it was checked, when it resets, credit expiry) and reads it before each batch of dispatches; `resolve` leaves exhausted resources out until their reset.
 
-When one runs out, the director switches down the ladder in [quota.md](quota.md) (another allowed channel first, in-house last) and says so in one line ("OpenCode quota exhausted; T4.b goes to agy `gemini-4-argon` · high"); spending a plentiful or expiring quota first is the user's call. Agree the substitute order when asking which teams may take work at session start, so a switch needs no question later. The ledger, watching, the ladder, reset times, in-house substitutes per tier and the questions to ask: [quota.md](quota.md).
+When one runs out, the director switches down the ladder in [quota.md](quota.md) (another allowed channel first, in-house last) and says so in one line ("OpenCode quota exhausted; T4.b goes to agy `gemini-4-argon` · high"); spending a plentiful or expiring quota first is the user's call. The fallback chain of each resource is agreed when the compute plan is initialized, so a switch needs no question later. The ledger, watching, the ladder, reset times, in-house substitutes per tier and the questions to ask: [quota.md](quota.md).
 
 ## Quality of a channel
 
-Track how each team · model performs during the run, on the board's `progress.md` or the cards: accepted first time, accepted after rework, or taken back in-house. Count only content failures (wrong code, missed spec, weak tests); sign-in, quota, sandbox and network failures are availability, not quality.
+Track how each team · model performs with the usage log: after every job, `compute-config.mjs record <id> --outcome accepted|rework|in-house|...`; `usage` shows the first-pass rate and a `qualityFlag` across sessions and projects ([compute-config.md](compute-config.md), "Usage log and quality"). Count only content failures (wrong code, missed spec, weak tests); sign-in, quota, sandbox and network failures are availability, not quality.
 
 - **Two jobs in a row on the same team · model need content rework, or one is taken back in-house**: change it for the next job. Move to a stronger model on the same channel (agy flash → `gemini-4-argon`, Codex `medium` → `high`), or to another team of the same tier when the channel's strongest model is already in use. Say the change in the dispatch line.
 - **A team that keeps failing after that** is dropped for the rest of the session, with a `lessons.md` row; drop it from the roster only on the user's word.
