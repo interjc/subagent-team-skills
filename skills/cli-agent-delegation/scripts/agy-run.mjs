@@ -17,10 +17,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Hard minimum: below it, built-ins these scripts rely on (global fetch,
 // process-group handling as tested) are missing or untested. Recommended: 24.
-export const MIN_NODE_MAJOR = 18;
+export const MIN_NODE_MAJOR = 22;
 if (Number(process.versions.node.split('.')[0]) < MIN_NODE_MAJOR) {
   console.error(`agy-run.mjs: Node.js >= ${MIN_NODE_MAJOR} is required (found v${process.versions.node}). ` +
-    'Install Node.js 24 LTS (e.g. `nvm install 24`), or use the raw commands in SKILL.md, "Channels and fallbacks".');
+    'Use Node.js 22 or newer: a version the project pins or nvm already has (`nvm use <version>`), else install 24 with nvm (`nvm install 24 && nvm use 24`; native installers only without nvm), or use the raw commands in SKILL.md, "Channels and fallbacks".');
   process.exit(1);
 }
 
@@ -34,8 +34,17 @@ const DEFAULT_OUTER_GRACE_SEC = 60;
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 
 export const EXIT = { OK: 0, USAGE: 1, AGY_ERROR: 2, LAUNCH_OR_PARSE: 3, TIMEOUT: 5 };
+// Printed on every run: this wrapper is the fallback, agy-acp-run.mjs the preferred channel.
+export const NON_ACP_RISK = 'agy-run uses print mode (`agy -p`), not agy\'s official ACP server. Prefer agy-acp-run.mjs: '
+  + 'over ACP the session mode and every permission request stay under the client\'s control, while print mode with --write '
+  + 'skips every permission check (no approval at all) and without --write silently skips anything that needs approval. '
+  + 'Use this only when `agy acp` is unavailable (agy older than 1.5.0: ask the user to run `agy update`) and say so in the dispatch line.';
 
-export const USAGE = `agy-run.mjs - run Google Antigravity CLI (agy) headless.
+export const USAGE = `agy-run.mjs - run Google Antigravity CLI (agy) headless in print mode (fallback).
+
+Prefer agy-acp-run.mjs, which uses agy's official ACP server (\`agy acp\`, agy 1.5.0+).
+This wrapper is for an agy without ACP; every run prints that risk on stderr and
+records channel "print" in the summary.
 
 Usage:
   agy-run.mjs run --repo <abs dir> --prompt-file <file> --model <id-with-effort-suffix>
@@ -472,9 +481,10 @@ async function runMode(opts) {
   const bin = process.env.AGY_BIN || 'agy';
   const args = buildArgs(cfg);
   if (cfg.dryRun) {
-    printJson({ bin, args: redactPrompt(args, cfg.promptFile, cfg.prompt), cwd: cfg.repo, outDir: cfg.outDir });
+    printJson({ bin, args: redactPrompt(args, cfg.promptFile, cfg.prompt), cwd: cfg.repo, outDir: cfg.outDir, channel: 'print', nonAcpRisk: NON_ACP_RISK });
     return EXIT.OK;
   }
+  hint(`warning: ${NON_ACP_RISK}`);
   if (cfg.write) hint('note: --write passes --dangerously-skip-permissions; agy runs unrestricted and may edit files and run commands in the workspace.');
   fs.mkdirSync(cfg.outDir, { recursive: true });
   hint(`running agy (model=${cfg.model}, timeout=${cfg.timeoutSec}s); output: ${cfg.outDir}`);
@@ -492,6 +502,8 @@ async function runMode(opts) {
   const result = {
     ok: c.exitCode === EXIT.OK,
     exitCode: c.exitCode,
+    channel: 'print',
+    nonAcpRisk: NON_ACP_RISK,
     agyExitCode: run.exitCode ?? null,
     status: c.status,
     timedOut: c.timedOut,

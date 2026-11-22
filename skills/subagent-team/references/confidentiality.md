@@ -35,7 +35,7 @@ Until the user answers, or in a non-interactive run: teams on the project's rost
 | Scope | Home |
 |---|---|
 | This session | the board's `progress.md` session choice, or the director's working notes |
-| Lasting, kept out of git (**default**) | `.agent-team/confidentiality.md`, with `.agent-team/` added to the repository's local exclude file (`.git/info/exclude`) |
+| Lasting, kept out of git (**default**) | `.agent-team/confidentiality.md`, with `.agent-team/` added to the repository's local exclude file (`.git/info/exclude`); the same directory holds the project compute plan ([compute-config.md](compute-config.md)) |
 | Lasting, tracked in git (only when the user asks) | `docs/agent-team/confidentiality.md`, linked from the board index |
 
 It is the user's configuration rather than a team rule, which is why the default keeps it out of git: trust in a vendor is personal, and a public repository should not publish it. Whichever home is chosen, the policy section carries one pointer line so the next session finds it:

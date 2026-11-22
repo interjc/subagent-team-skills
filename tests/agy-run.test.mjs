@@ -5,7 +5,7 @@ import path from 'node:path';
 
 import {
   parseArgs, validateModel, validateRunOptions, buildArgs, redactPrompt, parseAgyOutput,
-  classify, isErrorStatus, isTimeoutStatus, buildContinueHint, parseDuration, MAX_PROMPT_BYTES, UsageError,
+  classify, isErrorStatus, isTimeoutStatus, buildContinueHint, parseDuration, MAX_PROMPT_BYTES, NON_ACP_RISK, UsageError,
 } from '../skills/cli-agent-delegation/scripts/agy-run.mjs';
 import {
   SCRIPTS, makeTempDir, removeDir, makeFakeBin, runScript, readJson, isAlive, waitUntilGone,
@@ -452,7 +452,17 @@ process.exit(0);
         '--output-format', 'json', '--print-timeout', '600s', '--add-dir', repo],
       cwd: repo,
       outDir: out,
+      channel: 'print',
+      nonAcpRisk: NON_ACP_RISK,
     });
+  });
+
+  test('every run warns that print mode is the non-ACP fallback', () => {
+    const r = run(baseArgs());
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stderr, /not agy's official ACP server\. Prefer agy-acp-run\.mjs/);
+    assert.equal(r.json.channel, 'print');
+    assert.equal(r.json.nonAcpRisk, NON_ACP_RISK);
   });
 
   test('models passthrough', () => {

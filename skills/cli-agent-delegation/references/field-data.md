@@ -57,6 +57,18 @@ Small jobs on a scratch repository with OpenCode 2.2.5 (2026-11), a free gateway
 | `--write`, new session | the same steps | — | The file was created; `touch` denied; the write outside the repository refused as an external directory |
 | raw `opencode run --standalone` with the agent injected by hand | `touch`, read a file | — | Same enforcement. Without `--standalone`: "Agent not found", because the shared background service ignores injected config. |
 
+## agy through ACP (verification runs, not project work)
+
+Small jobs on a scratch directory with agy 1.5.14 (2026-11-22), `gemini-4-hydrogen` at `low`, through `agy-acp-run.mjs`, to check the channel rather than the model.
+
+| Mode | Job | Tokens | Outcome |
+|---|---|---|---|
+| read-only (`default`) | create a file, then `touch` | ~10k | The edit arrived as a permission request and was rejected; no file, the command did not run. agy then **ended the turn with no reply**. |
+| `--write` (`accept-edits`), new session | create a file, no commands | — | File created without a request; reply received |
+| `--write`, resumed session | `touch`, recall the earlier turn | — | Resume worked; the command arrived as a request, was rejected, and again ended the turn with no reply |
+
+Lesson: over ACP, agy stops at the first denied action. Briefs must not need one: no shell commands in any agy job, no edits in a read-only job. The wrapper reports this as `deniedAction`.
+
 ## When outsourcing did not pay
 
 - Tiny edits: the brief took longer to write than the edit.

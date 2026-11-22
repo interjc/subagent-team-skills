@@ -1,10 +1,11 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
 import {
-  parseArgs, parseCodexConfig, extractModelIds, findAgyStaff, findCodexPlugin, UsageError,
+  parseArgs, parseCodexConfig, extractModelIds, findAgyStaff, findCodexPlugin, latestTag, parseSemver, compareSemver, planUpgrades, UsageError,
 } from '../skills/cli-agent-delegation/scripts/doctor.mjs';
 import { SCRIPTS, makeTempDir, removeDir, makeFakeBin, runScript } from './helpers/fakes.mjs';
 
@@ -65,8 +66,9 @@ const MODELS_CACHE = {
 
 describe('doctor: pure helpers', () => {
   test('parseArgs', () => {
-    assert.deepEqual(parseArgs([]), { json: false, help: false });
-    assert.deepEqual(parseArgs(['--json']), { json: true, help: false });
+    assert.deepEqual(parseArgs([]), { json: false, help: false, checkUpdates: false });
+    assert.deepEqual(parseArgs(['--json']), { json: true, help: false, checkUpdates: false });
+    assert.equal(parseArgs(['--check-updates']).checkUpdates, true);
     assert.throws(() => parseArgs(['--verbose']), UsageError);
   });
 
@@ -85,19 +87,36 @@ describe('doctor: pure helpers', () => {
   test('findAgyStaff handles array and object shapes', () => {
     assert.deepEqual(
       findAgyStaff({ version: 2, plugins: { 'agy@agy-staff': [{ scope: 'user', installPath: '/p/agy' }] } }),
-      { key: 'agy@agy-staff', installPath: '/p/agy' },
+      { key: 'agy@agy-staff', installPath: '/p/agy', version: null },
     );
-    assert.deepEqual(findAgyStaff({ 'agy@agy-staff': { installPath: '/q' } }), { key: 'agy@agy-staff', installPath: '/q' });
-    assert.deepEqual(findAgyStaff({ 'agy@agy-staff': [{}] }), { key: 'agy@agy-staff', installPath: null });
+    assert.deepEqual(findAgyStaff({ 'agy@agy-staff': { installPath: '/q' } }), { key: 'agy@agy-staff', installPath: '/q', version: null });
+    assert.deepEqual(findAgyStaff({ 'agy@agy-staff': [{}] }), { key: 'agy@agy-staff', installPath: null, version: null });
     assert.equal(findAgyStaff({ plugins: { 'other@market': [] } }), null);
     assert.equal(findAgyStaff(null), null);
   });
 
   test('findCodexPlugin tells the official plugin from forks', () => {
     assert.deepEqual(findCodexPlugin({ plugins: { 'codex@openai-codex': [{ installPath: '/p/codex' }] } }),
-      { key: 'codex@openai-codex', installPath: '/p/codex', official: true });
+      { key: 'codex@openai-codex', installPath: '/p/codex', version: null, official: true });
     assert.equal(findCodexPlugin({ plugins: { 'codex@some-fork': [{}] } }).official, false);
     assert.equal(findCodexPlugin({ plugins: { 'agy@agy-staff': [{}], 'codexish@x': [{}] } }), null);
+  });
+});
+
+describe('doctor: versions and upgrades', () => {
+  test('latestTag picks the highest release tag', () => {
+    assert.equal(latestTag('a\trefs/tags/v0.9.1\nb\trefs/tags/v0.10.0\nc\trefs/tags/v0.9.12\nd\trefs/tags/v1.0.0-rc\n'), '0.10.0');
+    assert.equal(latestTag(''), null);
+    assert.deepEqual(parseSemver('agy 1.5.14'), [1, 5, 14]);
+    assert.ok(compareSemver([1, 5, 12], [1, 5, 9]) > 0);
+  });
+
+  test('planUpgrades only proposes, and every entry needs consent', () => {
+    const none = planUpgrades({ agy: { present: false, agyStaff: { installed: false } } });
+    assert.deepEqual(none, []);
+    const old = planUpgrades({ agy: { present: true, semver: '1.4.9', acp: false, acpMinOk: false, recommendedOk: false, agyStaff: { installed: true, companionExists: true, updateAvailable: false } } });
+    assert.equal(old.length, 1);
+    assert.match(old[0].reason, /no official ACP server/);
   });
 });
 
@@ -133,7 +152,13 @@ describe('doctor: end to end', () => {
     assert.equal(j.agy.agyStaff.installPath, installPath);
     assert.equal(j.agy.agyStaff.companionExists, true);
     assert.ok(Array.isArray(j.recommendations));
-    assert.ok(j.recommendations.some((x) => /agy-staff plugin installed/.test(x)));
+    assert.equal(j.agy.agyStaff.version, '1.0.0');
+    assert.equal(j.agy.acp, false);
+    assert.equal(j.agy.acpMinOk, false);
+    assert.ok(j.recommendations.some((x) => /^RISK: agy 1\.4\.2 has no official ACP server/.test(x) && /offer to run `agy update`/.test(x)));
+    assert.ok(j.recommendations.some((x) => /agy-staff plugin installed \(1\.0\.0\): borrow its personas/.test(x) && /dispatch through agy-acp-run\.mjs/.test(x)));
+    assert.deepEqual(j.upgrades.map((u) => [u.target, u.commands]), [['agy', ['agy update', 'agy --version']]]);
+    assert.ok(j.upgrades.every((u) => u.needsConsent));
     assert.deepEqual({ ...j.codex.plugin, pluginsFile: undefined, error: undefined },
       { installed: true, key: 'codex@openai-codex', official: true, installPath: codexPluginPath, companionExists: true, pluginsFile: undefined, error: undefined });
     assert.ok(j.recommendations.some((x) => /Codex plugin installed: use \/codex:review/.test(x)));
@@ -178,8 +203,8 @@ describe('doctor: end to end', () => {
     assert.equal(j.opencode.present, false);
     assert.ok(j.recommendations.some((x) => /OpenCode not found/.test(x)));
     assert.equal(j.codex.plugin.installed, false);
-    assert.ok(j.recommendations.some((x) => x.includes(
-      'agy-staff plugin not found: use agy-run.mjs, or install it: claude plugin marketplace add keli-wen/agy-staff && claude plugin install agy@agy-staff')));
+    assert.ok(j.recommendations.some((x) => /agy not found .*with the user's consent/.test(x)));
+    assert.deepEqual(j.upgrades, []);
   });
 
   test('a Codex plugin fork and an OpenCode without acp get warnings', () => {
@@ -219,6 +244,50 @@ describe('doctor: end to end', () => {
     assert.match(r.stdout, /codex: found \(codex-cli 0\.165\.0\)/);
     assert.match(r.stdout, /default reasoning effort: high/);
     assert.match(r.stdout, /Recommendations:\n {2}- /);
+  });
+
+  test('agy with ACP: readiness, recommended release, agy-staff missing', () => {
+    const home = newHome('acp');
+    const acpAgy = makeFakeBin(path.join(tmp, 'bin'), 'agy-acp', 'fake-agy-acp.mjs');
+    const r = doctor(home, ['--json'], { AGY_BIN: acpAgy });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.json.agy.semver, '1.5.14');
+    assert.equal(r.json.agy.acp, true);
+    assert.equal(r.json.agy.recommendedOk, true);
+    assert.ok(r.json.recommendations.some((x) => /agy ACP available: dispatch agy jobs with agy-acp-run\.mjs/.test(x)));
+    assert.deepEqual(r.json.upgrades.map((u) => u.target), ['agy-staff']);
+    assert.deepEqual(r.json.upgrades[0].commands, ['claude plugin marketplace add keli-wen/agy-staff', 'claude plugin install agy@agy-staff']);
+    const older = doctor(home, ['--json'], { AGY_BIN: acpAgy, FAKE_AGY_VERSION: '1.5.3' });
+    assert.equal(older.json.agy.recommendedOk, false);
+    assert.ok(older.json.recommendations.some((x) => /below the recommended 1\.5\.12: offer `agy update`/.test(x)));
+    assert.equal(older.json.upgrades[0].target, 'agy');
+    const human = doctor(home, [], { AGY_BIN: acpAgy });
+    assert.match(human.stdout, /acp subcommand \(official ACP server\): yes/);
+    assert.match(human.stdout, /Upgrades to offer \(run only after the user agrees\):/);
+  });
+
+  test('--check-updates compares agy-staff with the newest release tag', () => {
+    const home = newHome('updates');
+    const installPath = path.join(home, 'agy-staff');
+    write(path.join(installPath, 'companion', 'agy-companion.mjs'), '// companion\n');
+    write(path.join(home, '.claude', 'plugins', 'installed_plugins.json'),
+      { plugins: { 'agy@agy-staff': [{ installPath, version: '0.9.1' }] } });
+    const remote = path.join(tmp, 'agy-staff-remote');
+    const git = (...a) => spawnSync('git', a, { cwd: remote, encoding: 'utf8', env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com' } });
+    fs.mkdirSync(remote);
+    git('init', '-q');
+    git('commit', '-q', '--allow-empty', '-m', 'x');
+    for (const t of ['v0.9.1', 'v0.9.3', 'v0.10.0-rc', 'v0.9.2']) git('tag', t);
+    const acpAgy = makeFakeBin(path.join(tmp, 'bin'), 'agy-acp2', 'fake-agy-acp.mjs');
+    const r = doctor(home, ['--json', '--check-updates'], { AGY_BIN: acpAgy, AGY_STAFF_REPO_URL: remote });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.json.agy.agyStaff.latest, '0.9.3');
+    assert.equal(r.json.agy.agyStaff.updateAvailable, true);
+    assert.ok(r.json.recommendations.some((x) => /agy-staff 0\.9\.1 is older than 0\.9\.3: offer to upgrade it/.test(x)));
+    assert.deepEqual(r.json.upgrades.map((u) => u.commands), [['claude plugin marketplace update agy-staff', 'claude plugin update agy@agy-staff']]);
+    const offline = doctor(home, ['--json'], { AGY_BIN: acpAgy, AGY_STAFF_REPO_URL: remote });
+    assert.equal(offline.json.agy.agyStaff.latest, null);
+    assert.equal(offline.json.agy.agyStaff.updateAvailable, null);
   });
 
   test('--help and usage error', () => {

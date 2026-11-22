@@ -16,10 +16,10 @@ import { pathToFileURL } from 'node:url';
 
 // Hard minimum: below it, built-ins these scripts rely on (global fetch,
 // process-group handling as tested) are missing or untested. Recommended: 24.
-export const MIN_NODE_MAJOR = 18;
+export const MIN_NODE_MAJOR = 22;
 if (Number(process.versions.node.split('.')[0]) < MIN_NODE_MAJOR) {
   console.error(`doctor.mjs: Node.js >= ${MIN_NODE_MAJOR} is required (found v${process.versions.node}). ` +
-    'Install Node.js 24 LTS (e.g. `nvm install 24`), or use the raw commands in SKILL.md, "Channels and fallbacks".');
+    'Use Node.js 22 or newer: a version the project pins or nvm already has (`nvm use <version>`), else install 24 with nvm (`nvm install 24 && nvm use 24`; native installers only without nvm), or use the raw commands in SKILL.md, "Channels and fallbacks".');
   process.exit(1);
 }
 
@@ -35,17 +35,26 @@ Checks (read-only; auth and credential files are never read):
   - Codex CLI: \`$CODEX_BIN --version\`, default model and reasoning effort from
     <CODEX_HOME or ~/.codex>/config.toml, model ids from models_cache.json, and the
     Codex plugin for Claude Code (codex@openai-codex) in installed_plugins.json
-  - agy: \`$AGY_BIN --version\`, agy-staff Claude Code plugin in
+  - agy: \`$AGY_BIN --version\` against the ACP minimum (1.5.0) and the recommended
+    release (1.5.12), whether \`agy acp\` (the official ACP server) exists, and the
+    agy-staff Claude Code plugin and its version in
     <CLAUDE_CONFIG_DIR or ~/.claude>/plugins/installed_plugins.json
   - OpenCode: \`$OPENCODE_BIN --version\` and whether \`opencode acp\` exists
 
 Options:
-  --json    Print one JSON object instead of human-readable lines.
-  --help    Show this help.
+  --json           Print one JSON object instead of human-readable lines.
+  --check-updates  Also ask GitHub for agy-staff's newest release tag (network,
+                   \`git ls-remote\`); without it the doctor stays offline.
+  --help           Show this help.
+
+Upgrades: the report lists each needed install or upgrade with its exact commands
+("upgrades"). The doctor never runs them; an agent runs them only after the user
+agrees.
 
 Environment:
   CODEX_BIN (default codex), AGY_BIN (default agy), OPENCODE_BIN (default opencode),
-  CODEX_HOME, CLAUDE_CONFIG_DIR, HOME.
+  CODEX_HOME, CLAUDE_CONFIG_DIR, HOME, AGY_STAFF_REPO_URL (default
+  https://github.com/keli-wen/agy-staff, used by --check-updates).
 
 Exit code: 0 (it is a report); 1 on usage errors.
 `;
@@ -53,9 +62,10 @@ Exit code: 0 (it is a report); 1 on usage errors.
 export class UsageError extends Error {}
 
 export function parseArgs(argv) {
-  const opts = { json: false, help: false };
+  const opts = { json: false, help: false, checkUpdates: false };
   for (const arg of argv) {
     if (arg === '--json') opts.json = true;
+    else if (arg === '--check-updates') opts.checkUpdates = true;
     else if (arg === '--help' || arg === '-h') opts.help = true;
     else throw new UsageError(`unknown argument: ${arg}`);
   }
@@ -124,7 +134,8 @@ export function findPlugin(installed, test) {
       if (!test(key)) continue;
       const entries = Array.isArray(value) ? value : [value];
       const withPath = entries.find((e) => e && typeof e === 'object' && typeof e.installPath === 'string');
-      return { key, installPath: withPath ? withPath.installPath : null };
+      const withVersion = entries.find((e) => e && typeof e === 'object' && typeof e.version === 'string');
+      return { key, installPath: withPath ? withPath.installPath : null, version: withVersion ? withVersion.version : null };
     }
   }
   return null;
@@ -217,32 +228,107 @@ export function checkOpencode(env = process.env) {
   return opencode;
 }
 
-export function checkAgy(env = process.env) {
+// `agy acp` (the official ACP server) shipped in 1.5.0; T3 Code recommends 1.5.12 or newer.
+export const AGY_ACP_MIN = [1, 5, 0];
+export const AGY_RECOMMENDED = [1, 5, 12];
+export const AGY_STAFF_REPO_URL = 'https://github.com/keli-wen/agy-staff';
+
+export function parseSemver(v) {
+  const m = /(\d+)\.(\d+)\.(\d+)/.exec(String(v ?? ''));
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+export function compareSemver(a, b) {
+  for (let i = 0; i < 3; i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) - (b[i] ?? 0);
+  return 0;
+}
+
+// Newest vX.Y.Z tag from `git ls-remote --tags --refs` output, or null.
+export function latestTag(lsRemoteOutput) {
+  let best = null;
+  for (const line of String(lsRemoteOutput || '').split('\n')) {
+    const m = /refs\/tags\/v?(\d+\.\d+\.\d+)$/.exec(line.trim());
+    if (!m) continue;
+    const v = parseSemver(m[1]);
+    if (!best || compareSemver(v, best) > 0) best = v;
+  }
+  return best ? best.join('.') : null;
+}
+
+export function checkAgyStaffLatest(env = process.env) {
+  const url = env.AGY_STAFF_REPO_URL || AGY_STAFF_REPO_URL;
+  const r = spawnSync('git', ['ls-remote', '--tags', '--refs', url], { encoding: 'utf8', timeout: PROBE_TIMEOUT_MS * 3 });
+  if (r.error || r.status !== 0) return { latest: null, error: r.error ? r.error.message : `git ls-remote exited with code ${r.status}` };
+  const latest = latestTag(r.stdout);
+  return { latest, error: latest ? null : 'no release tags found' };
+}
+
+export function checkAgy(env = process.env, { checkUpdates = false } = {}) {
   const bin = env.AGY_BIN || 'agy';
   const { file: pluginsFile, plugins } = claudePlugins(env);
   const agy = {
     bin, ...probeVersion(bin),
-    agyStaff: { installed: false, key: null, installPath: null, companionExists: false, pluginsFile, error: null },
+    semver: null, acp: false, acpError: null, acpMinOk: null, recommendedOk: null,
+    agyStaff: { installed: false, key: null, version: null, latest: null, latestError: null, updateAvailable: null, installPath: null, companionExists: false, pluginsFile, error: null },
   };
+  if (agy.present) {
+    const v = parseSemver(agy.version);
+    agy.semver = v ? v.join('.') : null;
+    agy.acpMinOk = v ? compareSemver(v, AGY_ACP_MIN) >= 0 : null;
+    agy.recommendedOk = v ? compareSemver(v, AGY_RECOMMENDED) >= 0 : null;
+    const r = spawnSync(bin, ['acp', '--help'], { encoding: 'utf8', timeout: PROBE_TIMEOUT_MS });
+    const help = `${r.stdout || ''}${r.stderr || ''}`;
+    if (r.error) agy.acpError = r.error.message;
+    else if (r.status !== 0) agy.acpError = `\`${bin} acp --help\` exited with code ${r.status}`;
+    else if (!/Agent Client Protocol/i.test(help)) agy.acpError = `\`${bin} acp --help\` does not describe an ACP server`;
+    else agy.acp = true;
+  }
   if (plugins.error) agy.agyStaff.error = plugins.error;
   const found = findAgyStaff(plugins.data);
   if (found) {
     agy.agyStaff.installed = true;
     agy.agyStaff.key = found.key;
+    agy.agyStaff.version = found.version;
     agy.agyStaff.installPath = found.installPath;
     agy.agyStaff.companionExists = Boolean(found.installPath
       && fs.existsSync(path.join(found.installPath, 'companion', 'agy-companion.mjs')));
   }
+  if (checkUpdates) {
+    const { latest, error } = checkAgyStaffLatest(env);
+    agy.agyStaff.latest = latest;
+    agy.agyStaff.latestError = error;
+    const have = parseSemver(agy.agyStaff.version);
+    const want = parseSemver(latest);
+    if (agy.agyStaff.installed && have && want) agy.agyStaff.updateAvailable = compareSemver(want, have) > 0;
+  }
   return agy;
+}
+
+// Installs and upgrades the user may want, each with exact commands. Nothing
+// here runs them: an agent runs them only after the user agrees.
+export function planUpgrades({ agy }) {
+  const out = [];
+  if (agy.present && (agy.acpMinOk === false || !agy.acp)) {
+    out.push({ target: 'agy', reason: `agy ${agy.semver ?? agy.version ?? '(unknown)'} has no official ACP server (\`agy acp\`, 1.5.0+); without it agy jobs fall back to print mode`, commands: ['agy update', 'agy --version'], needsConsent: true });
+  } else if (agy.present && agy.recommendedOk === false) {
+    out.push({ target: 'agy', reason: `agy ${agy.semver} is older than the recommended ${AGY_RECOMMENDED.join('.')}`, commands: ['agy update', 'agy --version'], needsConsent: true });
+  }
+  const s = agy.agyStaff;
+  if (agy.present && !s.installed) {
+    out.push({ target: 'agy-staff', reason: 'agy-staff (personas and job discipline for agy) is not installed in Claude Code', commands: ['claude plugin marketplace add keli-wen/agy-staff', 'claude plugin install agy@agy-staff'], needsConsent: true, restart: 'Claude Code' });
+  } else if (s.installed && (s.updateAvailable || !s.companionExists)) {
+    out.push({ target: 'agy-staff', reason: s.updateAvailable ? `agy-staff ${s.version} is older than ${s.latest}` : 'agy-staff is registered but its companion is missing', commands: ['claude plugin marketplace update agy-staff', 'claude plugin update agy@agy-staff'], needsConsent: true, restart: 'Claude Code' });
+  }
+  return out;
 }
 
 export const RECOMMENDED_NODE_MAJOR = 24;
 
 export function recommend({ codex, agy, opencode = null, nodeVersion = process.version }) {
   const recs = [];
-  const major = Number(String(nodeVersion).replace(/^v/, '').split('.')[0]);
-  if (major < RECOMMENDED_NODE_MAJOR) {
-    recs.push(`Node.js ${nodeVersion} meets the minimum (${MIN_NODE_MAJOR}); ${RECOMMENDED_NODE_MAJOR} is recommended (e.g. \`nvm install ${RECOMMENDED_NODE_MAJOR}\`).`);
+  // The scripts refuse Node.js below the minimum; at or above it, the user's version is used as it is.
+  if (Number(String(nodeVersion).replace(/^v/, '').split('.')[0]) < MIN_NODE_MAJOR) {
+    recs.push(`Node.js ${nodeVersion} is below the minimum ${MIN_NODE_MAJOR}: with the user's consent, install the project's pinned version if it is ${MIN_NODE_MAJOR} or newer, else ${RECOMMENDED_NODE_MAJOR}, through nvm (\`nvm install ${RECOMMENDED_NODE_MAJOR} && nvm use ${RECOMMENDED_NODE_MAJOR}\`; a native install only without nvm).`);
   }
   if (!codex.present) recs.push(`Codex CLI not found (${codex.bin}): install it (npm install -g @openai/codex) or set CODEX_BIN.`);
   else if (codex.error) recs.push(`Codex CLI found but \`${codex.bin} --version\` failed: ${codex.error}.`);
@@ -263,22 +349,30 @@ export function recommend({ codex, agy, opencode = null, nodeVersion = process.v
     else if (!opencode.acp) recs.push(`OpenCode found but \`opencode acp\` is not available (${opencode.acpError}): upgrade OpenCode (\`opencode upgrade\`) to use opencode-acp-run.mjs.`);
     else recs.push('OpenCode ACP available: run `node scripts/opencode-acp-run.mjs probe --repo <abs repo>` to list its models and effort levels (no tokens spent).');
   }
-  if (!agy.present) recs.push(`agy not found (${agy.bin}): install Google Antigravity CLI or set AGY_BIN.`);
+  if (!agy.present) recs.push(`agy not found (${agy.bin}): install Google Antigravity CLI (https://antigravity.google/docs/cli/install) with the user's consent, or set AGY_BIN.`);
   else if (agy.error) recs.push(`agy found but \`${agy.bin} --version\` failed: ${agy.error}.`);
-  const s = agy.agyStaff;
-  if (!s.installed) {
-    recs.push('agy-staff plugin not found: use agy-run.mjs, or install it: claude plugin marketplace add keli-wen/agy-staff && claude plugin install agy@agy-staff');
-  } else if (!s.companionExists) {
-    recs.push(`agy-staff plugin is registered (${s.key}) but companion/agy-companion.mjs was not found${s.installPath ? ` under ${s.installPath}` : ''}: reinstall it (claude plugin install agy@agy-staff) or use agy-run.mjs.`);
+  else if (agy.acp) {
+    recs.push(`agy ACP available: dispatch agy jobs with agy-acp-run.mjs (official \`agy acp\`); check with \`node scripts/agy-acp-run.mjs probe\` (handshake only).${agy.recommendedOk === false ? ` agy ${agy.semver} is below the recommended ${AGY_RECOMMENDED.join('.')}: offer \`agy update\`.` : ''}`);
   } else {
-    recs.push('agy-staff plugin installed: prefer it for agy work; agy-run.mjs remains a fallback.');
+    recs.push(`RISK: agy ${agy.semver ?? agy.version ?? ''} has no official ACP server (${agy.acpError ?? 'older than 1.5.0'}). Tell the user that jobs would run in print mode, where --write skips every permission check, and offer to run \`agy update\` for them; until then agy-run.mjs only, with the risk stated in the dispatch line.`);
+  }
+  const s = agy.agyStaff;
+  const staffRole = 'borrow its personas (implementer, reviewer, researcher prompts) and its one-wait-per-job discipline, but dispatch through agy-acp-run.mjs: its own companion runs agy in print mode, not ACP';
+  if (!s.installed) {
+    recs.push(`agy-staff plugin not found: offer to install it (claude plugin marketplace add keli-wen/agy-staff && claude plugin install agy@agy-staff); then ${staffRole}.`);
+  } else if (!s.companionExists) {
+    recs.push(`agy-staff plugin is registered (${s.key}) but companion/agy-companion.mjs was not found${s.installPath ? ` under ${s.installPath}` : ''}: offer to reinstall it (claude plugin install agy@agy-staff).`);
+  } else if (s.updateAvailable) {
+    recs.push(`agy-staff ${s.version} is older than ${s.latest}: offer to upgrade it (claude plugin marketplace update agy-staff && claude plugin update agy@agy-staff, then restart Claude Code).`);
+  } else {
+    recs.push(`agy-staff plugin installed${s.version ? ` (${s.version})` : ''}: ${staffRole}.`);
   }
   return recs;
 }
 
-export function runChecks(env = process.env) {
+export function runChecks(env = process.env, { checkUpdates = false } = {}) {
   const codex = checkCodex(env);
-  const agy = checkAgy(env);
+  const agy = checkAgy(env, { checkUpdates });
   const opencode = checkOpencode(env);
   return {
     node: process.version,
@@ -288,6 +382,7 @@ export function runChecks(env = process.env) {
     agy,
     opencode,
     recommendations: recommend({ codex, agy, opencode }),
+    upgrades: planUpgrades({ agy }),
   };
 }
 
@@ -314,8 +409,10 @@ export function formatReport(r) {
   lines.push(
     '',
     `agy: ${a.present ? `found (${a.version ?? 'unknown version'})` : 'not found'} [${a.bin}]`,
-    `  agy-staff plugin: ${a.agyStaff.installed ? `installed (${a.agyStaff.key})` : 'not found in Claude Code'}`,
   );
+  if (a.present) lines.push(`  acp subcommand (official ACP server): ${a.acp ? 'yes' : `no${a.acpError ? ` (${a.acpError})` : ''}`}`);
+  lines.push(`  agy-staff plugin: ${a.agyStaff.installed ? `installed (${a.agyStaff.key}${a.agyStaff.version ? ` ${a.agyStaff.version}` : ''})` : 'not found in Claude Code'}`);
+  if (a.agyStaff.latest || a.agyStaff.latestError) lines.push(`  agy-staff latest release: ${a.agyStaff.latest ?? `unknown (${a.agyStaff.latestError})`}`);
   if (a.agyStaff.installed) {
     lines.push(`  install path: ${a.agyStaff.installPath ?? '(unknown)'}`);
     lines.push(`  companion/agy-companion.mjs present: ${yn(a.agyStaff.companionExists)}`);
@@ -328,6 +425,10 @@ export function formatReport(r) {
   }
   lines.push('', 'Recommendations:');
   for (const rec of r.recommendations) lines.push(`  - ${rec}`);
+  if (r.upgrades && r.upgrades.length) {
+    lines.push('', 'Upgrades to offer (run only after the user agrees):');
+    for (const u of r.upgrades) lines.push(`  - ${u.target}: ${u.reason}`, ...u.commands.map((c) => `      ${c}`), ...(u.restart ? [`      (then restart ${u.restart})`] : []));
+  }
   return `${lines.join('\n')}\n`;
 }
 
@@ -346,7 +447,7 @@ export function main(argv = process.argv.slice(2)) {
     process.stdout.write(USAGE);
     return 0;
   }
-  const report = runChecks(process.env);
+  const report = runChecks(process.env, { checkUpdates: opts.checkUpdates });
   process.stdout.write(opts.json ? `${JSON.stringify(report, null, 2)}\n` : formatReport(report));
   return 0;
 }

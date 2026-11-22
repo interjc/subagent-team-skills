@@ -4,7 +4,7 @@ Detail behind the quota paragraph in "Start" and "Channels and fallbacks" in [SK
 
 ## Keep a ledger
 
-One small table where the team keeps session state (a progress record or the main session's notes), never in the project policy:
+Quota belongs to the account, so the ledger is the `quota` object of the global compute plan, `~/.subagent-team/compute.json` ([compute-plan.md](compute-plan.md)); with `subagent-team` installed, `compute-config.mjs quota <id> --state exhausted --resets <time> --source "error text"` writes it. Never in the project policy, a progress record or agent memory. As a table:
 
 | Channel · model | State | Checked | Resets | Source | Substitute |
 |---|---|---|---|---|---|
@@ -29,6 +29,7 @@ Quota exhaustion is availability, not quality; it does not count toward "two fai
 3. Switch, staying in the job's tier, and say it in one line on the job's record:
    - the same-tier model on **another allowed channel** (the table in "Channels and fallbacks", "Team unavailable");
    - then another same-tier model on the same channel when it has its own allowance (a drop below the job's tier is not a ladder step: state it, and use it only for work the weaker model can carry);
+   - never another account or subscription of the same vendor to get round the limit, and never a proxy that pools them: that risks the user's accounts ([compliance.md](compliance.md)). A separate account the user set up and listed in the compute plan is its own channel, not a way round;
    - then **in-house**, once every allowed external option for that tier is out: a cheap in-house model for purely mechanical work, the in-house mid tier otherwise.
 4. A read-only second opinion has no in-house substitute: an in-house review is not another vendor's opinion. Keep the in-house senior review, record the missing external opinion, and for money, auth, schema or irreversible-data work ask the user whether to wait for the reset.
 
@@ -36,8 +37,8 @@ Ask the user before switching only when no substitute was agreed and the switch 
 
 ## Coming back
 
-Once a recorded reset time has passed, the next suitable job may go back to that channel · model and doubles as the probe; if it fails on quota again, record the new time. With no reset time, ask the user once and keep the channel out until they answer. Do not poll or hold work waiting for a reset unless the user asks; jobs already running on the substitute finish there. At session end, leave the rows that still matter (exhausted with a future reset, credit expiry dates) in the progress record so the next session starts from them.
+Once a recorded reset time has passed, the next suitable job may go back to that channel · model and doubles as the probe; if it fails on quota again, record the new time. With no reset time, ask the user once and keep the channel out until they answer. Do not poll or hold work waiting for a reset unless the user asks; jobs already running on the substitute finish there. The ledger file outlives the session, so the next session starts from it; record every quota event there as it happens, and log the job with outcome `quota`.
 
 ## Spending a channel first
 
-When a channel has plenty left, or credits that expire soon, the user may want it used before the others. That is their choice: ask, do not infer it from a full ledger. A spend-first or spare preference reorders the teams that fit a job; it never sends out work that fails the gate, never drops a job below its tier silently, and never replaces a review. Ask its scope with it: for this session it lives in the ledger; as a lasting rule it goes into the project policy's team order with its date; "until a date" or "while the credits last" is lasting with that end condition and is removed when it ends. Unclear wording means this session only. Plenty of free quota is no reason to send a private repository to a model the user has not cleared for it ([roster-and-verification.md](roster-and-verification.md), "How far each team is trusted").
+When a channel has plenty left, or credits that expire soon, the user may want it used before the others. That is their choice: ask, do not infer it from a full ledger. A spend-first or spare preference reorders the teams that fit a job; it never sends out work that fails the gate, never drops a job below its tier silently, and never replaces a review. Ask its scope with it: for this session it lives in the session's choice; as a lasting rule it becomes a schedule rule in the compute plan that prefers that resource (project or global, as the user says); "until a date" or "while the credits last" is the same rule with an `until` date, removed with a one-line notice when it ends. Unclear wording means this session only. Plenty of free quota is no reason to send a private repository to a model the user has not cleared for it ([roster-and-verification.md](roster-and-verification.md), "How far each team is trusted").

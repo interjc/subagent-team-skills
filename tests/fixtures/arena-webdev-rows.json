@@ -1,0 +1,110 @@
+{
+  "features": [],
+  "rows": [
+    {
+      "row_idx": 0,
+      "row": {
+        "model_name": "Claude Opus 5.5 (High)",
+        "organization": "anthropic",
+        "license": "Proprietary",
+        "rating": 1790.2,
+        "rating_lower": 1779.8,
+        "rating_upper": 1800.1,
+        "variance": 61.0,
+        "vote_count": 1800,
+        "rank": 2,
+        "category": "overall",
+        "leaderboard_publish_date": "2026-11-20"
+      },
+      "truncated_cells": []
+    },
+    {
+      "row_idx": 1,
+      "row": {
+        "model_name": "Gemini 3.8 Pro",
+        "organization": "google",
+        "license": "Proprietary",
+        "rating": 1760.3,
+        "rating_lower": 1749.9,
+        "rating_upper": 1770.5,
+        "variance": 62.0,
+        "vote_count": 1700,
+        "rank": 3,
+        "category": "overall",
+        "leaderboard_publish_date": "2026-11-20"
+      },
+      "truncated_cells": []
+    },
+    {
+      "row_idx": 2,
+      "row": {
+        "model_name": "Claude Opus 5.5 (Max)",
+        "organization": "anthropic",
+        "license": "Proprietary",
+        "rating": 1820.5,
+        "rating_lower": 1810.1,
+        "rating_upper": 1830.2,
+        "variance": 60.1,
+        "vote_count": 2000,
+        "rank": 1,
+        "category": "overall",
+        "leaderboard_publish_date": "2026-11-20"
+      },
+      "truncated_cells": []
+    },
+    {
+      "row_idx": 3,
+      "row": {
+        "model_name": "GPT-6.1",
+        "organization": "openai",
+        "license": "Proprietary",
+        "rating": 1785.1,
+        "rating_lower": 1774.5,
+        "rating_upper": 1795.4,
+        "variance": 61.2,
+        "vote_count": 1850,
+        "rank": 4,
+        "category": "overall",
+        "leaderboard_publish_date": "2026-11-20"
+      },
+      "truncated_cells": []
+    },
+    {
+      "row_idx": 4,
+      "row": {
+        "model_name": "Claude Sonnet 5",
+        "organization": "anthropic",
+        "license": "Proprietary",
+        "rating": 1920.0,
+        "rating_lower": 1910.2,
+        "rating_upper": 1929.8,
+        "variance": 57.2,
+        "vote_count": 1400,
+        "rank": 1,
+        "category": "coding",
+        "leaderboard_publish_date": "2026-11-20"
+      },
+      "truncated_cells": []
+    },
+    {
+      "row_idx": 5,
+      "row": {
+        "model_name": "Claude Opus 6",
+        "organization": "anthropic",
+        "license": "Proprietary",
+        "rating": 1730.4,
+        "rating_lower": 1719.8,
+        "rating_upper": 1740.9,
+        "variance": 63.1,
+        "vote_count": 1200,
+        "rank": 5,
+        "category": "overall",
+        "leaderboard_publish_date": "2026-11-20"
+      },
+      "truncated_cells": []
+    }
+  ],
+  "num_rows_total": 6,
+  "num_rows_per_page": 100,
+  "partial": false
+}

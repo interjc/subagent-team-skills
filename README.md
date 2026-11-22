@@ -55,13 +55,17 @@ External teams:
 
 | External team | Channel | Status |
 |---|---|---|
-| **agy** (Google Antigravity) | CLI, or the [agy-staff](https://github.com/keli-wen/agy-staff) plugin | Used in real projects; wrapper script included |
+| **agy** (Google Antigravity) | ACP (`agy acp`, agy 1.5.0+), with briefs built from the [agy-staff](https://github.com/keli-wen/agy-staff) personas; print mode only as a stated fallback | Used in real projects. ACP wrapper included and checked against agy 1.5.14 on small read-only, write and resume jobs |
 | **Codex CLI** | CLI (`codex exec`), or OpenAI's [Codex plugin](https://github.com/openai/codex-plugin-cc) for Claude Code | CLI used in real projects; wrapper script included. The plugin is covered for reviews and as a second channel, from its docs and source |
 | **OpenCode** | [ACP](https://opencode.ai/v2/docs/cli/acp/) (`opencode acp`) | Wrapper script included: pinned model and effort, a deny-by-default permission set, timeout and resume. Checked against OpenCode 2.2.5 on small jobs; not yet used in real projects |
 | Grok Build, Cursor, Pi and the rest of the [ACP Registry](https://agentclientprotocol.com/get-started/registry) | ACP | Not tested for work. Session setup was checked against Grok Build and Cursor. Gemini CLI is deprecated (merged into agy): use agy. [An onboarding guide](skills/cli-agent-delegation/references/acp-agents.md), based on how [T3 Code](https://github.com/pingdotgg/t3code) supports many agents, gives the admission checklist, the permission policy and the traps |
 | Other CLIs, agents exposed through MCP | CLI / MCP | Not tested. The skill gives a checklist for adapting a new CLI and verifying it with one small read-only job first |
 
-At the start of a session the agent asks which of the detected external teams may take work (or reads the choice from your project policy), and it re-checks and adjusts them whenever you ask: "can Codex review this?", "add OpenCode", "stop using agy". Every team has a fallback ladder: another channel of the same team, then another team of the same tier, then in-house. While work is outside, the agent keeps a small quota ledger per channel and model: when one runs out it switches to the same-tier model on another channel, comes back in-house once every external option is used up, and records when the quota resets (or asks you). If a channel has plenty left or credits about to expire, it asks whether to spend that first, for this session or as a lasting rule. How far each external team is trusted with your code is also your call: the agent asks for a confidentiality level per team, and a lasting answer is kept in a project file that stays out of git unless you want it tracked.
+**ACP first.** External agents are called through their official ACP server wherever one exists; Codex, which has none, through its own CLI. When a job cannot use ACP (an agy too old for `agy acp`, say), the agent tells you the risk before dispatch. When it finds an outdated agent CLI or plugin, it offers to run the upgrade and runs it only after you agree. Plugins such as agy-staff contribute their role prompts and job discipline, while the call itself stays on ACP. Accounts and sign-in stay yours: no shared or rotated accounts, no ambient API keys, no community bridges. Rules: [compliance.md](skills/cli-agent-delegation/references/compliance.md).
+
+**Your external compute plan lives in local files, not in the agent's memory.** Which team · model · effort takes which job (translations, bulk edits, code-reading syncs, second-opinion reviews), each one's fallback chain, when it may be used (weekdays only, at night, until credits expire on a date), its quota and a log of every job (outcome, time, tokens, cost, per day and per hour) are kept in `~/.subagent-team/` for every project on your machine, and in a git-ignored `.agent-team/` for one project's differences. The agent asks about this **once**: when no plan exists, it drafts one from what it detected and a fresh model ranking (OpenRouter prices plus LMArena's Code Arena scores), you confirm or edit it in one dialog, and you say where to keep it (globally, this project, or this session only). After that it routes by the plan on its own and **tells** you when it changes something (a newer model your CLI now offers, a fallback after a quota error), going ahead unless you object; every few days it shows the plan for a quick look. Every change you ask for gets one question: this session, this project, or globally? When a ranked new model is missing from your CLI, it tells you the update command and asks before running it. Details: [compute-config.md](skills/subagent-team/references/compute-config.md).
+
+You can re-check and adjust teams whenever you ask: "can Codex review this?", "add OpenCode", "stop using agy". Every team has a fallback ladder: another channel of the same team, then another team of the same tier, then in-house. When a channel · model runs out, the agent records it in the quota ledger with its reset time (or asks you), switches along the fallback chain, comes back in-house once every external option is used up, and returns after the reset. If a channel has plenty left or credits about to expire, it asks whether to spend that first. How far each external team is trusted with your code is also your call: the agent asks for a confidentiality level per team, and a lasting answer is kept in a project file that stays out of git unless you want it tracked.
 
 ## Install
 
@@ -92,8 +96,8 @@ Restart the agent afterwards.
 
 **Requirements.** The method itself needs nothing. The optional helper scripts have no dependencies, but they need:
 
-- **Node.js 18 or newer** (hard minimum, measured on Node 18 / 20 / 22 / 24). Below it the scripts refuse to run with a clear message.
-- **Node.js 24** (recommended, pinned in [`.nvmrc`](.nvmrc)).
+- **Node.js 22 or newer** (hard minimum, measured on Node 22 / 24). Below it the scripts refuse to run with a clear message.
+- **Your own Node.js wins**: if the version you run, or the one your project pins (`.nvmrc`, `.node-version`, `volta.node`), is 22 or newer, it is used as it is. **Node.js 24 or newer** (pinned in [`.nvmrc`](.nvmrc)) is only the choice for a new install, through **nvm** first; a native install only if you do not want nvm. If Node.js is missing, the agent offers to install it with nvm, and asks first.
 - **git**.
 
 At the start of a session the core skill runs an **environment health check** (`env-check.cjs`). It reports:
@@ -101,7 +105,7 @@ At the start of a session the core skill runs an **environment health check** (`
 - blockers and warnings, with the exact fix for each;
 - a first guess at the host agent (for you to confirm);
 - which external teams are available: Codex CLI and its plugin, agy and agy-staff, OpenCode, other agent CLIs on `PATH`, MCP servers in the project's `.mcp.json`;
-- whether your project already has a team policy and a team board.
+- whether your project already has a team policy, a team board and an external compute plan.
 
 The agent installs anything only with your consent and then re-checks. If you decline, it continues with documented fallbacks.
 
@@ -139,7 +143,7 @@ docs/agent-team/
 | Skill | What it covers | Loads when |
 |---|---|---|
 | [`subagent-team`](skills/subagent-team/SKILL.md) (core) | Detecting and confirming the host agent; first-use team policy; the four layers and the layer / tier split; task breakdown and per-task flows; the outsourcing gate and liaisons; the team board and `AGENTS.md` / `docs/` cross-references; modes (solo / standard / strict); brief templates; executable verification and three-step review; the layer-by-layer escalation ladder; agent reuse and slot limits; Claude Code and Codex specifics | A task spans several files or phases; you split work, pick a flow, delegate, choose a model or effort, write a brief, track external work, review delegated work, record a lesson, or wonder whether to ask the user |
-| [`cli-agent-delegation`](skills/cli-agent-delegation/SKILL.md) | Outsourcing to OpenAI Codex CLI (wrapper, or OpenAI's Codex plugin), Google Antigravity (`agy`, with or without [agy-staff](https://github.com/keli-wen/agy-staff)) and OpenCode through ACP: choosing the teams with the user and re-checking them on request, which team for which work, safe wrappers, fallback ladders, tracking, resuming, acceptance, measured runs; bounded waiting for liaisons; an onboarding guide for other ACP agents from the ACP Registry, and a checklist for adapting other CLIs and MCP | Sending bulk, fully specified work to another vendor's agent, or checking which external agents are available |
+| [`cli-agent-delegation`](skills/cli-agent-delegation/SKILL.md) | Outsourcing to Google Antigravity (`agy acp`, briefs from the [agy-staff](https://github.com/keli-wen/agy-staff) personas) and OpenCode through ACP, and to OpenAI Codex CLI (wrapper, or OpenAI's Codex plugin): ACP first and the compliance rules, upgrade offers, choosing the teams with the user and re-checking them on request, which team for which work, safe wrappers, fallback ladders, tracking, resuming, acceptance, measured runs; bounded waiting for liaisons; an onboarding guide for other ACP agents from the ACP Registry, and a checklist for adapting other CLIs and MCP | Sending bulk, fully specified work to another vendor's agent, or checking which external agents are available |
 | [`agent-handover`](skills/agent-handover/SKILL.md) | Progress records, task cards and lessons, rules in the repo instead of local memory, commit-hash placeholders, decision records, hand-off and take-over checklists | After accepting work, before a session may end, when switching agents or tools, when resuming someone else's work |
 
 Agents shipped with the Claude Code plugin: `team-reviewer` (routine changes, medium effort) and `team-reviewer-deep` (risky or cross-module changes, high effort). Both are read-only by instruction and have no edit or write tools; they keep Bash so they can run tests, so fingerprint the working tree when it matters (see `verification.md`).
@@ -148,14 +152,16 @@ Agents shipped with the Claude Code plugin: `team-reviewer` (routine changes, me
 
 | Script | Purpose |
 |---|---|
-| `skills/subagent-team/scripts/env-check.cjs` | Environment health check at session start: Node.js (minimum 18, recommended 24), git, a host-agent hint, external teams (Codex CLI and its plugin, agy, agy-staff, OpenCode, other agent CLIs, project MCP servers), the project's team policy (including whether to ask which external teams to use) and team board. Written in conservative syntax so it still runs and explains on an old Node. |
+| `skills/subagent-team/scripts/env-check.cjs` | Environment health check at session start: Node.js (minimum 22, recommended 24 or newer, nvm), git, a host-agent hint, external teams (Codex CLI and its plugin, agy and whether it has `agy acp`, agy-staff, OpenCode, other agent CLIs, project MCP servers), the project's team policy (including whether to ask which external teams to use) and team board. Written in conservative syntax so it still runs and explains on an old Node. |
 | `skills/subagent-team/scripts/team-board.mjs` | The team board: `init` creates the `docs/agent-team/` skeleton (never overwrites), `new` adds a task card and its index row, `set` changes a card's status and its index row together, `status` summarises task states and open questions, and reports drift between the index, the cards, `lessons.md` and `AGENTS.md` (`--strict` fails on any drift). |
-| `skills/subagent-team/scripts/model-roster.mjs` | Lists the newest Anthropic / OpenAI / Google / DeepSeek models with price and context, from OpenRouter's public model list. Use it to map abstract tiers to current models. |
+| `skills/subagent-team/scripts/model-roster.mjs` | Lists the newest Anthropic / OpenAI / Google / DeepSeek models with price and context, from OpenRouter's public model list; `--arena` adds performance from LMArena's Code Arena leaderboard (no key), `--save` keeps the ranking for `compute-config.mjs`. Use it to map abstract tiers to current models. |
+| `skills/subagent-team/scripts/compute-config.mjs` | The external compute plan in local files (global and per project, merged): `show` (plan, review due, ranking age, quota notes), `set` / `route` / `schedule` (team · model · effort per role, fallbacks, time windows), `resolve --role <role>` (who takes a job right now and why), `quota`, `record` and `usage` (job log with first-pass rate, per day and per hour), `check-models` (newer models on a channel, or a CLI that needs updating). Writes under a lock; the project directory is kept out of git. |
 | `skills/subagent-team/scripts/audit-dispatch.mjs` | Lists what actually ran in a session, from the harness transcripts: each agent's model and effort, plus external jobs. Claude Code only. |
 | `skills/cli-agent-delegation/scripts/codex-run.mjs` | Runs `codex exec` / `exec resume` with a required explicit effort. Refuses `ultra` and `danger-full-access`, supports a timeout, writes the log and final message to files, and prints a JSON summary with the session id. |
-| `skills/cli-agent-delegation/scripts/agy-run.mjs` | Runs `agy` headless when the agy-staff plugin is not installed. Validates model ids, refuses routing back to Claude/GPT models, maps `--write` to unrestricted mode, and supports continuation by conversation id. |
+| `skills/cli-agent-delegation/scripts/agy-acp-run.mjs` | An ACP client for agy's official server, `agy acp`. `run` pins model and thinking level, uses agy's `default` mode for read-only jobs and `accept-edits` for edits, rejects every permission request, names itself truthfully, removes ambient Google credentials, refuses agy older than 1.5.0, supports timeout and resume, and prints a JSON summary. `probe` is a handshake only, or lists modes and models in an empty directory with `--session-check`. Shares its ACP core (`acp-core.mjs`) with the OpenCode wrapper. |
+| `skills/cli-agent-delegation/scripts/agy-run.mjs` | Fallback for an agy without ACP: runs `agy -p` in print mode, warns about that risk on every run, validates model ids, refuses routing back to Claude/GPT models, maps `--write` to unrestricted mode, and supports continuation by conversation id. |
 | `skills/cli-agent-delegation/scripts/opencode-acp-run.mjs` | An ACP client for `opencode acp`. `run` pins model and effort, injects an OpenCode agent that denies everything except reads, allowed edits and an allow-listed shell, rejects permission requests so a run never waits, supports timeout and resume, and prints a JSON summary. `probe` lists OpenCode's models and effort levels without spending tokens. |
-| `skills/cli-agent-delegation/scripts/doctor.mjs` | Read-only environment report: CLIs and versions, Codex's default effort footgun, available models, the agy-staff and Codex plugins, whether `opencode acp` exists. |
+| `skills/cli-agent-delegation/scripts/doctor.mjs` | Read-only environment report: CLIs and versions, Codex's default effort footgun, available models, the agy-staff (with its version; `--check-updates` compares it with the newest release) and Codex plugins, whether `agy acp` and `opencode acp` exist, and a list of upgrades to offer, with exact commands. |
 
 ## First use: agree on the team policy
 
@@ -169,7 +175,7 @@ If there is none, it detects the host agent, the available models, the external 
    - `fixed`: you set the model and effort for every tier.
    - `hybrid`: fixed for some roles, auto for the rest.
 3. **Cost preference**: balanced / economize / max quality.
-4. **External teams**: which ones, through which channel (CLI / plugin / ACP / MCP), which model fills the external-fast and external-strong tiers for each, which may edit files and which only review, and whether later sessions should ask again at the start which teams to use.
+4. **External teams**: which ones, through which channel (CLI / plugin / ACP / MCP), which may edit files and which only review, and whether later sessions should ask again at the start which teams to use. If you have no compute plan yet, the same dialog confirms the drafted one (model and effort per role, fallbacks, time windows) and where to keep it.
 5. **Team board**: `docs/agent-team/` plus the host's native task list is recommended.
 6. **Never outsourced and shared files**: e.g. billing, payment and auth paths; locale files and doc indexes.
 7. **Commit and push rules**.
@@ -187,7 +193,8 @@ Put private terms (project names, internal hosts) in an untracked `.privacy-deny
 
 ## Credits
 
-- [agy-staff](https://github.com/keli-wen/agy-staff) by Keli Wen: the agy plugin this repository recommends, and a blueprint for wrapping other worker CLIs.
+- [agy-staff](https://github.com/keli-wen/agy-staff) by Keli Wen: the agy plugin whose personas and job discipline this repository borrows, and a blueprint for wrapping other worker CLIs.
+- [T3 Code](https://github.com/pingdotgg/t3code): its ACP-first provider design and account rules shaped the onboarding guide and the compliance rules.
 - [anthropics/skills](https://github.com/anthropics/skills) and the [Agent Skills specification](https://agentskills.io/specification).
 
 ## Author

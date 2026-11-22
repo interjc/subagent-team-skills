@@ -36,7 +36,7 @@ Use the harness's question tool when there is one (recommended option first; if 
    - **fixed**: the user fills in (or confirms) a model and effort per role; the director uses exactly that and asks before deviating.
    - **hybrid**: fixed for the roles the user names (often reviewer and expert), auto for the rest.
 3. **Cost preference**: balanced (recommended) / economize (prefer mid and low tiers, top tier only for the expert, outsource aggressively) / max quality (high tier for all reviews and risky work, top tier for design).
-4. **External teams** (pre-filled from detection): which teams, through which channel (CLI, plugin, ACP, MCP), which model fills external-fast and external-strong, and which may edit files versus review only. "None" is a valid answer. Also: should later sessions ask again at the start which teams to use (`External delegation: ask`, recommended), use this roster without asking (`roster`), or keep everything in-house (`none`)? And is there a lasting order, including a channel to spend first or spare and what substitutes for what when one runs out (`External order:`)? How far is each team trusted with the code (its confidentiality level), is that lasting, and if so should the file stay out of git (default) or be tracked ([confidentiality.md](confidentiality.md))? Quota states and reset times are session state and stay out of the section ([quota.md](quota.md)).
+4. **External teams** (pre-filled from detection): which teams, through which channel (CLI, plugin, ACP, MCP), and which may edit files versus review only. "None" is a valid answer. Should later sessions ask again at the start which teams to use (`External delegation: ask`, recommended), use this roster without asking (`roster`), or keep everything in-house (`none`)? How far is each team trusted with the code (its confidentiality level), is that lasting, and if so should the file stay out of git (default) or be tracked ([confidentiality.md](confidentiality.md))? When no compute plan exists yet, the same dialog confirms the drafted plan: model and effort per role, fallbacks, time windows, review interval and where to keep it (global, project, session) ([compute-config.md](compute-config.md), "Initialization: the one interview"). The plan, quota and usage stay out of the section.
 5. **Team board** (recommended: `docs/agent-team/` plus the host's native task list where it has one): where shared state lives ([team-board.md](team-board.md)). Projects that never involve external teams or multiple sessions may choose `native`.
 6. **Never outsourced and shared files** (pre-filled): paths whose business code stays in-house; files only the director writes.
 7. **Commit, push and deploy**: may the agent commit after checks pass? Push to which branches, if any? Deploy changed services after verification, or only when asked, and how deep the post-deploy check goes? (Default: commit locally, never push or deploy without being asked; a post-deploy check is one live call per changed path.)
@@ -54,7 +54,7 @@ Use the harness's question tool when there is one (recommended option first; if 
 - Team board: docs/agent-team/README.md + native task list   <!-- or: native -->
 - External delegation: ask      <!-- ask (which teams, at each session start) | roster (use the table below) | none (in-house only) -->
 - External confidentiality: .agent-team/confidentiality.md (local, git-ignored; ask again if missing)   <!-- only when the user made it lasting; or docs/agent-team/confidentiality.md when tracked -->
-- External order: <e.g. OpenCode (other-vendor models) → agy → Codex CLI>   <!-- lasting order only; session preferences are not written here -->
+- External compute: local compute files (`compute-config.mjs show`; global plus .agent-team/compute.json, git-ignored)   <!-- models, roles, fallbacks, windows, order, quota, usage; never written here -->
 
 | Layer | Role | Tier | Model | Effort |
 |---|---|---|---|---|
@@ -67,11 +67,13 @@ Use the harness's question tool when there is one (recommended option first; if 
 | L3 | Reviewer / tester (routine) | mid | auto, ≠ implementer's model | medium |
 | L3 | Runner, liaison | low | auto | low |
 
-| External team | Channel | external-fast | external-strong | May edit? | Status |
-|---|---|---|---|---|---|
-| <e.g. agy> | <plugin agy-staff, or CLI> | <model id> | <model id> | yes | <verified YYYY-MM-DD> |
-| <e.g. Codex CLI> | CLI (codex-run.mjs); plugin for reviews | — | <model id> · medium–high | yes | <verified YYYY-MM-DD> |
-| <e.g. OpenCode> | ACP (opencode-acp-run.mjs) | <provider/model> · <effort> | <provider/model> · <effort> | yes, allow-listed shell | <verified YYYY-MM-DD> |
+| External team | Channel | Tiers it can fill | May edit? | Status |
+|---|---|---|---|---|
+| <e.g. agy> | ACP (agy-acp-run.mjs; agy-staff personas in briefs) | external-fast, external-strong | yes, edits only (no commands) | <verified YYYY-MM-DD> |
+| <e.g. Codex CLI> | CLI (codex-run.mjs); plugin for reviews | external-strong | yes | <verified YYYY-MM-DD> |
+| <e.g. OpenCode> | ACP (opencode-acp-run.mjs) | the tier of its configured model | yes, allow-listed shell | <verified YYYY-MM-DD> |
+
+<!-- Which model and effort each team uses for which role is the user's compute plan, not this table. -->
 
 - Never outsourced: <paths>
 - Shared files (director only): <paths>
@@ -89,7 +91,7 @@ The section is read at the start of every session, so it holds **the rules in fo
 
 - One rule, one line or two, ending with its source: `(user, 2026-11-03)`. The user's verbatim words live in `lessons.md`, whose row links back here. A rule born of an incident may keep one clause of why ("Why: a refusal state looped a client's poll"): it stops a later tidy-up from trimming the rule as noise.
 - When a rule is replaced or expires, rewrite it in place; do not append "the rule of the 2nd ended early" next to it. The replaced rule goes to `decisions.md` with an "Overturned (date)" note.
-- Team capabilities go in the roster table, the order in the `External order:` line; neither carries history.
+- Team capabilities go in the roster table; models, order, fallbacks and windows go in the compute plan; neither carries history. An older policy with an `External order:` line or model columns: on first use, offer to move them into the compute plan (asking the scope), then replace them with the `External compute:` pointer.
 - Do not restate this skill's defaults; write only where the project differs.
 - At the end of a phase, if the section has grown past about 30 lines, move history and quotes out as above.
 
@@ -101,7 +103,7 @@ After writing the section, create the board if the policy names one (`scripts/te
 - Never change the director's own model; the user chose it when starting the session.
 - Keep reviewers on a different model from the implementer they review (ideally another vendor).
 - Liaisons and runners take the cheapest model that can run shell commands reliably.
-- External teams: pick each team's other-vendor models for its two tiers; never a model that routes back to the in-house vendor.
+- External teams: follow the compute plan ([compute-config.md](compute-config.md)); when drafting one, pick each team's other-vendor models for its two tiers by the saved ranking; never a model that routes back to the in-house vendor.
 - Respect the cost preference.
 - State the choice at dispatch ("worker: <model> · medium") and list the models used in the final report. When a pick turns out wrong (too weak, too slow), adjust and note it in the design doc's *Lessons*. Do not write per-task picks into `AGENTS.md`; the policy stays "auto".
 - If the preferred model is unavailable (refused, out of quota, slot limit), fall back one step and say so.

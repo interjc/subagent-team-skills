@@ -4,7 +4,15 @@ External channels run on quota: a subscription window that refills on a schedule
 
 ## The quota ledger
 
-Keep one small table for the session, in the board's `progress.md` under "Channel quota" ([team-board.md](team-board.md)), or in the director's working notes when no board is open. It is state, not policy: it never goes into `AGENTS.md`.
+Quota belongs to the account, so the ledger lives in the **global compute file**, where every session and project on the machine sees it ([compute-config.md](compute-config.md)); `--scope project` only for an allowance that exists in one project alone. It is state, not policy: it never goes into `AGENTS.md`, `progress.md` or agent memory. Without Node.js, edit the `quota` object of `compute.json` by hand.
+
+```bash
+node scripts/compute-config.mjs quota codex-strong --state exhausted --resets 2026-11-11T19:00+08:00 --source "error text"
+node scripts/compute-config.mjs quota agy-flash --state plenty --expires 2026-11-30 --source user --note "spend first"
+node scripts/compute-config.mjs show      # quotaNotes: resets passed, resets unknown, credits expiring within 3 days
+```
+
+The ledger, shown as a table:
 
 | Channel · model | State | Checked | Resets | Source | Substitute |
 |---|---|---|---|---|---|
@@ -20,7 +28,7 @@ Keep one small table for the session, in the board's `progress.md` under "Channe
 
 Check at four moments, cheapest source first; never spend a job only to measure quota.
 
-1. **Session start.** With the question about which teams may take work, ask what the user knows: which channel is nearly out, which has plenty, when each resets ("Asking the user", below). Carry forward ledger rows from the last session whose reset time has not passed.
+1. **Session start.** `show` lists what earlier sessions recorded. On initialization, or when a row's reset time is unknown, ask what the user knows: which channel is nearly out, which has plenty, when each resets ("Asking the user", below).
 2. **Before each batch of dispatches.** Read the ledger. A batch that would not fit what is left on a `low` channel goes to the substitute as a whole, or is split at a clean boundary; do not start a job that is likely to die half-way.
 3. **When a job returns.** The liaison reports every quota signal it saw: usage figures the runner exposes, rate-limit or retry warnings in the result or the log, and any "resets at" text, quoted exactly. The layer above updates the ledger. Several throttling warnings in a row mean `low`, even when the job succeeded.
 4. **When a job fails on quota.** See "When a channel · model runs out".
@@ -32,15 +40,17 @@ Sources, in order: what the job result and log already contain; the channel's ow
 Exhaustion is an availability failure, not a quality one: it does not count against the team ([external-teams.md](external-teams.md), "Quality of a channel"), and it is an exception to "rework goes to the same agent": the rest of the job moves to the substitute.
 
 1. **The liaison stops and reports**: the error text, the reset time if the channel gave one, the job's state and ids, and the partial diff against the lease. It does not retry, wait for the reset, or switch on its own.
-2. **Record it** in the ledger: state `exhausted`, the reset time or `unknown`.
+2. **Record it** in the ledger (`compute-config.mjs quota <id> --state exhausted --resets <time>`), and log the job with `record <id> --outcome quota`.
 3. **Settle the partial work.** The layer above, never the liaison, keeps for review what passes the acceptance checks, has the rest reverted inside the lease, and writes the remaining scope as a fresh brief that states what is already done. Kept work still gets its independent review. Do not resume the dead conversation on another channel.
-4. **Pick the substitute** down this ladder, staying in the job's tier, and say the switch in one line on the card ("Codex strong model exhausted until 19:00; T4.b goes to OpenCode `<model>` · high"):
+4. **Pick the substitute** down this ladder, staying in the job's tier (`compute-config.mjs resolve --role <role>` applies the resource's fallback chain and the quota rows for you), and say the switch in one line on the card ("Codex strong model exhausted until 19:00; T4.b goes to OpenCode `<model>` · high"):
 
 | Step | Substitute | Notes |
 |---|---|---|
-| 1 | The same-tier model on **another allowed channel** | The agreed substitute order decides which. Still another vendor than in-house, and its confidentiality level must cover the job ([confidentiality.md](confidentiality.md)). |
+| 1 | The same-tier model on **another allowed channel** | The resource's `fallback` chain in the compute plan decides which. Still another vendor than in-house, and its confidentiality level must cover the job ([confidentiality.md](confidentiality.md)). |
 | 2 | Another model of the same tier on the same channel, when it has its own allowance | A drop below the job's tier is not a ladder step: state it, and use it only for work the weaker model can carry. |
 | 3 | **In-house**, when every allowed external option for that tier is out | The table below. The flow changes from `outsource` to `direct`; no liaison is needed. |
+
+Never a step: another account or subscription of the same vendor used to get round the limit, or a proxy that pools accounts. That puts the user's accounts at risk. A separate account the user set up and listed in the compute plan is its own channel, chosen by the user (`cli-agent-delegation`, `references/compliance.md`).
 
 In-house substitutes for an external tier:
 
@@ -57,7 +67,7 @@ Ask the user before switching only when no agreed substitute exists and the swit
 - When a recorded reset time has passed, treat the channel · model as presumed available: the next suitable dispatch may return to it, and that job doubles as the probe. If it fails on quota again, record the new reset time and do not try again before it.
 - When the reset time is `unknown`, ask the user once, together with any other pending question; until they answer, keep the channel out for the rest of the session.
 - Do not poll, schedule wake-ups or hold work back waiting for a reset unless the user asks for that. Work continues on the substitute; jobs already running there finish there.
-- At session end, leave the ledger rows that still matter (exhausted with a future reset, credit expiry dates, a lasting spend-first rule's source) in `progress.md`, so the next session starts from them.
+- The ledger is already durable; at session end, make sure every quota event of the session was written to it. Nothing about quota is copied into `progress.md`.
 
 ## Spending a channel first
 
@@ -65,7 +75,7 @@ Sometimes the aim is the opposite: a channel has plenty left, or credits that ex
 
 - A spend-first or spare preference changes the **order among teams that fit the job**. It does not send work out that fails the outsourcing gate, does not drop a job below its tier without saying so, and does not replace an in-house review. Once the user has chosen spend-first, plenty of quota lowers the cost side of the gate's fourth criterion, and nothing else.
 - The director does not decide on its own to burn a quota because the ledger says `plenty`; it asks, or follows a recorded rule.
-- Scope decides where it is written ([user-overrides.md](user-overrides.md), "How long an instruction lasts"): for this session, the ledger and the session choice line; lasting, the `External order:` line in `AGENTS.md` with its date and a `lessons.md` row, as for any lasting instruction; until a date or "while the credits last", lasting with the end condition, removed and marked overturned when it expires.
+- Scope decides where it is written ([user-overrides.md](user-overrides.md), "How long an instruction lasts"): for this session, the session choice line; lasting, a schedule rule in the compute plan with `prefer` (project or global, as the user says); until a date or "while the credits last", the same rule with `until=<date>` or a quota `--expires`, after which `show` lists it under `expiredSchedules` and you remove it with a one-line notice.
 
 ## Asking the user
 
@@ -73,7 +83,7 @@ Ask once, with the session-start question about teams, and only what is not alre
 
 1. "Is any channel or model nearly out, and when does it reset?"
 2. "Is there one you want spent first (plenty left, or credits about to expire), or one to spare?"
-3. "If X runs out, use Y, then in-house?" (the substitute order)
-4. "Is that for this session, or should I write it into the project policy?" When the answer is unclear, it is session scope.
+3. "If X runs out, use Y, then in-house?" (the fallback chain)
+4. "Is that for this session, this project, or global?" When the answer is unclear, it is session scope.
 
-Skip the questions in a non-interactive run or when the policy and the ledger already answer them, and state what you are using in one line. Ask again mid-run only when a channel runs out with no agreed substitute, a reset time is unknown, or the ledger shows a large surplus the user has not spoken about and a bulk task is about to be routed; batch it with other questions when the user has authorized continuous work.
+Ask these at initialization of the compute plan ([compute-config.md](compute-config.md), "Initialization: the one interview"); skip them in a non-interactive run or when the plan and the ledger already answer them, and state what you are using in one line. Ask again mid-run only when a channel runs out with no fallback, a reset time is unknown, or the ledger shows a large surplus the user has not spoken about and a bulk task is about to be routed; batch it with other questions when the user has authorized continuous work.

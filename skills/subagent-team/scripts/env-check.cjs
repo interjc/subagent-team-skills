@@ -4,7 +4,7 @@
 //   node env-check.cjs [--root <project dir>] [--json]
 //
 // Run once per session before the team starts working. Checks Node.js
-// (hard minimum and recommended version), git, which host harness this
+// (hard minimum; the user's or project's version wins when it meets it), git, which host harness this
 // session probably runs in (a hint to confirm with the user), the optional
 // external teams (Codex CLI and its Claude Code plugin, agy, the agy-staff
 // plugin, OpenCode, Pi, Grok Build CLIs, project MCP servers), whether the project
@@ -25,7 +25,7 @@ var fs = require('fs');
 var os = require('os');
 var path = require('path');
 
-var MIN_NODE_MAJOR = 18;
+var MIN_NODE_MAJOR = 22;
 var RECOMMENDED_NODE_MAJOR = 24;
 var PROBE_TIMEOUT_MS = 10000;
 
@@ -37,10 +37,12 @@ var USAGE = [
   '  --root <dir>  project to inspect for a "## Subagent team" policy (default: current directory)',
   '  --json        print one JSON object instead of the report',
   '',
-  'Requirements: Node.js >= ' + MIN_NODE_MAJOR + ' (hard minimum), ' + RECOMMENDED_NODE_MAJOR + ' recommended; git.',
+  'Requirements: Node.js >= ' + MIN_NODE_MAJOR + ' (hard minimum; the user\'s own version is used when it meets it), ' + RECOMMENDED_NODE_MAJOR + ' or newer for a new install; git.',
   'Optional external teams: Codex CLI, Codex plugin, agy, agy-staff plugin, OpenCode (ACP), Pi, Grok Build, project MCP servers.',
   'The host harness is detected from environment variables: a hint, confirm it with the user.',
-  'Env overrides: GIT_BIN, CODEX_BIN, AGY_BIN, OPENCODE_BIN, PI_BIN, GROK_BIN, CLAUDE_CONFIG_DIR, HOME.',
+  'Node.js version: the project pin (.nvmrc, .node-version, volta.node), else the running one, else the newest nvm one, if >= ' + MIN_NODE_MAJOR + '; else ' + RECOMMENDED_NODE_MAJOR + '.',
+  'Node.js: nvm first (NVM_DIR, default ~/.nvm); a native install only without nvm. Install nothing without the user\'s consent.',
+  'Env overrides: GIT_BIN, CODEX_BIN, AGY_BIN, OPENCODE_BIN, PI_BIN, GROK_BIN, CLAUDE_CONFIG_DIR, NVM_DIR, SUBAGENT_TEAM_HOME, HOME.',
   'Exit codes: 0 ready (warnings allowed), 1 usage error, 2 blocked.'
 ].join('\n');
 
@@ -65,23 +67,114 @@ function nodeMajor(version) {
   return m ? Number(m[1]) : 0;
 }
 
-function checkNode(version) {
+// nvm is the preferred way to get Node.js; a native install only without it.
+function findNvm(env) {
+  var dir = env.NVM_DIR ? path.resolve(env.NVM_DIR) : path.join(homeDir(env), '.nvm');
+  var found = false;
+  try { found = fs.statSync(path.join(dir, 'nvm.sh')).isFile(); } catch (e) { /* not installed */ }
+  var versions = [];
+  if (found) {
+    try {
+      fs.readdirSync(path.join(dir, 'versions', 'node')).forEach(function (n) { if (/^v\d+\.\d+\.\d+$/.test(n)) versions.push(n); });
+    } catch (e) { /* no versions yet */ }
+    versions.sort(function (a, b) {
+      var x = a.slice(1).split('.').map(Number);
+      var y = b.slice(1).split('.').map(Number);
+      return (y[0] - x[0]) || (y[1] - x[1]) || (y[2] - x[2]);
+    });
+  }
+  return { found: found, dir: dir, versions: versions };
+}
+
+// The Node.js version a project pins: .nvmrc, .node-version, or package.json volta.node.
+function findNodePin(root) {
+  var files = ['.nvmrc', '.node-version'];
+  for (var i = 0; i < files.length; i++) {
+    var text = null;
+    try { text = fs.readFileSync(path.join(root, files[i]), 'utf8'); } catch (e) { continue; }
+    var value = String(text).split(/\r?\n/)[0].trim();
+    if (!value) continue;
+    var m = /^v?(\d+)/.exec(value);
+    return { file: files[i], value: value, major: m ? Number(m[1]) : null };
+  }
+  try {
+    var pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+    var volta = pkg && pkg.volta && pkg.volta.node;
+    if (typeof volta === 'string' && volta.trim()) {
+      var mv = /^v?(\d+)/.exec(volta.trim());
+      return { file: 'package.json volta.node', value: volta.trim(), major: mv ? Number(mv[1]) : null };
+    }
+  } catch (e) { /* no package.json or not JSON */ }
+  return null;
+}
+
+// Which Node.js major to use or install. The user's own choice wins when it
+// meets the minimum: the project's pin, then the running version, then the
+// newest version already installed through nvm; the recommended version only
+// when none of them qualifies.
+function nodeTarget(version, pin, nvm) {
+  var installed = function (major) {
+    var list = (nvm && nvm.versions) || [];
+    for (var i = 0; i < list.length; i++) if (nodeMajor(list[i]) === major) return true;
+    return false;
+  };
+  var pick = function (major, source) { return { major: major, source: source, installed: installed(major) }; };
+  if (pin && pin.major && pin.major >= MIN_NODE_MAJOR) return pick(pin.major, 'project (' + pin.file + ')');
+  var running = nodeMajor(version);
+  if (running >= MIN_NODE_MAJOR) return pick(running, 'running');
+  var list = (nvm && nvm.versions) || [];
+  for (var i = 0; i < list.length; i++) if (nodeMajor(list[i]) >= MIN_NODE_MAJOR) return pick(nodeMajor(list[i]), 'nvm');
+  return pick(RECOMMENDED_NODE_MAJOR, 'recommended');
+}
+
+function nodeInstallHint(nvm, target) {
+  var v = target && target.major ? target.major : RECOMMENDED_NODE_MAJOR;
+  if (nvm && nvm.found && target && target.installed) return '`nvm use ' + v + '` (already installed through nvm in ' + nvm.dir + '; nothing to install)';
+  if (nvm && nvm.found) return 'With the user\'s consent: `nvm install ' + v + ' && nvm use ' + v + '` (nvm found in ' + nvm.dir + ')';
+  return 'With the user\'s consent, install nvm (https://github.com/nvm-sh/nvm, its install script) and then `nvm install ' + v + ' && nvm use ' + v +
+    '`; only if the user does not want nvm, install Node.js ' + v + ' natively (https://nodejs.org or the system package manager)';
+}
+
+// The Node.js running this check is not nvm's although nvm is installed.
+function checkNvm(nvm, execPath, target) {
+  if (!nvm || !nvm.found || !execPath) return [];
+  if (path.resolve(execPath).indexOf(nvm.dir + path.sep) === 0) return [];
+  var v = target && target.major ? target.major : RECOMMENDED_NODE_MAJOR;
+  return [{
+    id: 'nvm', status: 'info', detail: 'nvm is installed (' + nvm.dir + '), but this Node.js runs from ' + execPath + '.',
+    fix: 'Fine if this is the version the user wants. To run the helper scripts with nvm\'s Node.js: `nvm use ' + v + '` in the shell that runs them, or `nvm exec ' + v + ' node <script>`.'
+  }];
+}
+
+function checkNode(version, nvm, pin) {
   var major = nodeMajor(version);
-  var install = 'Install Node.js ' + RECOMMENDED_NODE_MAJOR + ' LTS, e.g. `nvm install ' + RECOMMENDED_NODE_MAJOR +
-    '` (then `nvm use ' + RECOMMENDED_NODE_MAJOR + '` in the shell that runs the agent) or from https://nodejs.org';
+  var target = nodeTarget(version, pin, nvm);
   if (major < MIN_NODE_MAJOR) {
     return {
       id: 'node', status: 'error', detail: 'Node.js ' + version + ' is below the minimum ' + MIN_NODE_MAJOR + '; the helper scripts will not work.',
-      fix: install + '. Until then, use the fallbacks in references/environment-check.md (the method itself needs no scripts).'
+      fix: nodeInstallHint(nvm, target) + '. Until then, use the fallbacks in references/environment-check.md (the method itself needs no scripts).'
     };
   }
-  if (major < RECOMMENDED_NODE_MAJOR) {
-    return {
-      id: 'node', status: 'warn', detail: 'Node.js ' + version + ' works (minimum ' + MIN_NODE_MAJOR + '); ' + RECOMMENDED_NODE_MAJOR + ' is recommended.',
-      fix: install + '.'
-    };
+  // Any version at or above the minimum is the user's choice: use it as it is.
+  return { id: 'node', status: 'ok', detail: 'Node.js ' + version + ' (minimum ' + MIN_NODE_MAJOR + '; the user\'s version is used, ' + RECOMMENDED_NODE_MAJOR + ' or newer only for a new install)' };
+}
+
+// A project pin that differs from the running Node.js: information, never a reason to switch unasked.
+function checkNodePin(version, pin, nvm) {
+  if (!pin || !pin.major) return [];
+  var running = nodeMajor(version);
+  if (pin.major < MIN_NODE_MAJOR) {
+    var t = nodeTarget(version, null, nvm);
+    return [{
+      id: 'node-pin', status: 'info', detail: 'The project pins Node.js ' + pin.value + ' (' + pin.file + '), below the scripts\' minimum ' + MIN_NODE_MAJOR + '.',
+      fix: 'Keep the project\'s pin; run the helper scripts with Node.js ' + t.major + ' (`nvm exec ' + t.major + ' node <script>`).'
+    }];
   }
-  return { id: 'node', status: 'ok', detail: 'Node.js ' + version + ' (minimum ' + MIN_NODE_MAJOR + ', recommended ' + RECOMMENDED_NODE_MAJOR + ')' };
+  if (pin.major === running) return [];
+  return [{
+    id: 'node-pin', status: 'info', detail: 'The project pins Node.js ' + pin.value + ' (' + pin.file + '); this is ' + version + '. Both work for the scripts.',
+    fix: 'To match the project: `nvm use ' + pin.major + '`' + (nvm && nvm.found && !nodeTarget(version, pin, nvm).installed ? ' after `nvm install ' + pin.major + '` (with the user\'s consent)' : '') + '.'
+  }];
 }
 
 function probe(bin, args, cwd) {
@@ -128,6 +221,36 @@ function readInstalledPlugins(env) {
   } catch (e) {
     return '';
   }
+}
+
+// `agy acp`, the official ACP server, shipped in agy 1.5.0; 1.5.12 or newer is recommended.
+var AGY_ACP_MIN = [1, 5, 0];
+var AGY_RECOMMENDED = [1, 5, 12];
+
+function semver(text) {
+  var m = /(\d+)\.(\d+)\.(\d+)/.exec(String(text || ''));
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+function older(a, b) {
+  for (var i = 0; i < 3; i++) {
+    if (a[i] !== b[i]) return a[i] < b[i];
+  }
+  return false;
+}
+
+function agyCheck(agy) {
+  if (!agy.found) {
+    return { id: 'agy', status: 'info', detail: 'agy not found (optional external team, external-fast).', fix: 'Optional: install Google Antigravity CLI (https://antigravity.google/docs/cli/install), then sign in once with `agy`.' };
+  }
+  var v = semver(agy.output);
+  if (v && older(v, AGY_ACP_MIN)) {
+    return { id: 'agy', status: 'warn', detail: 'agy: ' + agy.output + ' has no official ACP server (`agy acp`, 1.5.0+): agy jobs would fall back to print mode, where writes skip every permission check.', fix: 'Update agy (`agy update`); the agent may run it after the user agrees.' };
+  }
+  if (v && older(v, AGY_RECOMMENDED)) {
+    return { id: 'agy', status: 'ok', detail: 'agy: ' + agy.output + ' (ACP available; ' + AGY_RECOMMENDED.join('.') + ' or newer recommended: `agy update`).' };
+  }
+  return { id: 'agy', status: 'ok', detail: 'agy: ' + agy.output + (v ? ' (ACP available)' : '') };
 }
 
 function findAgyStaff(env) {
@@ -232,13 +355,11 @@ function checkExternal(env) {
   }
   var agyBin = env.AGY_BIN || 'agy';
   var agy = probe(agyBin, ['--version']);
-  checks.push(agy.found
-    ? { id: 'agy', status: 'ok', detail: 'agy: ' + agy.output }
-    : { id: 'agy', status: 'info', detail: 'agy not found (optional external team, external-fast).', fix: 'Optional: install Google Antigravity CLI (https://antigravity.google/docs/cli/install), then sign in once with `agy`.' });
+  checks.push(agyCheck(agy));
   var staff = findAgyStaff(env);
   checks.push(staff
-    ? { id: 'agy-staff', status: 'ok', detail: 'agy-staff plugin installed (Claude Code).' }
-    : { id: 'agy-staff', status: 'info', detail: 'agy-staff plugin not found in Claude Code.', fix: 'Optional, if you use agy: `claude plugin marketplace add keli-wen/agy-staff && claude plugin install agy@agy-staff` (otherwise the raw agy CLI works).' });
+    ? { id: 'agy-staff', status: 'ok', detail: 'agy-staff plugin installed (Claude Code): borrow its personas and job discipline, but dispatch agy through ACP (agy-acp-run.mjs); its own companion runs print mode.' }
+    : { id: 'agy-staff', status: 'info', detail: 'agy-staff plugin not found in Claude Code.', fix: 'Optional, if you use agy (the agent may run it after the user agrees): `claude plugin marketplace add keli-wen/agy-staff && claude plugin install agy@agy-staff`. Jobs still go through ACP (agy-acp-run.mjs).' });
   return checks;
 }
 
@@ -289,15 +410,37 @@ function findBoard(root, policy) {
   return { found: false, path: null };
 }
 
+// The user's external compute plan (compute-config.mjs): global config
+// directory, and .agent-team/ in the main checkout (shared by worktrees).
+function computeGlobalDir(env) {
+  if (env.SUBAGENT_TEAM_HOME) return path.resolve(env.SUBAGENT_TEAM_HOME);
+  return path.join(homeDir(env), '.subagent-team');
+}
+
+function findCompute(env, root) {
+  var main = root;
+  var common = probe(env.GIT_BIN || 'git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], root);
+  if (common.found && common.ok && path.basename(common.output) === '.git') main = path.dirname(common.output);
+  var g = path.join(computeGlobalDir(env), 'compute.json');
+  var p = path.join(main, '.agent-team', 'compute.json');
+  var exists = function (f) { try { return fs.statSync(f).isFile(); } catch (e) { return false; } };
+  return { global: g, globalFound: exists(g), project: p, projectFound: exists(p) };
+}
+
 function runChecks(opts, env, nodeVersion) {
-  var checks = [checkNode(nodeVersion)];
+  var checks = [null];
   var git = checkGit(env, opts.root);
   var projectRoot = opts.root;
   for (var i = 0; i < git.length; i++) if (git[i].root) projectRoot = git[i].root;
   var host = detectHost(env);
-  checks = checks.concat(git, [checkHost(host)], checkExternal(env), checkOtherAgents(env, projectRoot));
+  var nvm = findNvm(env);
+  var pin = findNodePin(projectRoot);
+  var target = nodeTarget(nodeVersion, pin, nvm);
+  checks[0] = checkNode(nodeVersion, nvm, pin);
+  checks = checks.concat(checkNodePin(nodeVersion, pin, nvm), checkNvm(nvm, opts.execPath, target), git, [checkHost(host)], checkExternal(env), checkOtherAgents(env, projectRoot));
   var policy = findPolicy(projectRoot);
   var board = findBoard(projectRoot, policy);
+  var compute = findCompute(env, projectRoot);
   var blocked = checks.some(function (c) { return c.status === 'error'; });
   var warned = checks.some(function (c) { return c.status === 'warn'; });
   var status = blocked ? 'blocked' : warned ? 'ready-with-warnings' : 'ready';
@@ -316,17 +459,27 @@ function runChecks(opts, env, nodeVersion) {
   } else if (choice === 'roster' || choice === 'none') {
     next.push('External delegation: ' + choice + ' (from the policy): ' + (choice === 'none' ? 'keep all work in-house' : 'use the roster as recorded') + ' and say so in one line; re-check only when the user asks.');
   }
+  if (teams.length && choice !== 'none') {
+    if (compute.globalFound || compute.projectFound) {
+      next.push('Compute plan found (' + [compute.globalFound ? 'global' : null, compute.projectFound ? 'project' : null].filter(Boolean).join(' + ') + '): run scripts/compute-config.mjs show and route by it; ask nothing about compute unless it reports a review is due (then notify and proceed).');
+    } else {
+      next.push('Compute plan: none yet: draft one (teams, model and effort per role, fallbacks, windows) and confirm it once, asking whether to keep it globally, for this project or for this session (references/compute-config.md).');
+    }
+  }
   if (!board.found && !(policy.teamBoard && /^(native|none)\b/i.test(policy.teamBoard))) next.push('No team board yet: when the work involves external teams, several sessions or Strict mode, create one (scripts/team-board.mjs init) and link it from the policy section.');
-  if (!next.length || next.every(function (n) { return n.indexOf('External delegation: ') === 0; })) next.push('Environment ready and policy found: proceed.');
+  if (!next.length || next.every(function (n) { return n.indexOf('External delegation: ') === 0 || n.indexOf('Compute plan found') === 0; })) next.push('Environment ready and policy found: proceed.');
   return {
     status: status,
     minNode: MIN_NODE_MAJOR,
     recommendedNode: RECOMMENDED_NODE_MAJOR,
+    nodePin: pin,
+    nodeTarget: target,
     projectRoot: projectRoot,
     host: host,
     checks: checks,
     policy: policy,
     board: board,
+    compute: compute,
     next: next
   };
 }
@@ -344,6 +497,9 @@ function formatReport(r) {
     ? 'found in ' + r.policy.file + (r.policy.modelPolicy ? ' (Model policy: ' + r.policy.modelPolicy + ')' : ' (no Model policy line)')
     : 'not found in ' + r.projectRoot));
   lines.push('Team board: ' + (r.board.found ? r.board.path : (r.policy.teamBoard || 'none')));
+  lines.push('Compute plan: ' + (r.compute.globalFound || r.compute.projectFound
+    ? [r.compute.globalFound ? r.compute.global : null, r.compute.projectFound ? r.compute.project : null].filter(Boolean).join(' + ')
+    : 'none'));
   lines.push('Status: ' + r.status.toUpperCase());
   lines.push('');
   lines.push('Next:');
@@ -363,6 +519,7 @@ function main(argv) {
     process.stdout.write(USAGE + '\n');
     return 0;
   }
+  opts.execPath = process.execPath;
   var r = runChecks(opts, process.env, process.version);
   process.stdout.write((opts.json ? JSON.stringify(r, null, 2) : formatReport(r)) + '\n');
   return r.status === 'blocked' ? 2 : 0;
@@ -375,6 +532,13 @@ module.exports = {
   nodeMajor: nodeMajor,
   checkNode: checkNode,
   detectHost: detectHost,
+  findCompute: findCompute,
+  findNvm: findNvm,
+  checkNvm: checkNvm,
+  findNodePin: findNodePin,
+  nodeTarget: nodeTarget,
+  checkNodePin: checkNodePin,
+  nodeInstallHint: nodeInstallHint,
   findPolicy: findPolicy,
   findBoard: findBoard,
   findMcpServers: findMcpServers,
