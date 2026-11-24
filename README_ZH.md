@@ -47,9 +47,11 @@
 |---|---|
 | **Claude Code** | 主推。日常开发使用，以插件形式提供 skills 和两个只读审核 agent。 |
 | **Codex** | 次选。真实项目里当过主 session；skills 可以作为插件安装。审核 agent 是 Claude Code 的定义，Codex 下请用 `reviewer-prompt.md`。 |
-| 其他（OpenCode、Pi、Cursor、Gemini CLI 等） | 未测试，不保证使用质量。skills 遵循开放的 [Agent Skills](https://agentskills.io) 格式，方法本身不绑定工具，所以支持 skills 的 agent 都能安装和加载。请通过 `npx skills` 或你所用 agent 自己的插件 / skill 市场安装，并自行微调 harness 相关的部分。 |
+| 其他（T3 Code、OpenCode、Cursor、agy、Pi、Gemini CLI 等） | 未测试，不保证使用质量。skills 遵循开放的 [Agent Skills](https://agentskills.io) 格式，方法本身不绑定工具，所以支持 skills 的 agent 都能安装和加载。请通过 `npx skills` 或你所用 agent 自己的插件 / skill 市场安装，并自行微调 harness 相关的部分。 |
 
 宿主不用你先说：环境检查会根据环境变量给出初步判断，首次使用时再和你确认，并记进项目策略。之后按这个宿主的能力调整团队，例如能不能起 subagent、能不能按 subagent 指定模型和 effort、有没有原生任务列表。
+
+检查还会判断宿主是哪**一类**客户端，并在会话恢复或交接时重新检查。**原厂客户端**（Claude Code、Codex、agy）只能把其他厂商的模型当作外部团队来用：走 ACP，每个任务配一个联络员。**多厂商 harness**（T3 Code、OpenCode、Cursor）本身就能调用多家厂商的模型，所以外部委派改为内部切换模型：起一个使用对方模型的 subagent 或子 agent，不用包装脚本也不用联络员，主管自己的模型永远不切换。如果不好判断（客户端未知、按 subagent 指定模型不可靠、两条路都能走但账号或额度不同），agent 会给出推荐，让你来选。详见[宿主类型](skills/subagent-team/references/host-harness.md)。
 
 外包团队：
 

@@ -10,7 +10,7 @@ If the user prefers a separate file, write it (e.g. `docs/agents/subagent-team.m
 
 ## When to run setup
 
-1. Look for the `## Subagent team` section (or the pointer to it). If it has a `Model policy:` line, **use it and do not ask**. If something it names is unavailable (a model was retired, a CLI is not installed), fall back as in the "auto" rules below and tell the user in one line. If it lacks a line that newer versions of this skill add (`Host harness:`, `Team board:`, `External delegation:`, the external-team table), ask only for the missing items, pre-filled.
+1. Look for the `## Subagent team` section (or the pointer to it). If it has a `Model policy:` line, **use it and do not ask**. If something it names is unavailable (a model was retired, a CLI is not installed), fall back as in the "auto" rules below and tell the user in one line. If it lacks a line that newer versions of this skill add (`Host harness:` with the host's kind, `External route:`, `Team board:`, `External delegation:`, the external-team table), ask only for the missing items, pre-filled.
 2. No section: run the questionnaire before dispatching the first subagent. Solo-mode work ("Start" in [SKILL.md](../SKILL.md)) does not need it.
 3. The user cannot be asked right now (non-interactive run, or they said "don't ask, just go"): write the section with `Model policy: auto` and `Decided: default, not confirmed`, continue, and include the policy in the end-of-task grill-me list.
 4. The user later changes their mind ("use another vendor's model for reviews") and wants it to last: update the rule in place, with the date, and add a row to the board's `lessons.md` with the user's words. A preference for this session only ("use OpenCode for now") does not go into the section ([user-overrides.md](user-overrides.md)).
@@ -30,7 +30,7 @@ Pre-fill every answer from what you can see, so the user can accept everything i
 
 Use the harness's question tool when there is one (recommended option first; if it limits the number of questions per dialog, ask in two dialogs, or offer "accept all detected answers" as the first question); otherwise one message with numbered questions. Keep it to these seven. The user can answer "all recommended".
 
-1. **Host harness** (pre-filled from detection): "This session looks like <host> (evidence: ...). Correct? Do you also run this project from other agents?" Record every host the project is used from.
+1. **Host harness** (pre-filled from detection): "This session looks like <host> (evidence: ...), a <vendor-native client | multi-vendor harness>. Correct? Do you also run this project from other agents?" Record every host the project is used from, with its kind. When the route for external work is not clear-cut, add the route question from [host-harness.md](host-harness.md), "When the route is not obvious, the user picks".
 2. **Model policy**
    - **auto (recommended)**: the director picks the recommended model and effort per role from what is available at the time, following the tier table, and states each choice in one line when dispatching. No per-task confirmation.
    - **fixed**: the user fills in (or confirms) a model and effort per role; the director uses exactly that and asks before deviating.
@@ -46,7 +46,8 @@ Use the harness's question tool when there is one (recommended option first; if 
 ```markdown
 ## Subagent team
 <!-- Policy for the subagent-team skill. Edit freely; the skill reads it at the start of each task. -->
-- Host harness: <e.g. Claude Code> (confirmed <YYYY-MM-DD>)   <!-- every host the project is used from -->
+- Host harness: <e.g. Claude Code, vendor-native> (confirmed <YYYY-MM-DD>)   <!-- every host the project is used from, each with its kind: vendor-native | multi-vendor -->
+- External route: auto          <!-- auto (by host kind: vendor-native → ACP + liaison, multi-vendor → host switch) | acp-liaison | host-switch | in-house -->
 - Model policy: auto            <!-- auto | fixed | hybrid -->
 - Cost preference: balanced     <!-- balanced | economize | max-quality -->
 - Decided: <YYYY-MM-DD>, confirmed by the user   <!-- or: default, not confirmed -->

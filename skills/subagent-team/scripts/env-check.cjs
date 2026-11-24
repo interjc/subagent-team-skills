@@ -267,12 +267,30 @@ function findCodexPlugin(env) {
 // Claude Code entries were observed by the authors; the others are unverified
 // hints. Detection never decides anything: the director confirms with the user.
 var HOST_HINTS = [
-  { id: 'claude-code', name: 'Claude Code', vars: ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT'], verified: true },
-  { id: 'codex', name: 'Codex', vars: ['CODEX_SANDBOX', 'CODEX_SANDBOX_NETWORK_DISABLED', 'CODEX_THREAD_ID'], verified: false },
-  { id: 'opencode', name: 'OpenCode', vars: ['OPENCODE'], verified: false },
-  { id: 'gemini-cli', name: 'Gemini CLI', vars: ['GEMINI_CLI'], verified: false },
-  { id: 'cursor', name: 'Cursor', vars: ['CURSOR_AGENT', 'CURSOR_TRACE_ID'], verified: false }
+  { id: 'claude-code', name: 'Claude Code', kind: 'vendor-native', vars: ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT'], verified: true },
+  { id: 'codex', name: 'Codex', kind: 'vendor-native', vars: ['CODEX_SANDBOX', 'CODEX_SANDBOX_NETWORK_DISABLED', 'CODEX_THREAD_ID'], verified: false },
+  { id: 'opencode', name: 'OpenCode', kind: 'multi-vendor', vars: ['OPENCODE'], verified: false },
+  { id: 'gemini-cli', name: 'Gemini CLI', kind: 'vendor-native', vars: ['GEMINI_CLI'], verified: false },
+  { id: 'cursor', name: 'Cursor', kind: 'multi-vendor', vars: ['CURSOR_AGENT', 'CURSOR_TRACE_ID'], verified: false }
 ];
+
+// The route for another vendor's model follows the host's kind (references/host-harness.md, "Host kind").
+var ROUTE_BY_KIND = { 'vendor-native': 'acp-liaison', 'multi-vendor': 'host-switch' };
+// Hosts without a known environment variable, recognised by the name the policy records.
+var NAMED_HOST_KINDS = [
+  { pattern: /\bagy\b|antigravity/, kind: 'vendor-native' },
+  { pattern: /\bt3\s*code\b|\bt3code\b/, kind: 'multi-vendor' }
+];
+
+function kindFromName(text) {
+  var t = String(text || '').toLowerCase();
+  var kinds = [];
+  for (var i = 0; i < HOST_HINTS.length; i++) if (t.indexOf(HOST_HINTS[i].name.toLowerCase()) !== -1) kinds.push(HOST_HINTS[i].kind);
+  for (var j = 0; j < NAMED_HOST_KINDS.length; j++) if (NAMED_HOST_KINDS[j].pattern.test(t)) kinds.push(NAMED_HOST_KINDS[j].kind);
+  if (!kinds.length) return null;
+  for (var k = 1; k < kinds.length; k++) if (kinds[k] !== kinds[0]) return null;
+  return kinds[0];
+}
 
 function detectHost(env) {
   var found = [];
@@ -280,15 +298,18 @@ function detectHost(env) {
     var h = HOST_HINTS[i];
     var evidence = [];
     for (var j = 0; j < h.vars.length; j++) if (env[h.vars[j]]) evidence.push(h.vars[j]);
-    if (evidence.length) found.push({ id: h.id, name: h.name, evidence: evidence, verified: h.verified });
+    if (evidence.length) found.push({ id: h.id, name: h.name, kind: h.kind, evidence: evidence, verified: h.verified });
   }
   if (env.AI_AGENT) {
     if (found.length) found[0].evidence.push('AI_AGENT');
-    else found.push({ id: 'other', name: String(env.AI_AGENT).split(/[_\s]/)[0], evidence: ['AI_AGENT'], verified: false });
+    else found.push({ id: 'other', name: String(env.AI_AGENT).split(/[_\s]/)[0], kind: 'unknown', evidence: ['AI_AGENT'], verified: false });
   }
-  if (!found.length) return { id: 'unknown', name: 'unknown', evidence: [], verified: false, candidates: [] };
+  if (!found.length) return { id: 'unknown', name: 'unknown', kind: 'unknown', route: null, evidence: [], verified: false, candidates: [] };
   var host = found[0];
   host.candidates = found.slice(1).map(function (f) { return f.id; });
+  // Conflicting kinds (a nested shell) leave the route to the user.
+  var mixed = found.some(function (f) { return f.kind !== host.kind; });
+  host.route = mixed ? null : (ROUTE_BY_KIND[host.kind] || null);
   return host;
 }
 
@@ -296,12 +317,27 @@ function checkHost(host) {
   if (host.id === 'unknown') {
     return {
       id: 'host', status: 'info', detail: 'Host harness: not detected from the environment.',
-      fix: 'Ask the user which agent runs this session; see references/host-harness.md.'
+      fix: 'Ask the user which agent runs this session and whether external work goes by ACP + liaison or by host switch; see references/host-harness.md, "Host kind".'
     };
   }
   var detail = 'Host harness (hint): ' + host.name + ' (' + host.evidence.join(', ') + (host.verified ? '' : '; unverified hint') + ')' +
-    (host.candidates.length ? '; also matched: ' + host.candidates.join(', ') : '') + '. Confirm with the user.';
+    (host.candidates.length ? '; also matched: ' + host.candidates.join(', ') : '') + '; kind: ' + host.kind +
+    (host.route ? ', external route: ' + host.route : ', external route: ask the user') + '. Confirm with the user.';
   return { id: 'host', status: 'info', detail: detail };
+}
+
+// The route for other vendors' models: an explicit policy line, else the kind recorded with
+// the confirmed host, else the detected host's kind; null means ask the user.
+function externalRoute(policy, host) {
+  var r = policy.externalRoute;
+  if (r && r !== 'auto') return r;
+  var h = (policy.hostHarness || '').toLowerCase();
+  var multi = h.indexOf('multi-vendor') !== -1, native = h.indexOf('vendor-native') !== -1;
+  if (multi !== native) return multi ? 'host-switch' : 'acp-liaison';
+  // A policy listing several hosts of different kinds, or none known, falls back to detection.
+  var named = multi || native ? null : kindFromName(h);
+  if (named) return ROUTE_BY_KIND[named];
+  return host.route || null;
 }
 
 function findMcpServers(root) {
@@ -378,14 +414,16 @@ function findPolicy(root) {
       var h = /^\s*-?\s*Host harness:\s*([^<\n]+)/m.exec(text);
       var b = /^\s*-?\s*Team board:\s*([^<\n]+)/m.exec(text);
       var x = /^\s*-?\s*External delegation:\s*([A-Za-z-]+)/m.exec(text);
+      var r = /^\s*-?\s*External route:\s*([A-Za-z-]+)/m.exec(text);
       return {
         found: true, file: names[i], modelPolicy: m ? m[1] : null,
         hostHarness: h ? h[1].trim() : null, teamBoard: b ? b[1].trim() : null,
-        externalDelegation: x ? x[1].toLowerCase() : null
+        externalDelegation: x ? x[1].toLowerCase() : null,
+        externalRoute: r ? r[1].toLowerCase() : null
       };
     }
   }
-  return { found: false, file: null, modelPolicy: null, hostHarness: null, teamBoard: null, externalDelegation: null };
+  return { found: false, file: null, modelPolicy: null, hostHarness: null, teamBoard: null, externalDelegation: null, externalRoute: null };
 }
 
 function findBoard(root, policy) {
@@ -454,6 +492,11 @@ function runChecks(opts, env, nodeVersion) {
   }).map(function (c) { return c.id; });
   if (checks.some(function (c) { return c.id === 'mcp'; })) teams.push('MCP servers');
   var choice = policy.externalDelegation;
+  var route = externalRoute(policy, host);
+  if (policy.found && choice !== 'none' && (teams.length || host.kind === 'multi-vendor')) {
+    if (!route) next.push('External route unclear (host ' + host.name + ', kind ' + host.kind + '): ask the user to choose host switch, ACP + liaison or in-house only, with your recommendation pre-selected, and record it as "External route:" (references/host-harness.md, "When the route is not obvious, the user picks").');
+    else if (route === 'host-switch') next.push('External route: host switch (multi-vendor harness). Models the harness serves go to in-house subagents on that model, with no liaison; confirm the served model; models it does not serve keep ACP + liaison.');
+  }
   if (policy.found && teams.length && choice !== 'roster' && choice !== 'none') {
     next.push('External teams available (' + teams.join(', ') + '): ask the user which may take work this session, pre-selecting the policy roster (references/environment-check.md, step 5). Policy "External delegation: roster" or "none" skips this question.');
   } else if (choice === 'roster' || choice === 'none') {
@@ -532,6 +575,8 @@ module.exports = {
   nodeMajor: nodeMajor,
   checkNode: checkNode,
   detectHost: detectHost,
+  externalRoute: externalRoute,
+  kindFromName: kindFromName,
   findCompute: findCompute,
   findNvm: findNvm,
   checkNvm: checkNvm,

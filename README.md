@@ -47,9 +47,11 @@ Host agents:
 |---|---|
 | **Claude Code** | Primary. Developed and used daily; plugin with skills and reviewer agents. |
 | **Codex** | Secondary. Used as the main session on real projects; skills install as a plugin. The reviewer agents are Claude Code definitions (use `reviewer-prompt.md` instead). |
-| Others (OpenCode, Pi, Cursor, Gemini CLI, ...) | Not tested; quality not guaranteed. The skills follow the open [Agent Skills](https://agentskills.io) format and the method is tool-neutral, so any agent that supports skills can install and load them. Install through `npx skills` or your agent's own plugin/skill marketplace, then adapt the harness-specific parts yourself. |
+| Others (T3 Code, OpenCode, Cursor, agy, Pi, Gemini CLI, ...) | Not tested; quality not guaranteed. The skills follow the open [Agent Skills](https://agentskills.io) format and the method is tool-neutral, so any agent that supports skills can install and load them. Install through `npx skills` or your agent's own plugin/skill marketplace, then adapt the harness-specific parts yourself. |
 
 You do not have to say which host you use: the environment check makes a first guess from environment variables, confirms it with you on first use, and records it in the project policy. The team then adapts to what that host can do, such as spawning subagents, choosing a model and effort per subagent, or a native task list.
+
+The check also settles what **kind** of client the host is, and checks again when a session is resumed or handed over. A **vendor-native client** (Claude Code, Codex, agy) reaches other vendors' models only as external teams, through ACP with a liaison per job. A **multi-vendor harness** (T3 Code, OpenCode, Cursor) already serves several vendors' models, so external work becomes an in-house model switch: a subagent or child agent on the other vendor's model, with no wrapper and no liaison, and the director's own model never switched. When the choice is not clear-cut (an unknown client, unreliable per-subagent models, both routes with different accounts or quota), the agent asks you to pick, with a recommendation. Details: [host kind](skills/subagent-team/references/host-harness.md).
 
 External teams:
 

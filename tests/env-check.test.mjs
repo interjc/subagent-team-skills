@@ -59,9 +59,9 @@ test('checkNode: error below the minimum, the user\'s version is ok at or above 
 
 test('findPolicy detects the Subagent team section and its model policy', () => {
   const withPolicy = project('p1', { 'AGENTS.md': '# Rules\n\n## Subagent team\n- Model policy: hybrid\n' }, { git: false });
-  assert.deepEqual(envCheck.findPolicy(withPolicy), { found: true, file: 'AGENTS.md', modelPolicy: 'hybrid', hostHarness: null, teamBoard: null, externalDelegation: null });
+  assert.deepEqual(envCheck.findPolicy(withPolicy), { found: true, file: 'AGENTS.md', modelPolicy: 'hybrid', hostHarness: null, teamBoard: null, externalDelegation: null, externalRoute: null });
   const claudeOnly = project('p2', { 'CLAUDE.md': '## Subagent team\nsee docs\n' }, { git: false });
-  assert.deepEqual(envCheck.findPolicy(claudeOnly), { found: true, file: 'CLAUDE.md', modelPolicy: null, hostHarness: null, teamBoard: null, externalDelegation: null });
+  assert.deepEqual(envCheck.findPolicy(claudeOnly), { found: true, file: 'CLAUDE.md', modelPolicy: null, hostHarness: null, teamBoard: null, externalDelegation: null, externalRoute: null });
   const full = project('p4', { 'AGENTS.md': '## Subagent team\n- Model policy: auto\n- Host harness: Claude Code   <!-- confirmed -->\n- Team board: docs/team/README.md + native task list\n' }, { git: false });
   const fp = envCheck.findPolicy(full);
   assert.equal(fp.hostHarness, 'Claude Code');
@@ -253,6 +253,40 @@ test('detectHost reads harness environment variables as hints', () => {
   assert.equal(envCheck.detectHost({}).id, 'unknown');
   const both = envCheck.detectHost({ CLAUDECODE: '1', OPENCODE: '1' });
   assert.deepEqual(both.candidates, ['opencode']);
+  assert.equal(cc.kind, 'vendor-native');
+  assert.equal(cc.route, 'acp-liaison');
+  assert.equal(envCheck.detectHost({ OPENCODE: '1' }).route, 'host-switch');
+  // A nested shell with hosts of different kinds leaves the route to the user.
+  assert.equal(both.route, null);
+  assert.equal(envCheck.detectHost({}).route, null);
+});
+
+test('externalRoute: policy line, recorded host kind or name, then detection', () => {
+  const unknown = envCheck.detectHost({});
+  const native = envCheck.detectHost({ CLAUDECODE: '1' });
+  const route = (policy, host = unknown) => envCheck.externalRoute({ hostHarness: null, externalRoute: null, ...policy }, host);
+  assert.equal(route({ externalRoute: 'in-house' }, native), 'in-house');
+  assert.equal(route({ externalRoute: 'auto', hostHarness: 'T3 Code' }), 'host-switch');
+  assert.equal(route({ hostHarness: 'Claude Code, vendor-native (confirmed 2026-11-24)' }), 'acp-liaison');
+  assert.equal(route({ hostHarness: 'MyHarness, multi-vendor' }), 'host-switch');
+  assert.equal(route({ hostHarness: 'agy' }), 'acp-liaison');
+  assert.equal(route({ hostHarness: 'Codex' }), 'acp-liaison');
+  assert.equal(route({ hostHarness: 'Claude Code; OpenCode' }), null);
+  assert.equal(route({ hostHarness: 'Claude Code; OpenCode' }, native), 'acp-liaison');
+  assert.equal(route({}), null);
+});
+
+test('runChecks: asks for the external route when the host kind is unclear', () => {
+  const dir = project('route', { 'AGENTS.md': '## Subagent team\n- Model policy: auto\n- Host harness: SomeGUI\n- Team board: native\n- External delegation: roster\n' });
+  const env = { ...noOthers(), CODEX_BIN: fakeCodex, AGY_BIN: missing('agy'), HOME: tmp, CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg') };
+  const r = envCheck.runChecks({ root: dir }, env, 'v24.1.0');
+  assert.match(r.next[0], /External route unclear .*host switch, ACP \+ liaison or in-house only/);
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), '## Subagent team\n- Model policy: auto\n- Host harness: T3 Code (multi-vendor)\n- Team board: native\n- External delegation: roster\n');
+  const r2 = envCheck.runChecks({ root: dir }, env, 'v24.1.0');
+  assert.match(r2.next[0], /External route: host switch/);
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), '## Subagent team\n- Model policy: auto\n- Host harness: SomeGUI\n- Team board: native\n- External delegation: none\n');
+  const r3 = envCheck.runChecks({ root: dir }, env, 'v24.1.0');
+  assert.ok(!r3.next.some((n) => /External route/.test(n)));
 });
 
 test('runChecks: other agent CLIs, MCP servers, board and policy hints', () => {

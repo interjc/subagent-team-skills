@@ -9,7 +9,7 @@ node <this skill's directory>/scripts/env-check.cjs --root <project root>
 It installs nothing and reports:
 
 - **Hard requirements**: Node.js 22 or newer for the helper scripts, and git. **The user's version wins**: any Node.js at or above 22 that the user runs, or that the project pins, is used as it is; 24 or newer is only the choice for a new install, through nvm. It also reports the project's pin, whether nvm is installed, and whether the running Node.js is nvm's.
-- **Host harness hint**: which agent this session probably runs in, from environment variables. A hint to confirm, never a decision ([host-harness.md](host-harness.md)).
+- **Host harness hint**: which agent this session probably runs in, from environment variables, and its default kind (`vendor-native` or `multi-vendor`), which decides whether external work goes by ACP + liaison or by host switch. A hint to confirm, never a decision ([host-harness.md](host-harness.md), "Host kind").
 - **Optional external teams**: Codex CLI and OpenAI's Codex plugin, agy (warned when it is too old for its ACP server, `agy acp`, 1.5.0+) and the agy-staff plugin, OpenCode (reachable through ACP), other agent CLIs on `PATH` (Pi, Grok), MCP servers in the project's `.mcp.json`.
 - **Project policy and team board**: whether `## Subagent team` exists, records the host, and links a board.
 
