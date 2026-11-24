@@ -4,6 +4,10 @@ External teams are other vendors' agents that the host harness reaches through a
 
 Editing work must pass the outsourcing gate ([SKILL.md](../SKILL.md), "Breakdown, flows and the outsourcing gate"). Authorized read-only second opinions can inspect sensitive code without an edit lease; use a strong model at high effort and keep acceptance in-house ([verification.md](verification.md), "Sensitive work: two independent reviews"). How to call Codex CLI, agy and OpenCode, wrappers, timeouts, resume and each team's fallback ladder: skill `cli-agent-delegation`.
 
+## Which route: ACP + liaison or host switch
+
+How an external tier is reached depends on the host's kind ([host-harness.md](host-harness.md), "Host kind"). Under a **vendor-native client** (Claude Code, Codex, agy), everything on this page applies as written: other vendors are teams called through ACP (Codex through `codex exec`), each job with a liaison. Under a **multi-vendor harness** (T3 Code, OpenCode, Cursor), a model the harness serves is dispatched in-house as a subagent or child agent on that model (a host switch): no wrapper and no liaison, but the same tier, gate tests 1 to 3, confidentiality level, quota ledger, usage log and independent review, and the served model confirmed before the job counts as another vendor's opinion. Models the harness does not serve keep the ACP + liaison route. When the choice is not clear-cut, the user picks.
+
 ## The external roster
 
 What each team *can* do (channel, may it edit, verified when) is recorded in the project's `## Subagent team` section ([project-setup.md](project-setup.md)), one row per team. What the user has decided each one *does* (model and effort per role, fallbacks, time windows, order) is the compute plan in local files ([compute-config.md](compute-config.md)), since it depends on the user's accounts and quota rather than on the project. Like in-house agents, external teams have tiers: **external-fast** (cheap, fast, mechanical work) and **external-strong** (reads code, steadier on large homogeneous work, second opinions). One team often offers both tiers through different models or effort levels.
@@ -121,6 +125,7 @@ The liaison never decides product or architecture, never edits code itself (only
 
 - **Claude Code**: dispatch the liaison as a background subagent. Inside it, start the wrapper detached with an `--out-dir`, then wait in the foreground in bounded slices: an `until` loop on the result file (`summary.json` for the wrappers in `cli-agent-delegation`; a fresh `--out-dir` per round, since it is written only at the end) with an upper bound below the shell tool's time limit, the agy-staff plugin's `wait <job> --timeout <below the tool limit>`, or the Codex plugin runtime's `status <job> --wait --timeout-ms <below the tool limit>`, repeated while it returns "still running". Nested background notifications go to the root, not reliably to the liaison ([harness-claude-code.md](harness-claude-code.md)), so the liaison must not rely on them.
 - **Codex as host**: each wake-up carries full context, so give the liaison few, long jobs and long wait slices (*unverified* how subagent waits behave; record what you observe).
+- **Multi-vendor harness, host switch**: there is no external process to wait on, so no liaison; the subagent on the other vendor's model reports like any in-house agent.
 - **No subagents, or subagents without a shell**: there is no liaison. The director runs the job in the background and reacts to the completion notification, as in `cli-agent-delegation`.
 
 ### Liaison brief
