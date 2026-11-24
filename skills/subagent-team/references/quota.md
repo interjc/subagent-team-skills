@@ -4,7 +4,7 @@ External channels run on quota: a subscription window that refills on a schedule
 
 ## The quota ledger
 
-Quota belongs to the account, so the ledger lives in the **global compute file**, where every session and project on the machine sees it ([compute-config.md](compute-config.md)); `--scope project` only for an allowance that exists in one project alone. It is state, not policy: it never goes into `AGENTS.md`, `progress.md` or agent memory. Without Node.js, edit the `quota` object of `compute.json` by hand.
+Quota belongs to the account, so the ledger lives in the **global compute file**, where every session and project on the machine sees it ([compute-config.md](compute-config.md)); `--scope project` only for an allowance that exists in one project alone. It is state, not policy: it never goes into `AGENTS.md`, `progress.md` or agent memory. Without Node.js, edit the `quota` object of `compute.json` by hand. Under a multi-vendor host with several accounts of one vendor, quota is per account: keep that table in the host's overlay file and switch accounts by its rule before stepping down the model fallback ([host-harness.md](host-harness.md), "Accounts per vendor: the harness overlay").
 
 ```bash
 node scripts/compute-config.mjs quota codex-strong --state exhausted --resets 2026-11-11T19:00+08:00 --source "error text"

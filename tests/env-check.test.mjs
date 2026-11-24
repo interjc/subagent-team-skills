@@ -261,6 +261,24 @@ test('detectHost reads harness environment variables as hints', () => {
   assert.equal(envCheck.detectHost({}).route, null);
 });
 
+test('detectHost: a wrapper host (T3 Code) wins over the provider runtime it runs', () => {
+  const t3 = envCheck.detectHost({ CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 't3-code', T3CODE_THREAD_ID: 'x', AI_AGENT: 'claude-code_2' });
+  assert.equal(t3.id, 't3-code');
+  assert.equal(t3.kind, 'multi-vendor');
+  assert.equal(t3.route, 'host-switch');
+  assert.equal(t3.runtime, 'claude-code');
+  assert.deepEqual(t3.candidates, []);
+  assert.deepEqual(t3.evidence, ['T3CODE_THREAD_ID', 'CLAUDE_CODE_ENTRYPOINT=t3-code']);
+  // The entrypoint value alone is enough; another value is plain Claude Code.
+  assert.equal(envCheck.detectHost({ CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 't3-code' }).id, 't3-code');
+  assert.equal(envCheck.detectHost({ CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'cli' }).id, 'claude-code');
+  // A Codex provider inside T3 Code.
+  const codex = envCheck.detectHost({ T3CODE_CLI_PATH: '/x', CODEX_THREAD_ID: 'y' });
+  assert.equal(codex.id, 't3-code');
+  assert.equal(codex.runtime, 'codex');
+  assert.equal(envCheck.detectHost({ T3CODE_THREAD_ID: 'x' }).runtime, null);
+});
+
 test('externalRoute: policy line, recorded host kind or name, then detection', () => {
   const unknown = envCheck.detectHost({});
   const native = envCheck.detectHost({ CLAUDECODE: '1' });

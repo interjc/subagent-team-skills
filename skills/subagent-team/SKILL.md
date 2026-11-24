@@ -4,7 +4,7 @@ description: Run multi-file, multi-phase coding work as a small software organis
 license: MIT with Commons Clause v1.0 (see LICENSE)
 compatibility: Built for Claude Code (primary) and Codex (secondary); other hosts are unverified. The method itself needs nothing but a harness that can spawn subagents. The optional helper scripts need Node.js 22+ (24 or newer recommended, through nvm) and git; run scripts/env-check.cjs at the start of a session.
 metadata:
-  version: "0.6.0"
+  version: "0.6.1"
 ---
 
 # Subagent Team
@@ -42,7 +42,7 @@ Once per session, before the first dispatch, run `node <this skill's directory>/
 
 **Team policy.** If `## Subagent team` exists in `AGENTS.md` (or `CLAUDE.md`), follow it without asking. If not, run the short setup questionnaire and write the section ([references/project-setup.md](references/project-setup.md)).
 
-**Compute plan.** Run `node <this skill's directory>/scripts/compute-config.mjs show --root <project root>` once per session. It reads the user's external compute plan from local files (global, overridden by the project's `.agent-team/`): which team · model · effort takes which role, fallbacks, time windows, quota, the review date and the ranking's age. No plan yet: draft one from detection and a fresh model ranking and confirm it in the one start-up interview, with where to keep it (global, project or session). With a plan: route by it without asking; when its review is due or the ranking is stale, tell the user the plan and what you will change, and proceed unless they object ([references/compute-config.md](references/compute-config.md)).
+**Compute plan.** Run `node <this skill's directory>/scripts/compute-config.mjs show --root <project root>` once per session. It reads the user's external compute plan from local files (global, overridden by the project's `.agent-team/`): which team · model · effort takes which role, fallbacks, time windows, quota, the review date and the ranking's age. No plan yet: draft one from detection and a fresh model ranking and confirm it in the one start-up interview, with where to keep it (global, project or session). With a plan: route by it without asking; when its review is due (weekly by default) or the ranking is stale, refresh the ranking, drop outdated models, add new ones, re-rank, tell the user the plan and what you changed, and proceed unless they object ([references/compute-config.md](references/compute-config.md)). Under a multi-vendor host, `show` also lists its harness overlay: which account serves each vendor there, primary and backup ([references/host-harness.md](references/host-harness.md), "Accounts per vendor: the harness overlay").
 
 **Mode.** Say which one you picked in one line:
 

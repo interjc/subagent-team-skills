@@ -274,6 +274,13 @@ var HOST_HINTS = [
   { id: 'cursor', name: 'Cursor', kind: 'multi-vendor', vars: ['CURSOR_AGENT', 'CURSOR_TRACE_ID'], verified: false }
 ];
 
+// Hosts that run other vendors' agent runtimes inside them (T3 Code runs Claude Code, Codex, agy and
+// others as providers). Their variables sit next to the runtime's own, so a match means the runtime is
+// the provider this session runs on, not a nested shell. `values` match a variable's exact value.
+var WRAPPER_HOSTS = [
+  { id: 't3-code', name: 'T3 Code', kind: 'multi-vendor', vars: ['T3CODE_THREAD_ID', 'T3CODE_CLI_PATH'], values: { CLAUDE_CODE_ENTRYPOINT: 't3-code' }, verified: true }
+];
+
 // The route for another vendor's model follows the host's kind (references/host-harness.md, "Host kind").
 var ROUTE_BY_KIND = { 'vendor-native': 'acp-liaison', 'multi-vendor': 'host-switch' };
 // Hosts without a known environment variable, recognised by the name the policy records.
@@ -292,7 +299,27 @@ function kindFromName(text) {
   return kinds[0];
 }
 
+function detectWrapper(env) {
+  for (var i = 0; i < WRAPPER_HOSTS.length; i++) {
+    var w = WRAPPER_HOSTS[i];
+    var evidence = [];
+    for (var j = 0; j < w.vars.length; j++) if (env[w.vars[j]]) evidence.push(w.vars[j]);
+    var keys = Object.keys(w.values || {});
+    for (var k = 0; k < keys.length; k++) if (env[keys[k]] === w.values[keys[k]]) evidence.push(keys[k] + '=' + w.values[keys[k]]);
+    if (evidence.length) return { id: w.id, name: w.name, kind: w.kind, evidence: evidence, verified: w.verified };
+  }
+  return null;
+}
+
 function detectHost(env) {
+  var wrapper = detectWrapper(env);
+  if (wrapper) {
+    var inner = detectHost(stripWrapper(env));
+    wrapper.candidates = [];
+    wrapper.runtime = inner.id === 'unknown' ? null : inner.id;
+    wrapper.route = ROUTE_BY_KIND[wrapper.kind] || null;
+    return wrapper;
+  }
   var found = [];
   for (var i = 0; i < HOST_HINTS.length; i++) {
     var h = HOST_HINTS[i];
@@ -313,6 +340,22 @@ function detectHost(env) {
   return host;
 }
 
+// The environment without the wrapper hosts' own variables, to name the runtime inside them.
+function stripWrapper(env) {
+  var out = {};
+  var keys = Object.keys(env);
+  for (var i = 0; i < keys.length; i++) {
+    var drop = false;
+    for (var j = 0; j < WRAPPER_HOSTS.length; j++) {
+      var w = WRAPPER_HOSTS[j];
+      if (w.vars.indexOf(keys[i]) !== -1) drop = true;
+      if (w.values && w.values[keys[i]] !== undefined && env[keys[i]] === w.values[keys[i]]) drop = true;
+    }
+    if (!drop) out[keys[i]] = env[keys[i]];
+  }
+  return out;
+}
+
 function checkHost(host) {
   if (host.id === 'unknown') {
     return {
@@ -321,7 +364,8 @@ function checkHost(host) {
     };
   }
   var detail = 'Host harness (hint): ' + host.name + ' (' + host.evidence.join(', ') + (host.verified ? '' : '; unverified hint') + ')' +
-    (host.candidates.length ? '; also matched: ' + host.candidates.join(', ') : '') + '; kind: ' + host.kind +
+    (host.candidates.length ? '; also matched: ' + host.candidates.join(', ') : '') +
+    (host.runtime ? '; runs on provider runtime: ' + host.runtime : '') + '; kind: ' + host.kind +
     (host.route ? ', external route: ' + host.route : ', external route: ask the user') + '. Confirm with the user.';
   return { id: 'host', status: 'info', detail: detail };
 }
