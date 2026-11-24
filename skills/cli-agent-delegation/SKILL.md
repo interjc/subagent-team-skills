@@ -4,7 +4,7 @@ description: Outsource well-specified bulk coding work to another vendor's agent
 license: MIT with Commons Clause v1.0 (see LICENSE)
 compatibility: Built for Claude Code (primary) and Codex (secondary) as the host; other hosts are unverified. Needs a shell. The helper scripts need Node.js 22+ (24 or newer recommended, through nvm); external agents need their own CLIs and accounts (Codex CLI, agy, OpenCode). Run scripts/doctor.mjs first.
 metadata:
-  version: "0.6.0"
+  version: "0.6.1"
 ---
 
 # CLI Agent Delegation

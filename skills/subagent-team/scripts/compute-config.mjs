@@ -764,6 +764,21 @@ function loadEffective(root) {
   return { global: { dir: g, exists: !!gc }, project: { dir: info.dir, root: info.root, exists: !!pc }, eff, any: Object.keys(eff.resources).length > 0 };
 }
 
+// Harness overlays: harness-<host>.md beside compute.json, one per multi-vendor host, mapping each
+// vendor to that host's provider instances (accounts). Read only when the session runs in that host.
+export function listOverlays(dirs) {
+  const out = [];
+  for (const [scope, dir] of dirs) {
+    let names = [];
+    try { names = fs.readdirSync(dir); } catch { continue; }
+    for (const n of names.sort()) {
+      const m = /^harness-([a-z0-9][a-z0-9-]*)\.md$/.exec(n);
+      if (m) out.push({ host: m[1], scope, file: path.join(dir, n) });
+    }
+  }
+  return out;
+}
+
 function rankingStatus(now = new Date()) {
   const file = path.join(globalDir(), RANKING_FILE);
   if (!fs.existsSync(file)) return { file, fetchedAt: null, ageDays: null, stale: true };
@@ -794,6 +809,7 @@ function cmdShow(opts) {
     resources: Object.fromEntries(Object.entries(eff.resources).map(([id, r]) => [id, { ...r, scope: eff.sources[id] }])),
     routing: eff.routing, schedules: eff.schedules, activeSchedules: active, expiredSchedules: expired,
     quota: eff.quota, quotaNotes, warnings: configWarnings(eff),
+    harnessOverlays: listOverlays([['project', project.dir], ['global', global.dir]]),
   };
 }
 

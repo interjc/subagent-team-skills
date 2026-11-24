@@ -347,6 +347,20 @@ describe('compute-config: CLI', () => {
     assert.equal(result.json.needsInit, true);
   });
 
+  test('show lists harness overlays, project before global', () => {
+    const { run, home, repo } = cliFixture('overlays');
+    fs.mkdirSync(home, { recursive: true });
+    fs.writeFileSync(path.join(home, 'harness-t3-code.md'), '# accounts\n');
+    fs.writeFileSync(path.join(home, 'harness-.md'), 'ignored\n');
+    fs.writeFileSync(path.join(home, 'notes.md'), 'ignored\n');
+    fs.mkdirSync(path.join(repo, '.agent-team'), { recursive: true });
+    fs.writeFileSync(path.join(repo, '.agent-team', 'harness-opencode.md'), '# accounts\n');
+    const result = run(['show']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(result.json.harnessOverlays.map((o) => [o.host, o.scope]), [['opencode', 'project'], ['t3-code', 'global']]);
+    assert.equal(result.json.harnessOverlays[1].file, path.join(home, 'harness-t3-code.md'));
+  });
+
   test('global init refuses an existing config and --force replaces it', () => {
     const { run, home } = cliFixture('init');
     const args = ['init', '--scope', 'global'];
