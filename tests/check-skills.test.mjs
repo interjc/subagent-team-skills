@@ -16,6 +16,7 @@ import {
   checkEnglish,
   checkReadmeParity,
   checkNodeVersions,
+  checkHostNames,
   runChecks,
   walk,
 } from '../scripts/check-skills.mjs';
@@ -207,6 +208,16 @@ test('checkPrivacy catches personal paths, emails, keys and denylisted terms', (
   assert.match(joined, /doc.md:7: API key/);
   assert.match(joined, /doc.md:8: denylisted term/);
   assert.equal(errors.length, 5, joined);
+});
+
+test('host-harness reference names every detected host, Orca and Pi as whole names', () => {
+  const rel = 'skills/subagent-team/references/host-harness.md';
+  const root = tmpRepo({ [rel]: 'Claude Code, Codex, OpenCode, Gemini CLI, Cursor, T3 Code, Orca, Pi' });
+  try {
+    assert.deepEqual(checkHostNames(root), []);
+    fs.writeFileSync(path.join(root, rel), 'Claude Code, Codex, OpenCode, Gemini CLI, Cursor, Pipeline, Orca');
+    assert.deepEqual(checkHostNames(root), [`${rel}: missing host name "T3 Code"`, `${rel}: missing host name "Pi"`]);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
 test('the repository itself passes all checks', () => {

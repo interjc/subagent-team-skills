@@ -4,7 +4,7 @@ description: Run multi-file, multi-phase coding work as a small software organis
 license: MIT with Commons Clause v1.0 (see LICENSE)
 compatibility: Built for Claude Code (primary) and Codex (secondary); other hosts are unverified. The method itself needs nothing but a harness that can spawn subagents. The optional helper scripts need Node.js 22+ (24 or newer recommended, through nvm) and git; run scripts/env-check.cjs at the start of a session.
 metadata:
-  version: "0.6.1"
+  version: "0.7.0"
 ---
 
 # Subagent Team
@@ -19,6 +19,8 @@ This page holds the decisions you make on every task. Read a reference when you 
 |---|---|
 | start a session, or something is missing | [references/environment-check.md](references/environment-check.md) |
 | meet a new host, need its mechanics, or decide how L4 work travels (ACP + liaison or host switch) | [references/host-harness.md](references/host-harness.md), [references/harness-claude-code.md](references/harness-claude-code.md), [references/harness-codex.md](references/harness-codex.md) |
+| classify a host scenario, separate dispatch from vendor family, or probe a bot host | [references/scenarios.md](references/scenarios.md) |
+| pick or switch a spending profile, set vendor constraints, spread work across declared accounts, or run the planning interview | [references/profiles.md](references/profiles.md) |
 | find no `## Subagent team` policy | [references/project-setup.md](references/project-setup.md) |
 | split work, pick a flow, escalate, or decide who writes which document | [references/org-layers.md](references/org-layers.md) |
 | pick a model and effort | [references/model-tiers.md](references/model-tiers.md) |
@@ -42,7 +44,7 @@ Once per session, before the first dispatch, run `node <this skill's directory>/
 
 **Team policy.** If `## Subagent team` exists in `AGENTS.md` (or `CLAUDE.md`), follow it without asking. If not, run the short setup questionnaire and write the section ([references/project-setup.md](references/project-setup.md)).
 
-**Compute plan.** Run `node <this skill's directory>/scripts/compute-config.mjs show --root <project root>` once per session. It reads the user's external compute plan from local files (global, overridden by the project's `.agent-team/`): which team · model · effort takes which role, fallbacks, time windows, quota, the review date and the ranking's age. No plan yet: draft one from detection and a fresh model ranking and confirm it in the one start-up interview, with where to keep it (global, project or session). With a plan: route by it without asking; when its review is due (weekly by default) or the ranking is stale, refresh the ranking, drop outdated models, add new ones, re-rank, tell the user the plan and what you changed, and proceed unless they object ([references/compute-config.md](references/compute-config.md)). Under a multi-vendor host, `show` also lists its harness overlay: which account serves each vendor there, primary and backup ([references/host-harness.md](references/host-harness.md), "Accounts per vendor: the harness overlay").
+**Compute plan.** Run `node <this skill's directory>/scripts/compute-config.mjs start --root <project root>` once per session. It detects the current host, compares it with the last session's, loads that host's plan and active profile, and returns `ask[]` and `say[]` items to merge into the one start-up dialog (never mid-task). A host change always uses the current host's plan, never the last session's. With `needsInit` or a new/unknown host, run the planning interview ([references/profiles.md](references/profiles.md)); otherwise route by the plan without asking. When `start` reports the model review due (weekly by default) or the ranking stale, refresh the ranking, drop outdated models, add new ones, re-rank, tell the user the plan and what you changed, and proceed unless they object; when it reports the preferences check due (every 30 days by default), ask Keep / Adjust / Later in that same dialog ([references/compute-config.md](references/compute-config.md), [references/scenarios.md](references/scenarios.md)).
 
 **Mode.** Say which one you picked in one line:
 

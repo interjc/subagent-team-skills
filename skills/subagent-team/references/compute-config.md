@@ -1,90 +1,139 @@
-# The compute plan: external resources in local files
+# The compute plan: local files, host plans and state
 
-Which external team · model · effort takes which responsibility, what replaces it when it fails, when it may be used, how much quota it has left and how it has performed are the user's own configuration. They live in **local files that every session reads**, never in an agent's memory or in chat. This page is the procedure behind "External teams and the liaison" in [SKILL.md](../SKILL.md); `scripts/compute-config.mjs` reads and writes the files. Quota handling is in [quota.md](quota.md), how long an instruction lasts in [user-overrides.md](user-overrides.md), what a team may read in [confidentiality.md](confidentiality.md).
+Which models fill in-house seats and external roles, which host plan applies, which spending profile and vendor constraints are active, what replaces a failing resource, when each resource may run, how much quota it or its declared account has left, and how it has performed are the user's own configuration. They live in **local files that every session reads**, never in an agent's memory or in chat. This page is the procedure behind "Start" and "External teams and the liaison" in [SKILL.md](../SKILL.md); `scripts/compute-config.mjs` reads and writes the files. Scenarios are in [scenarios.md](scenarios.md), profiles and the planning interview in [profiles.md](profiles.md), quota in [quota.md](quota.md), override scope in [user-overrides.md](user-overrides.md), and confidentiality in [confidentiality.md](confidentiality.md).
 
 ## Where it lives
 
-| Scope | Directory | Holds |
+Plan (user-decided) and state (machine-written per session) live in separate files.
+
+| Scope | Directory | Files and purpose |
 |---|---|---|
-| **global** (the user's machine) | `~/.subagent-team/`, a dedicated directory no other tool uses; `$SUBAGENT_TEAM_HOME` overrides it | the plan the user wants in every project; quota (it belongs to the account, not the project); the usage log; the cached model ranking |
-| **project** | `<main checkout>/.agent-team/` | this project's differences: a team allowed only here, a different order, a project schedule |
-| session | not in these files | "for now" choices: the session choice line in the board's `progress.md`, or the director's notes ([user-overrides.md](user-overrides.md)) |
+| **global** (the user's machine) | `~/.subagent-team/`, a dedicated directory no other tool uses; `$SUBAGENT_TEAM_HOME` overrides it | `compute.json` (plan, profiles, declared accounts, seats, hosts, global quota and `accountQuota`); `compute-usage.jsonl` (job log); `model-ranking.json` (cached ranking); `compute-state.json` (only when outside a git repo); legacy `harness-<host>.md` overlays |
+| **project** | `<main checkout>/.agent-team/` | `compute.json` (project overrides); `compute-state.json` (machine-written per-session state when inside a git repo); `confidentiality.md`; optional project `harness-<host>.md` overlays |
+| **session** | `compute-state.json` (`sessions.<key>`) | "for now" overrides written via `--scope session --session <key>` (accepted by `set`, `route`, `schedule add`, `profile use`), plus `notes` and `carryOver` ([user-overrides.md](user-overrides.md)) |
 
-Files: `compute.json` (the plan and quota), `compute-usage.jsonl` (one line per finished job), `model-ranking.json` (global only), and optionally one `harness-<host id>.md` per multi-vendor host: which provider instance (account) serves each vendor there, primary and backup, read only in that host ([host-harness.md](host-harness.md), "Accounts per vendor: the harness overlay"). `show` lists the overlays as `harnessOverlays`. The effective plan is global overridden by project: a project resource replaces the global one field by field, a project routing line replaces that role's global line, a project schedule replaces a global one with the same id, and for quota the most recently checked entry wins.
-
-- The project directory sits in the **main checkout**, so every worktree of the repository shares it; the script finds it through git. On its first project write the script adds `/.agent-team/` to `.git/info/exclude`, which changes no tracked file. `confidentiality.md` sits beside it.
-- Never commit these files or copy them into tracked records; the tracked policy carries one pointer line (below). They are written with owner-only permissions, under a lock, by atomic rename, so parallel sessions do not corrupt them.
+- **Additive compatibility (`schema: 1`, `rev: 2`).** `compute.json` keeps `"schema": 1` so older cached plugin versions (0.6.x) can still read the shared global file. Every write stamps `"rev": 2`; reading never rewrites.
+- **Merge rules (global < project < host < session).** `resources`, `accounts`, `seats`, and `profiles` shallow-merge per id (project wins). `hosts` merges one level deep per host id, with `serves` merged per team. `quota` and `accountQuota` keep the entry with the newest `checked`. `profile` replaces (project wins). In `review.preferences`, `lastConfirmed`, `lastAsked` and `snoozeUntil` keep the newest date, so a global "keep" is not masked by an older project date; `everyDays` is project wins. `constraints` narrows only: `denyVendors` union, `onlyVendors` intersection when both non-empty (else the non-empty one), `inHouseOnly` OR. To build the effective plan for host `H` and session `K`, apply `hosts[H]` (`routing` per role, non-null `profile`, `constraints`) and then `sessions[K].patch` the same way.
+- **`compute-state.json`** holds `lastHost` (`id`, `runtime`, `served` fingerprint, `at`, `session`), `sessions` (per-session `host`, `runtime`, `startedAt`, `touchedAt`, `patch`, `notes` with `saveAsked: null | session | project | global`), and `carryOver`. On every write, sessions whose `touchedAt` is older than 14 days are pruned and their unasked notes (`saveAsked: null`) move to `carryOver` (newest 10 kept). Session keys come from `--session`, else a 16-hex SHA-256 hash of `<hostId>:<envValue>` from the first present of `OPENCODE_SESSION_ID`, `T3CODE_THREAD_ID`, `CODEX_THREAD_ID` (never storing the raw env value), else a generated 12-hex key (`generated: true`). Passing `--served <file>` hashes sorted, unique, trimmed lines into a `sha256:` fingerprint.
+- The project `.agent-team/` sits in the **main checkout**, shared by worktrees; on its first project write the script adds `/.agent-team/` to `.git/info/exclude`, touching no tracked file. All writes use owner-only permissions (`0600`), under a lock, by atomic rename. Never commit these files or copy account ids, instance ids or fingerprints into tracked records.
 - Without Node.js 22+, edit the JSON by hand in the same format.
 
 ```bash
-node scripts/compute-config.mjs paths                 # where the files are for this project
-node scripts/compute-config.mjs show                  # effective plan, review due?, ranking age, quota notes, warnings
-node scripts/compute-config.mjs resolve --role bulk   # who takes a bulk job right now, in order, and who is excluded and why
+node scripts/compute-config.mjs paths                              # where the files are for this project
+node scripts/compute-config.mjs start --root <project>             # session start: detect host, update state, emit ask[]/say[]
+node scripts/compute-config.mjs show --root <project> [--host <id>] # read-only effective plan, rev, hosts, overlays, warnings
+node scripts/compute-config.mjs resolve --role bulk --host <id>    # who takes the job now, account/instance, exclusions
 ```
 
-Paths are relative to this skill's directory; pass `--root <project>` when running from elsewhere. `--help` lists every command.
+Paths are relative to this skill's directory; pass `--root <project>` when running from elsewhere. `--help` lists every command. Exit codes: `0` ok, `1` usage error, `2` no config, `3` invalid config/draft, `4` fs/lock error, `5` unknown id, `6` already exists.
 
-## What it records
+## What `compute.json` records
 
 | Field | Meaning |
 |---|---|
-| resource id | one team · model · effort, e.g. `agy-flash`, `codex-strong`, `opencode-deepseek` |
-| `team`, `channel`, `model`, `effort`, `tier` | as in the dispatch line; effort is always pinned, never the tool's default |
-| `roles` | its responsibilities: `bulk` (translations, bulk copy, mechanical edits, template fills), `homogeneous` (large homogeneous implementation from a fixed spec), `bounded` (one bounded unit from a frozen spec), `code-sync` (doc or test syncs that need reading code), `review`, `sensitive-review` (read-only second opinion on money, auth, schema or irreversible data). Custom names are allowed |
-| `mayEdit` | `false`: review only; excluded from edit roles |
-| `fallback` | ordered ids to try when it is unavailable, ending with an in-house entry such as `in-house:mid:medium` |
-| `windows` | when it may be used at all: days, hours (may wrap midnight), zone, `from` / `until` |
-| `routing` | per role, an explicit order of resource ids; without one, declaration order |
-| `schedules` | time-based rules: within a window, `prefer` some resources first or `avoid` others, optionally only for some roles; `until` ends a rule |
-| `quota` | per resource: state, checked, resets, credit expiry, source ([quota.md](quota.md)) |
-| `review` | when the plan was last reviewed with the user and how often (default every 7 days) |
-| `timezone` | zone for windows and usage buckets; the system zone when unset |
+| `schema`, `rev` | `schema: 1` (kept for compatibility); `rev: 2` (stamped on writes by 0.7.0+) |
+| `profile` | Active profile: `{ active, by, at, until }`. `active` is a built-in (`performance`, `balanced`, `frugal`, `load-balance`) or a key in `profiles`; `until` is a time/date or `null` ([profiles.md](profiles.md)) |
+| `profiles` | Custom profiles keyed by id: `{ extends, parallelism, note }` (`parallelism`: `max`, `normal`, `low`; cycles are an error) |
+| `constraints` | Orthogonal filters: `{ onlyVendors: [], denyVendors: [], inHouseOnly: false }` |
+| `accounts` | User-declared accounts only: `{ vendor, team, billing, plan, cycle, resets, expires, weight, declared, note }`. `billing`: `subscription`, `prepaid`, `metered`, `free`; `declared` is a date; `weight` > 0 (default 1) |
+| `accountQuota` | Per-account quota ledger: `{ state, checked, resets, expires, remaining, source, note }`. `remaining` is 0–100 if present ([quota.md](quota.md)) |
+| `seats` | In-house seats: `{ team, vendor, model, effort, tier, note }`. `tier`: `top`, `high`, `mid`, `low`; `model` and `effort` required |
+| `hosts` | Per-host plans keyed by host id: `name`, `scenario` (`vendor-native`, `harness`, `open-router`, `bot`, `unknown`), `kind` (`vendor-native`, `multi-vendor`, `unknown`), `route` (`acp-liaison`, `host-switch`, `none`), `confirmed`, `home` (vendor list), `capabilities`, `serves` (per team: `strategy` in `primary-backup`/`spread`/`fixed`, `accounts: [{ account, instance }]`, `options`, `models`), `roles` (seat ids, resource ids, or `auto:<top|high|mid|low>[:<effort>]`), `routing`, `profile`, `constraints`, `overlay` |
+| `resources` | External resources keyed by id: `team`, `channel`, `model`, `effort` (always pinned), `tier`, `roles` (`bulk`, `homogeneous`, `bounded`, `code-sync`, `review`, `sensitive-review`, or custom), `mayEdit`, `fallback` (ending in `in-house:<tier>:<effort>`), `windows`, optional `account` (pins a declared account), optional `cost` (`free`, `included`, `metered`) |
+| `routing` | Per role, an explicit ordered list of resource ids; without one, declaration order |
+| `schedules` | Time-based rules: within a window (`when`), `prefer` or `avoid` resources, optionally for listed `roles`; `until` ends a rule |
+| `quota` | Per-resource quota ledger: `state`, `checked`, `resets`, `expires`, `source`, `note` ([quota.md](quota.md)) |
+| `review` | `lastReviewed` and `everyDays` (model review notice, default 7), plus `preferences: { everyDays, lastConfirmed, lastAsked, snoozeUntil }` (Keep / Adjust / Later check, default 30) |
+| `timezone` | IANA zone for windows and usage buckets; the system zone when unset |
 
-**Time windows ("time-sliced use").** Typical uses: a company plan usable on weekdays only; an off-peak price at night (`prefer` the discounted model 00:00-08:00); credits that expire (`prefer ... until=2026-11-30`); a channel to spare during the day when the user works in it interactively (`avoid` 09:00-19:00). Days are the days a window starts on: `fri 22:00-08:00` covers Friday night until Saturday 08:00. Times carry an offset (`2026-11-30T19:00+08:00`); a date alone (`until=2026-11-30`, `--resets 2026-12-01`, `--expires 2026-11-30`) is a whole local day in the window's or the plan's zone.
+Reference checks (unknown account in `serves` or `resources`, unknown seat or resource in `hosts.<id>.roles`) emit `configWarnings` rather than failing read commands; `plan check` treats them as errors in a draft. `needsInit` is `true` only when there are no `resources`, no `hosts`, and no `seats` (an approved zero-worker host plan is still a plan).
+
+**Time windows ("time-sliced use").** Typical uses: a company plan usable on weekdays only; an off-peak price at night (`prefer` the discounted model 00:00–08:00); credits that expire (`prefer ... until=2026-11-30`); a channel kept free during working hours (`avoid` 09:00–19:00). Days are the days a window starts on: `fri 22:00-08:00` covers Friday night until Saturday 08:00. Times carry an offset (`2026-11-30T19:00+08:00`); a date alone (`until=2026-11-30`, `--resets 2026-12-01`, `--expires 2026-11-30`) is a whole local day in the window's or the plan's zone.
+
+## Commands
+
+### Session start and inspection
+
+- `start [--root <dir>] [--host <id>] [--runtime <id>] [--session <key>] [--served <file>] [--at <time>]` — run once per session instead of `show`. Never writes `compute.json`; updates `compute-state.json` (`lastHost`, `sessions[key]`). Computes `change` (`unknown`, `new`, `changed`, `runtime-changed`, `served-changed`, `same`) from current evidence, loads that host's effective plan and profile, and returns `host`, `session`, `profile`, `constraints`, `review` (`models` and `preferences`), `ranking`, `harnessOverlays`, `ask[]` (ordered: `host-scenario`, `host-served-changed`, `preferences-review`, `unsaved-overrides`, `repeat-override`, `account-expiry`, `profile-until-passed`), and `say[]`.
+- `show [--root <dir>] [--at <time>] [--host <id>] [--session <key>]` — read-only inspection (no state write). Reports `rev`, `profile`, `constraints`, `accounts`, `accountQuota`, `seats`, `profiles`, `hosts`, `effectiveHost` (with `--host`), and `harnessOverlays` (`superseded: true` when `hosts[overlay.host].serves` exists).
+- `resolve --role <r> [--host <id>] [--session <key>] [--profile <name>] [--count <n>] [--at <time>]` — resolves candidates for `<r>`. Resolves in-house `hosts[H].roles[r]` entries (seats and `auto:<tier>[:<effort>]`), expands served resources across declared `serves.<team>.accounts` with `route`, `account`, `instance`, `hostModel` and `options`, applies home-vendor, constraint and quota exclusions, orders by the active profile, and with `--count <n>` (1–50) returns `assignments` ([profiles.md](profiles.md)).
+
+### Writing and managing the plan
 
 ```bash
+# Profiles
+node scripts/compute-config.mjs profile list
+node scripts/compute-config.mjs profile use frugal --scope session --session <key>
+node scripts/compute-config.mjs profile define night --extends load-balance --parallelism max --note "off-peak" --scope global
+
+# User-declared accounts and account quota
+node scripts/compute-config.mjs account set acct-primary --scope global --vendor openai --team codex --billing subscription --plan pro --cycle "weekly mon 09:00" --weight 2
+node scripts/compute-config.mjs account quota acct-primary --state ok --remaining 40 --source user
+node scripts/compute-config.mjs account remove acct-primary --scope global
+
+# In-house seats and per-host plans
+node scripts/compute-config.mjs seat set seat-top --scope global --team claude --vendor anthropic --model claude-fable-5-2 --effort high --tier top
+node scripts/compute-config.mjs seat remove seat-top --scope global
+node scripts/compute-config.mjs host set t3-code --scope global --from host-draft.json
+node scripts/compute-config.mjs host show t3-code
+node scripts/compute-config.mjs host remove t3-code --scope global
+
+# Resources, routing, schedules (support --scope session --session <key> as well as project/global)
 node scripts/compute-config.mjs set agy-flash --scope global --team agy --channel agy-acp-run.mjs \
   --model gemini-3.8-flash --effort high --tier external-fast --roles bulk \
   --fallback opencode-fast,in-house:mid:medium
 node scripts/compute-config.mjs schedule add night-discount --scope global \
   --when "00:00-08:00 tz=Asia/Shanghai" --prefer opencode-fast --roles bulk
 node scripts/compute-config.mjs route review codex-strong,opencode-strong --scope project
+
+# Session promotion and review cadence
+node scripts/compute-config.mjs promote --session <key> --scope project --all
+node scripts/compute-config.mjs promote --session <key> --decline --what "profile use frugal"
+node scripts/compute-config.mjs reviewed --scope global --what models
+node scripts/compute-config.mjs reviewed --scope global --what preferences --decision keep
+node scripts/compute-config.mjs reviewed --scope global --what preferences --decision later --snooze-days 3
 ```
 
-## Initialization: the one interview
+`host set <id> --scope project|global` accepts either `--from <file.json>` or inline flags (`--name`, `--scenario`, `--kind`, `--route`, `--home a,b`, `--confirmed <date>`). `--scope session` requires `--session <key>` (exit 1 otherwise).
 
-The only time the director stops to ask about compute is when `show` reports `needsInit` (no plan in either scope), together with the setup questionnaire or the session-start team question ([project-setup.md](project-setup.md), [environment-check.md](environment-check.md)). Pre-fill everything, so one reply settles it:
+### Drafts, rendering and migration
 
-1. Detect: the environment check, `cli-agent-delegation`'s doctor and probes (which teams, which models each channel actually offers), and a fresh ranking ("Choosing models: ranking and updates", below).
-2. Draft the plan yourself: per team, which model and effort fill which roles, the fallback chain per resource, the routing order per role, and any windows the user already mentioned. Rank by the ranking's performance and price within what each channel can call; keep every team on another vendor than in-house.
-3. Ask once, in one dialog: confirm or edit the draft (show it as a table: resource, model · effort, roles, fallback); confidentiality per channel · model; what the user knows about quota and resets; any time-based use ("credits run out on the 30th", "agy only at night"); how often to review (default 7 days); and **where to keep it: global (every project on this machine, recommended for teams the user uses everywhere), this project, or this session only**. Different parts may go to different scopes.
-4. Write it: `init --scope <s> --from <draft.json>`, or `set` / `route` / `schedule` per item. Say in one line where it was written.
+- `plan check --from <file> [--host <id>]` — validates a full or partial `compute.json` draft. Returns `{ ok, errors, warnings }`; exits `3` on errors (schema errors, missing `effort` on a resource or seat, undeclared account, unknown ids in routing or host roles, home-vendor resource on a non-`in-house-*` route). Warns when a fallback chain never reaches an `in-house:` entry or when every review candidate shares a vendor with every edit candidate.
+- `plan render [--from <file>] [--host <id>] [--session <key>]` — returns `{ ok, markdown }`, a Markdown table (`Role | Candidate | Model · effort | Route | Account → instance | Fallback`) from a draft or the effective plan.
+- `plan apply --from <file> --scope project|global` — keyed merge into that scope's `compute.json`, stamps `rev: 2`, validates, and reports `{ ok, scope, file, changed }`.
+- `migrate --dry-run [--root <dir>]` — read-only report of `rev`, `overlaysWithoutHost`, `inHouseRoutingRoles`, `policyCostPreference` (from `- Cost preference:` in `AGENTS.md` / `CLAUDE.md`) and `legacyProfile`. Running `migrate` without `--dry-run` exits `1` and points to `plan apply` after user confirmation.
 
-In a non-interactive run, use the draft for this session only, do not write it, and put the questions in the end-of-task list.
+## Initialization and session-start cadence
 
-## After that: decide, tell, proceed
-
-Once a plan exists, the director routes by it without asking ([SKILL.md](../SKILL.md), "Escalation and asking the human"):
-
-- Before each batch, `resolve --role <role>` gives the order for now: active schedules, windows, quota and fallbacks applied. Check the pick's confidentiality level and the outsourcing gate yourself; `resolve` knows neither.
-- **Changes you make on your own judgement** (moving a role to a newer model the channel now offers, reordering after repeated rework, a fallback after a quota error) are announced in one line and applied: "Plan change: `code-sync` moves from Codex `gpt-6.1-sol` to `gpt-6.2-sol` · high (newer, ranks higher, same price). Say if you object." If the user objects, ask then, interactively. Session-scope changes stay in the session; a change you want to keep is written only after the user has seen the notice and not objected, to the scope the plan already lives in. `fixed` policy rows in `AGENTS.md` are never upgraded silently ([project-setup.md](project-setup.md)).
-- **Review notice.** When `show` reports `review.due` (every 7 days by default), review the model line-up before the notice: refresh the ranking and compare it with what each channel offers ("Choosing models: ranking and updates", below); drop models the channels no longer serve or that a newer model of the same family has replaced; add new models that rank well at a fair price; re-rank each role's routing and fallbacks by the fresh ranking, price and the `usage` record. Then post one short notice at a natural break (not mid-question): the plan as a table, what changed and why (models added or dropped, new order, quota events, quality flags), and what you will do next; write the changes to the plan's scope, run `reviewed --scope <the plan's scope>` and continue. It is a notice, not a question: continue unless the user objects. A harness overlay changes only when the user's accounts change, not at a review.
+- **Planning interview** (`needsInit: true` or a new/unknown host): follow [profiles.md](profiles.md), "The planning interview" — gather facts, draft up to three variants with a high-tier model, validate with `plan check`, render with `plan render`, ask one pre-filled dialog of at most five questions, then apply with `plan apply`.
+- **After that: decide, tell, proceed.** Route by `resolve --role <role> --host <id>` without asking (still check confidentiality and the outsourcing gate yourself; `resolve` knows neither). Model or ordering changes you make on your own judgement are announced in one line and applied unless the user objects; `fixed` policy rows in `AGENTS.md` are never upgraded silently ([project-setup.md](project-setup.md)).
+- **Two cadences, one dialog per session (never mid-task):**
+  - **Model review notice (every 7 days by default)**: when `start` reports `review.models.due`, refresh the ranking, compare against channel model lists, drop outdated models, add well-ranked new ones, post one short notice of the updated table and what changed, write the changes to the plan's scope, run `reviewed --scope <S> --what models`, and proceed unless the user objects.
+  - **Preferences check (every 30 days by default)**: when `start` emits `preferences-review`, merge it into the session's start-up dialog (Keep / Adjust / Later) and record the answer with `reviewed --scope <S> --what preferences --decision keep|adjust|later [--snooze-days <n>] [--every-days <n>]`.
 
 ## When the user changes it
 
-Every change the user asks for, including during initialization, gets one short scope question unless their words already settle it: "Keep this for this session, for this project, or globally?" Recommend session for quota-driven preferences ("use OpenCode for now"), global for teams and models the user uses everywhere, project for a difference that only holds here. Then:
+Overrides default to **session scope** (`--scope session --session <key>`). Ask once whether to keep the change (`session`, `project`, or `global`) unless the user's words settle it; silence never promotes ([user-overrides.md](user-overrides.md)).
 
-| Answer | Write |
+| Answer | Action |
 |---|---|
-| this session | the session choice line in `progress.md`; nothing in the files |
-| this project | `--scope project` |
-| globally | `--scope global` |
+| this session *(default)* | keep in `compute-state.json` (`--scope session --session <key>`); if declining a prompt, run `promote --session <key> --decline --all` |
+| this project | write `--scope project`, or promote an existing session override with `promote --session <key> --scope project --all` |
+| globally | write `--scope global`, or promote with `promote --session <key> --scope global --all` |
 
-A lasting change to a role, model, effort, fallback or schedule rewrites the entry in place; no history in the file. Running jobs keep their team; queued ones are re-routed ([user-overrides.md](user-overrides.md), "Which work it touches").
+Running jobs keep their team; queued ones are re-routed ([user-overrides.md](user-overrides.md), "Which work it touches").
 
 ## Usage log and quality
 
-After every external job, the layer that accepted or rejected it records the outcome: `record <id> --outcome accepted|rework|in-house|quota|failed|cancelled --task T4.b [--minutes n] [--tokens-in n] [--tokens-out n] [--cost usd]`, with figures from the wrapper's `summary.json` when it has them. `usage [--since-days 30]` summarizes per resource: jobs, outcomes, first-pass rate, time, tokens, cost, jobs per day and per hour of day. It is how the next session knows a channel's track record and when it is actually used.
+After every external job, the layer that accepted or rejected it records the outcome:
+
+```bash
+node scripts/compute-config.mjs record <id> --outcome accepted|rework|in-house|quota|failed|cancelled \
+  --task T4.b [--host <host-id>] [--account <acct-id>] [--instance <inst-id>] [--session <key>] \
+  [--minutes n] [--tokens-in n] [--tokens-out n] [--cost usd]
+```
+
+Old usage lines without the new optional fields stay readable. `usage [--since-days 30]` summarizes per resource: jobs, outcomes, first-pass rate, time, tokens, cost, jobs per day and per hour of day.
 
 - `qualityFlag` appears after two content failures in a row or a job taken back in-house: the next job goes to a stronger model or another team ([external-teams.md](external-teams.md), "Quality of a channel"). Only `accepted`, `rework` and `in-house` count as content; `quota`, `failed` and `cancelled` are availability.
 - The log is global by default, so it spans projects; each line carries the project directory's name. `--scope project` keeps a project's log apart.
@@ -93,7 +142,7 @@ After every external job, the layer that accepted or rejected it records the out
 
 Model names go stale within months, and a new model is often out before the user's CLI can select it.
 
-1. **Refresh the ranking** when `show` reports `ranking.stale` (older than 30 days or missing), at initialization, and at each review: `node scripts/model-roster.mjs --arena --save`. It combines OpenRouter's price list with LMArena's Code Arena leaderboard (performance on coding, no key needed) and saves `model-ranking.json` globally. When the arena cannot be read, the price list still prints (exit 3): look up a current coding leaderboard by web search and say which source and date you used ([model-tiers.md](model-tiers.md), "Finding the current model line-up").
+1. **Refresh the ranking** when `start` or `show` reports `ranking.stale` (older than 30 days or missing), at initialization, and at each model review: `node scripts/model-roster.mjs --arena --save`. It combines OpenRouter's price list with LMArena's Code Arena leaderboard (performance on coding, no key needed) and saves `model-ranking.json` globally. When the arena cannot be read, the price list still prints (exit 3): look up a current coding leaderboard by web search and say which source and date you used ([model-tiers.md](model-tiers.md), "Finding the current model line-up").
 2. **Compare with what each channel offers**: write each channel's model list to a file (`agy models`, Codex's `models_cache.json` ids from the doctor, `opencode-acp-run.mjs probe`) and run `check-models --available codex=<file> --available agy=<file>`.
    - `newer`: the channel already offers a newer model of the same family than the plan uses. Decide, tell, proceed (above).
    - `missing`: a ranked model of the team's vendor that the channel does not list. Usually the CLI is out of date. Tell the user, with the update command from `updateHint`, and ask whether to run it for them; updating a global tool needs their yes. A vendor may also simply not offer that model on this channel yet: say so rather than promising the update fixes it. `variants` lists ranked ids that extend a model the channel offers (for example a `-pro` API variant); they are not a reason to update.

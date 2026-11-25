@@ -94,7 +94,7 @@ test('runChecks: ready with optional tools present and a policy in the repo root
     { ...noOthers(), CODEX_BIN: fakeCodex, AGY_BIN: fakeAgyAcp, HOME: tmp, CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg') }, 'v24.1.0');
   assert.equal(r2.compute.projectFound, true);
   assert.deepEqual(r2.next.slice(1), [
-    'Compute plan found (project): run scripts/compute-config.mjs show and route by it; ask nothing about compute unless it reports a review is due (then notify and proceed).',
+    'Compute plan found (project): run scripts/compute-config.mjs start and route by it; ask nothing about compute unless it reports a review is due (then notify and proceed).',
     'Environment ready and policy found: proceed.',
   ]);
   assert.match(envCheck.formatReport(r2), /Compute plan: .*\.agent-team/);
@@ -239,6 +239,35 @@ test('Node.js version precedence: project pin, then running, then nvm, then reco
   assert.deepEqual(r.nodeTarget, { major: 23, source: 'project (.nvmrc)', installed: true });
   assert.equal(r.checks.find((c) => c.id === 'node').status, 'ok');
   assert.equal(r.checks.find((c) => c.id === 'node-pin').status, 'info');
+});
+
+test('host names have scenarios and session detection returns only the variable name', () => {
+  const env = { OPENCODE_SESSION_ID: 'sample-session', T3CODE_THREAD_ID: 'sample-wrapper' };
+  const host = envCheck.detectHost(env);
+  assert.equal(host.scenario, 'harness');
+  assert.equal(host.runtime, 'opencode');
+  assert.equal(host.sessionVar, 'OPENCODE_SESSION_ID');
+  assert.doesNotMatch(JSON.stringify(host), /sample-session|sample-wrapper/);
+  assert.equal(envCheck.detectHost({ OPENCODE_SESSION_ID: 'sample' }).scenario, 'open-router');
+  for (const [label, scenario, kind] of [['Orca', 'harness', 'multi-vendor'], ['Pi', 'open-router', 'multi-vendor'],
+    ['Codex desktop', 'vendor-native', 'vendor-native'], ['Claude desktop', 'vendor-native', 'vendor-native'], ['chat bot', 'bot', 'unknown']]) {
+    assert.equal(envCheck.scenarioFromName(label), scenario);
+    assert.equal(envCheck.kindFromName(label), kind);
+  }
+  assert.equal(envCheck.kindFromName('pipeline'), null);
+});
+
+test('a live host outranks the recorded kind and reports the mismatch', () => {
+  const dir = project('changed-host', { 'AGENTS.md': '## Subagent team\n- Host harness: SomeGUI (multi-vendor)\n' });
+  const env = { ...noOthers(), CLAUDECODE: '1', CODEX_BIN: missing('codex'), AGY_BIN: missing('agy'), HOME: tmp };
+  const r = envCheck.runChecks({ root: dir }, env, 'v24.1.0');
+  assert.equal(envCheck.externalRoute(r.policy, r.host), 'acp-liaison');
+  assert.equal(envCheck.externalRoute({ ...r.policy, externalRoute: 'in-house' }, r.host), 'in-house');
+  assert.equal(envCheck.externalRoute({ hostHarness: 'Pi (unknown)' }, envCheck.detectHost({})), null);
+  const mixed = envCheck.detectHost({ OPENCODE: '1', CLAUDECODE: '1' });
+  assert.equal(envCheck.externalRoute({ hostHarness: 'Pi (vendor-native)' }, mixed), 'acp-liaison');
+  assert.ok(r.next.some((s) => s.includes('multi-vendor but this session looks like Claude Code (vendor-native)')));
+  assert.match(envCheck.formatReport(r), /scenario: vendor-native/);
 });
 
 test('detectHost reads harness environment variables as hints', () => {
@@ -392,4 +421,11 @@ test('runChecks: an agy without ACP is a warning with the update as fix; 1.5.x b
   const a2 = mid.checks.find((c) => c.id === 'agy');
   assert.equal(a2.status, 'ok');
   assert.match(a2.detail, /1\.5\.12 or newer recommended/);
+});
+
+test('named policy host reports a live mismatch', () => {
+  const dir = project('named-host', { 'AGENTS.md': '## Subagent team\n- Host harness: Pi\n' });
+  const env = { ...noOthers(), CLAUDECODE: '1', CODEX_BIN: missing('codex'), AGY_BIN: missing('agy'), HOME: tmp };
+  const r = envCheck.runChecks({ root: dir }, env, 'v24.1.0');
+  assert.ok(r.next.some((s) => s.includes('multi-vendor but this session looks like Claude Code (vendor-native)')));
 });

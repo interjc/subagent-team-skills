@@ -50,11 +50,12 @@ Reviewer effort: single file, straightforward logic, clear blast radius → medi
 
 ## Deciding the mapping
 
-The project's policy decides; see [project-setup.md](project-setup.md) for the first-use questionnaire and the `## Subagent team` section it writes to `AGENTS.md`.
+The project's policy and the compute plan's in-house seats decide; see [project-setup.md](project-setup.md) for the first-use questionnaire and `## Subagent team` section, and [compute-config.md](compute-config.md) / [profiles.md](profiles.md) for host-specific seats and profiles.
 
 1. **Policy `fixed` or `hybrid`**: use the concrete models and efforts in the section's table; ask before deviating.
-2. **Policy `auto`** (or a role marked `auto`): pick the best fit per tier from what the current harness and machine actually expose, respecting the cost preference, and state each pick in one line at dispatch. Check external models with the CLIs themselves (`agy models`, Codex's `~/.codex/models_cache.json`), never from memory.
-3. **No section yet**: run the setup questionnaire first. If the user cannot be asked, use `auto` and record it as "default, not confirmed".
+2. **In-house seats in the compute plan (`seats` and `hosts.<id>.roles`)**: when the active host defines `hosts.<id>.roles` (pointing to named `seats` defined with `compute-config.mjs seat set`, or `auto:<top|high|mid|low>[:<effort>]` entries), `compute-config.mjs resolve --role <role> --host <id>` resolves those in-house candidates directly per host.
+3. **Policy `auto`** (or a role marked `auto`): pick the best fit per tier from what the current harness and machine actually expose, respecting the active profile and constraints ([profiles.md](profiles.md)), and state each pick in one line at dispatch. Check external models with the CLIs themselves (`agy models`, Codex's `~/.codex/models_cache.json`), never from memory.
+4. **No section yet**: run the setup questionnaire first. If the user cannot be asked, use `auto` and record it as "default, not confirmed".
 
 ## Finding the current model line-up
 

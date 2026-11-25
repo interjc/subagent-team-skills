@@ -267,37 +267,43 @@ function findCodexPlugin(env) {
 // Claude Code entries were observed by the authors; the others are unverified
 // hints. Detection never decides anything: the director confirms with the user.
 var HOST_HINTS = [
-  { id: 'claude-code', name: 'Claude Code', kind: 'vendor-native', vars: ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT'], verified: true },
-  { id: 'codex', name: 'Codex', kind: 'vendor-native', vars: ['CODEX_SANDBOX', 'CODEX_SANDBOX_NETWORK_DISABLED', 'CODEX_THREAD_ID'], verified: false },
-  { id: 'opencode', name: 'OpenCode', kind: 'multi-vendor', vars: ['OPENCODE'], verified: false },
-  { id: 'gemini-cli', name: 'Gemini CLI', kind: 'vendor-native', vars: ['GEMINI_CLI'], verified: false },
-  { id: 'cursor', name: 'Cursor', kind: 'multi-vendor', vars: ['CURSOR_AGENT', 'CURSOR_TRACE_ID'], verified: false }
+  { id: 'claude-code', scenario: 'vendor-native', name: 'Claude Code', kind: 'vendor-native', vars: ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT'], verified: true },
+  { id: 'codex', scenario: 'vendor-native', name: 'Codex', kind: 'vendor-native', vars: ['CODEX_SANDBOX', 'CODEX_SANDBOX_NETWORK_DISABLED', 'CODEX_THREAD_ID'], verified: false },
+  { id: 'opencode', scenario: 'open-router', name: 'OpenCode', kind: 'multi-vendor', vars: ['OPENCODE', 'OPENCODE_SESSION_ID'], verified: false },
+  { id: 'gemini-cli', scenario: 'vendor-native', name: 'Gemini CLI', kind: 'vendor-native', vars: ['GEMINI_CLI'], verified: false },
+  { id: 'cursor', scenario: 'harness', name: 'Cursor', kind: 'multi-vendor', vars: ['CURSOR_AGENT', 'CURSOR_TRACE_ID'], verified: false }
 ];
 
 // Hosts that run other vendors' agent runtimes inside them (T3 Code runs Claude Code, Codex, agy and
 // others as providers). Their variables sit next to the runtime's own, so a match means the runtime is
 // the provider this session runs on, not a nested shell. `values` match a variable's exact value.
 var WRAPPER_HOSTS = [
-  { id: 't3-code', name: 'T3 Code', kind: 'multi-vendor', vars: ['T3CODE_THREAD_ID', 'T3CODE_CLI_PATH'], values: { CLAUDE_CODE_ENTRYPOINT: 't3-code' }, verified: true }
+  { id: 't3-code', scenario: 'harness', name: 'T3 Code', kind: 'multi-vendor', vars: ['T3CODE_THREAD_ID', 'T3CODE_CLI_PATH'], values: { CLAUDE_CODE_ENTRYPOINT: 't3-code' }, verified: true }
 ];
 
 // The route for another vendor's model follows the host's kind (references/host-harness.md, "Host kind").
 var ROUTE_BY_KIND = { 'vendor-native': 'acp-liaison', 'multi-vendor': 'host-switch' };
 // Hosts without a known environment variable, recognised by the name the policy records.
 var NAMED_HOST_KINDS = [
-  { pattern: /\bagy\b|antigravity/, kind: 'vendor-native' },
-  { pattern: /\bt3\s*code\b|\bt3code\b/, kind: 'multi-vendor' }
+  { pattern: /\bagy\b|antigravity/, kind: 'vendor-native', scenario: 'vendor-native' },
+  { pattern: /\bt3[-\s]*code\b/, kind: 'multi-vendor', scenario: 'harness' },
+  { pattern: /orca/, kind: 'multi-vendor', scenario: 'harness' },
+  { pattern: /\bpi\b/, kind: 'multi-vendor', scenario: 'open-router' },
+  { pattern: /chatgpt|codex desktop|codex app|claude desktop/, kind: 'vendor-native', scenario: 'vendor-native' },
+  { pattern: /\bbot\b/, kind: 'unknown', scenario: 'bot' }
 ];
 
-function kindFromName(text) {
+function fromName(text, field) {
   var t = String(text || '').toLowerCase();
-  var kinds = [];
-  for (var i = 0; i < HOST_HINTS.length; i++) if (t.indexOf(HOST_HINTS[i].name.toLowerCase()) !== -1) kinds.push(HOST_HINTS[i].kind);
-  for (var j = 0; j < NAMED_HOST_KINDS.length; j++) if (NAMED_HOST_KINDS[j].pattern.test(t)) kinds.push(NAMED_HOST_KINDS[j].kind);
-  if (!kinds.length) return null;
-  for (var k = 1; k < kinds.length; k++) if (kinds[k] !== kinds[0]) return null;
-  return kinds[0];
+  var matches = HOST_HINTS.filter(function (h) { return t.indexOf(h.name.toLowerCase()) !== -1; })
+    .concat(NAMED_HOST_KINDS.filter(function (h) { return h.pattern.test(t); }));
+  if (!matches.length) return null;
+  var value = matches[0][field];
+  return matches.every(function (h) { return h[field] === value; }) ? value : null;
 }
+
+function kindFromName(text) { return fromName(text, 'kind'); }
+function scenarioFromName(text) { return fromName(text, 'scenario'); }
 
 function detectWrapper(env) {
   for (var i = 0; i < WRAPPER_HOSTS.length; i++) {
@@ -306,15 +312,17 @@ function detectWrapper(env) {
     for (var j = 0; j < w.vars.length; j++) if (env[w.vars[j]]) evidence.push(w.vars[j]);
     var keys = Object.keys(w.values || {});
     for (var k = 0; k < keys.length; k++) if (env[keys[k]] === w.values[keys[k]]) evidence.push(keys[k] + '=' + w.values[keys[k]]);
-    if (evidence.length) return { id: w.id, name: w.name, kind: w.kind, evidence: evidence, verified: w.verified };
+    if (evidence.length) return { id: w.id, name: w.name, kind: w.kind, scenario: w.scenario, evidence: evidence, verified: w.verified };
   }
   return null;
 }
 
 function detectHost(env) {
+  var sessionVar = ['OPENCODE_SESSION_ID', 'T3CODE_THREAD_ID', 'CODEX_THREAD_ID'].filter(function (key) { return !!env[key]; })[0] || null;
   var wrapper = detectWrapper(env);
   if (wrapper) {
     var inner = detectHost(stripWrapper(env));
+    wrapper.sessionVar = sessionVar;
     wrapper.candidates = [];
     wrapper.runtime = inner.id === 'unknown' ? null : inner.id;
     wrapper.route = ROUTE_BY_KIND[wrapper.kind] || null;
@@ -325,14 +333,15 @@ function detectHost(env) {
     var h = HOST_HINTS[i];
     var evidence = [];
     for (var j = 0; j < h.vars.length; j++) if (env[h.vars[j]]) evidence.push(h.vars[j]);
-    if (evidence.length) found.push({ id: h.id, name: h.name, kind: h.kind, evidence: evidence, verified: h.verified });
+    if (evidence.length) found.push({ id: h.id, name: h.name, kind: h.kind, scenario: h.scenario, evidence: evidence, verified: h.verified });
   }
   if (env.AI_AGENT) {
     if (found.length) found[0].evidence.push('AI_AGENT');
-    else found.push({ id: 'other', name: String(env.AI_AGENT).split(/[_\s]/)[0], kind: 'unknown', evidence: ['AI_AGENT'], verified: false });
+    else found.push({ id: 'other', name: String(env.AI_AGENT).split(/[_\s]/)[0], kind: 'unknown', scenario: 'unknown', evidence: ['AI_AGENT'], verified: false });
   }
-  if (!found.length) return { id: 'unknown', name: 'unknown', kind: 'unknown', route: null, evidence: [], verified: false, candidates: [] };
+  if (!found.length) return { id: 'unknown', name: 'unknown', kind: 'unknown', scenario: 'unknown', sessionVar: sessionVar, route: null, evidence: [], verified: false, candidates: [] };
   var host = found[0];
+  host.sessionVar = sessionVar;
   host.candidates = found.slice(1).map(function (f) { return f.id; });
   // Conflicting kinds (a nested shell) leave the route to the user.
   var mixed = found.some(function (f) { return f.kind !== host.kind; });
@@ -359,29 +368,30 @@ function stripWrapper(env) {
 function checkHost(host) {
   if (host.id === 'unknown') {
     return {
-      id: 'host', status: 'info', detail: 'Host harness: not detected from the environment.',
+      id: 'host', status: 'info', detail: 'Host harness: not detected from the environment (scenario: unknown).',
       fix: 'Ask the user which agent runs this session and whether external work goes by ACP + liaison or by host switch; see references/host-harness.md, "Host kind".'
     };
   }
   var detail = 'Host harness (hint): ' + host.name + ' (' + host.evidence.join(', ') + (host.verified ? '' : '; unverified hint') + ')' +
     (host.candidates.length ? '; also matched: ' + host.candidates.join(', ') : '') +
-    (host.runtime ? '; runs on provider runtime: ' + host.runtime : '') + '; kind: ' + host.kind +
+    (host.runtime ? '; runs on provider runtime: ' + host.runtime : '') + '; scenario: ' + host.scenario + '; kind: ' + host.kind +
     (host.route ? ', external route: ' + host.route : ', external route: ask the user') + '. Confirm with the user.';
   return { id: 'host', status: 'info', detail: detail };
 }
 
-// The route for other vendors' models: an explicit policy line, else the kind recorded with
-// the confirmed host, else the detected host's kind; null means ask the user.
-function externalRoute(policy, host) {
-  var r = policy.externalRoute;
-  if (r && r !== 'auto') return r;
-  var h = (policy.hostHarness || '').toLowerCase();
+function recordedKind(text) {
+  var h = (text || '').toLowerCase();
   var multi = h.indexOf('multi-vendor') !== -1, native = h.indexOf('vendor-native') !== -1;
-  if (multi !== native) return multi ? 'host-switch' : 'acp-liaison';
-  // A policy listing several hosts of different kinds, or none known, falls back to detection.
-  var named = multi || native ? null : kindFromName(h);
-  if (named) return ROUTE_BY_KIND[named];
-  return host.route || null;
+  if (multi !== native) return multi ? 'multi-vendor' : 'vendor-native';
+  if (!multi && /\bunknown\b/.test(h)) return 'unknown';
+  return null;
+}
+
+function externalRoute(policy, host) {
+  if (policy.externalRoute && policy.externalRoute !== 'auto') return policy.externalRoute;
+  if (host.route) return host.route;
+  var kind = recordedKind(policy.hostHarness) || kindFromName(policy.hostHarness);
+  return ROUTE_BY_KIND[kind] || null;
 }
 
 function findMcpServers(root) {
@@ -531,6 +541,8 @@ function runChecks(opts, env, nodeVersion) {
   if (!policy.found) next.push('No "## Subagent team" policy yet: run the first-use setup (references/project-setup.md).');
   else if (!policy.modelPolicy) next.push('The policy section in ' + policy.file + ' has no "Model policy:" line: complete it with the user.');
   if (policy.found && !policy.hostHarness) next.push('The policy has no "Host harness:" line: confirm the host' + (host.id === 'unknown' ? '' : ' (detected: ' + host.name + ')') + ' with the user and record it.');
+  var recorded = recordedKind(policy.hostHarness) || kindFromName(policy.hostHarness);
+  if (recorded && host.route && recorded !== host.kind) next.push('The policy records ' + recorded + ' but this session looks like ' + host.name + ' (' + host.kind + "): confirm the host with the user, then use that host's plan (compute-config.mjs start).");
   var teams = checks.filter(function (c) {
     return c.status === 'ok' && ['codex', 'agy', 'opencode', 'pi', 'grok'].indexOf(c.id) !== -1;
   }).map(function (c) { return c.id; });
@@ -548,7 +560,7 @@ function runChecks(opts, env, nodeVersion) {
   }
   if (teams.length && choice !== 'none') {
     if (compute.globalFound || compute.projectFound) {
-      next.push('Compute plan found (' + [compute.globalFound ? 'global' : null, compute.projectFound ? 'project' : null].filter(Boolean).join(' + ') + '): run scripts/compute-config.mjs show and route by it; ask nothing about compute unless it reports a review is due (then notify and proceed).');
+      next.push('Compute plan found (' + [compute.globalFound ? 'global' : null, compute.projectFound ? 'project' : null].filter(Boolean).join(' + ') + '): run scripts/compute-config.mjs start and route by it; ask nothing about compute unless it reports a review is due (then notify and proceed).');
     } else {
       next.push('Compute plan: none yet: draft one (teams, model and effort per role, fallbacks, windows) and confirm it once, asking whether to keep it globally, for this project or for this session (references/compute-config.md).');
     }
@@ -618,6 +630,10 @@ module.exports = {
   parseArgs: parseArgs,
   nodeMajor: nodeMajor,
   checkNode: checkNode,
+  HOST_HINTS: HOST_HINTS,
+  WRAPPER_HOSTS: WRAPPER_HOSTS,
+  NAMED_HOST_KINDS: NAMED_HOST_KINDS,
+  scenarioFromName: scenarioFromName,
   detectHost: detectHost,
   externalRoute: externalRoute,
   kindFromName: kindFromName,

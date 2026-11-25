@@ -47,7 +47,7 @@ L4  外部チーム        翻訳、一括編集、テストの補充、セカ�
 |---|---|
 | **Claude Code** | 主対象。日常的に開発・使用。skills と読み取り専用のレビュー agent を含むプラグインとして提供。 |
 | **Codex** | 副対象。実プロジェクトでメインセッションとして使用。skills はプラグインとしてインストール可能。レビュー agent は Claude Code 用の定義なので、Codex では `reviewer-prompt.md` を使ってください。 |
-| その他（T3 Code、OpenCode、Cursor、agy、Pi、Gemini CLI など） | 未テストで、品質は保証しません。skills はオープンな [Agent Skills](https://agentskills.io) 形式に従い、方法自体もツールに依存しないため、skills に対応した agent ならインストールして読み込めます。`npx skills` か、お使いの agent のプラグイン / skill マーケットプレイスからインストールし、ハーネス固有の部分は各自で調整してください。 |
+| その他（T3 Code、OpenCode、Cursor、agy、Orca、Pi、Gemini CLI、bot フロントエンドなど） | T3 Code は一部検証済み（ホスト検出と他社プロバイダー上の子 agent）。OpenCode、Cursor、agy、Gemini CLI は*未検証*、Orca、Pi、bot フロントエンドは*未テスト*です。skills はオープンな [Agent Skills](https://agentskills.io) 形式に従い、方法自体もツールに依存しないため、skills に対応した agent ならインストールして読み込めます。`npx skills` か、お使いの agent のプラグイン / skill マーケットプレイスからインストールし、ハーネス固有の部分は各自で調整してください。 |
 
 どのホストを使っているかを先に伝える必要はありません。環境チェックが環境変数から最初の推測を出し、初回利用時にあなたに確認したうえで、プロジェクトのポリシーに記録します。その後チームは、subagent を起動できるか、subagent ごとにモデルと effort を選べるか、ネイティブのタスクリストがあるか、といったホストの能力に合わせて動きます。
 
@@ -68,6 +68,12 @@ L4  外部チーム        翻訳、一括編集、テストの補充、セカ�
 **外部コンピュートプランは agent のメモリではなく、ローカルファイルに置かれます**。どのチーム・モデル・effort がどの仕事（翻訳、一括編集、コード読解の同期、セカンドオピニオンのレビュー）を担当するか、それぞれのフォールバック順序、いつ使ってよいか（平日のみ、夜間、特定の日付でクレジットが切れるまで）、そのクォータ、そしてすべてのジョブのログ（結果、所要時間、トークン数、費用、日別および時間別）は、マシン上のすべてのプロジェクト向けに `~/.subagent-team/` に、プロジェクトごとの差分は git で無視される `.agent-team/` に保存されます。agent がこれについて尋ねるのは**一度だけ**です。プランが存在しない場合、検出した内容と最新のモデルランキング（OpenRouter の価格と LMArena の Code Arena スコア）から下書きを作成し、1 つのダイアログであなたが確認または編集して、保存先（全体、このプロジェクト、またはこのセッションのみ）を指定します。その後はプランに従って自動でルーティングし、変更があった場合（お使いの CLI がより新しいモデルに対応した、クォータエラー後のフォールバックなど）は**通知**したうえで、反対がなければそのまま進めます。数日ごとに確認用のプランを表示します。あなたが変更を求めるたびに尋ねられる質問は 1 つだけです：「このセッション、このプロジェクト、それとも全体ですか？」。ランキング入りした新しいモデルが CLI にない場合は、更新コマンドを提示し、実行前に確認します。詳細：[compute-config.md](skills/subagent-team/references/compute-config.md)。
 
 頼めばいつでも（「Codex にレビューさせられる？」「OpenCode を追加して」「agy はもう使わないで」）チームを再確認して調整できます。どのチームにもフォールバックの順序があります：同じチームの別経路、次に同じティアの別チーム、最後に社内です。ある経路・モデルが尽きると、agent はクォータの回復時刻とともにそれを台帳に記録し（分からなければ尋ねます）、フォールバックの順序に沿って切り替え、外部の選択肢がすべて尽きたら社内に戻し、回復後に復帰します。クォータが多く残っている経路や、期限が近いクレジットがあれば、先に使うかどうかを尋ねます。各外部チームにコードをどこまで見せるかもあなたが決めます。agent はチームごとに機密レベルを確認し、今後も有効な回答はプロジェクト内のファイルに保存します。このファイルは既定では git の管理外に置き、希望があれば git で管理します。
+
+### シナリオとプロファイル
+
+各セッションの開始時に `compute-config.mjs start` を実行し、現在のホストを検出してそのホスト自身のプランを読み込みます（ホストを切り替えた後に前回セッションのプランを引き継ぐことはありません）。機械が書き込むセッション状態は別の `compute-state.json` に分かれます。ホストは 5 つの**シナリオ**——`vendor-native`、`harness`、`open-router`、`bot`（*未テスト*）、`unknown`——に分類され、*どのように配送するか*と*どのベンダー系統のモデルか*を切り分けます（レビューの独立性と機密レベルは引き続きベンダー系統で決まります）。詳細：[scenarios.md](skills/subagent-team/references/scenarios.md)。
+
+4 つの組み込み**プロファイル**（`performance`、既定の `balanced`、`frugal`、`load-balance`）、これらを拡張するカスタムプロファイル、およびベンダー**制約**（`onlyVendors`、`denyVendors`、`inHouseOnly`）によって、安全の下限を下げることなくコスト・並列度・バッチ配分を制御できます。複数アカウントへの分散は、あなたが明示的に宣言してサインイン済みのアカウントを許可した場合に限られ、agent が認証情報を探索したり独自にアカウントを切り替えたりすることはありません。セッション中の変更は既定でセッション単位にとどまり、同意なしに永続化されません。7 日ごとのモデル見直し通知と 30 日ごとの「維持 / 調整 / 後で」の設定確認も、セッション開始時の 1 回のダイアログにまとめられます。詳細：[profiles.md](skills/subagent-team/references/profiles.md)。
 
 ## インストール
 
@@ -157,7 +163,7 @@ Claude Code プラグインに同梱される agent：`team-reviewer`（通常�
 | `skills/subagent-team/scripts/env-check.cjs` | セッション開始時の環境ヘルスチェック：Node.js（下限 22、推奨 24 以上、nvm）、git、ホスト agent の推測、外部チーム（Codex CLI とそのプラグイン、agy と `agy acp` の有無、agy-staff、OpenCode、その他の agent CLI、プロジェクトの MCP サーバー）、プロジェクトのチームポリシー（どの外部チームを使うか尋ねるかどうかを含む）とチームボード。保守的な構文で書かれているため、古い Node でも動作して問題を説明できます。 |
 | `skills/subagent-team/scripts/team-board.mjs` | チームボード：`init` は `docs/agent-team/` の骨格を作り（既存ファイルは上書きしない）、`new` はタスクカードとその索引行を追加し、`set` はカードと索引行の状態を同時に変更し、`status` はタスクの状態と未回答の質問を集計して、索引・カード・`lessons.md`・`AGENTS.md` の食い違いを報告します（`--strict` を付けると食い違いがあれば失敗します）。 |
 | `skills/subagent-team/scripts/model-roster.mjs` | OpenRouter の公開モデル一覧から、Anthropic / OpenAI / Google / DeepSeek の最新モデルを価格とコンテキスト長付きで一覧表示します。`--arena` で LMArena の Code Arena リーダーボードの性能（キー不要）を追加し、`--save` で `compute-config.mjs` 向けのランキングを保存します。抽象ティアを現在のモデルに対応づけるのに使います。 |
-| `skills/subagent-team/scripts/compute-config.mjs` | ローカルファイルにある外部コンピュートプラン（全体とプロジェクト単位を統合）：`show`（プラン、要レビュー、ランキング鮮度、クォータの注記）、`set` / `route` / `schedule`（役割ごとのチーム・モデル・effort、フォールバック、時間枠）、`resolve --role <role>`（今誰がジョブを引き受けるかとその理由）、`quota`、`record` および `usage`（初回合格率を含む日別・時間別のジョブログ）、`check-models`（経路上の新しいモデル、または更新が必要な CLI）。ロック付きで書き込みます。プロジェクトのディレクトリは git の管理外に置かれます。 |
+| `skills/subagent-team/scripts/compute-config.mjs` | ローカルファイルにあるコンピュートプラン（全体・プロジェクト・ホスト・セッション状態）：`start`（開始時のホスト判定、プロファイル、`ask[]`/`say[]`）、`show`、`profile`、`account`（宣言済みアカウントと `accountQuota`）、`seat`、`host`、`set` / `route` / `schedule`（`--scope session` 対応）、`promote`、`resolve --role <role>`（`--host`、`--profile`、`--count` 対応）、`plan check|render|apply`、`migrate --dry-run`、`quota`、`reviewed`（モデルと設定確認）、`record` および `usage`、`check-models`。ロック付きで書き込み、`.agent-team/` は git の管理外に置かれます。 |
 | `skills/subagent-team/scripts/audit-dispatch.mjs` | ハーネスのトランスクリプトから、セッションで実際に何が動いたかを一覧表示します（各 agent のモデルと effort、および外部ジョブ）。Claude Code のみ。 |
 | `skills/cli-agent-delegation/scripts/codex-run.mjs` | `codex exec` / `exec resume` を、effort の明示指定を必須にして実行します。`ultra` と `danger-full-access` を拒否し、タイムアウトに対応し、ログと最終回答をファイルに書き、session id 付きの JSON サマリーを出力します。 |
 | `skills/cli-agent-delegation/scripts/agy-acp-run.mjs` | agy の公式 ACP サーバー `agy acp` のクライアントです。`run` はモデルと思考レベルを固定し、読み取り専用ジョブには agy の `default` モード、編集には `accept-edits` を使い、すべての権限リクエストを拒否し、正直に自分の名前を名乗り、環境にある Google の認証情報を取り除き、1.5.0 より古い agy を拒否し、タイムアウトと再開に対応し、JSON の要約を出力します。`probe` はハンドシェイクのみで、`--session-check` を付けると空のディレクトリでモードとモデルを一覧表示します。ACP のコア（`acp-core.mjs`）を OpenCode のラッパーと共有します。 |
@@ -176,7 +182,7 @@ Claude Code プラグインに同梱される agent：`team-reviewer`（通常�
    - `auto`（推奨）：メインセッションが、その時点で使えるモデルから役割ごとに推奨のモデルと effort を選び、何を選んだかを伝えます。
    - `fixed`：すべてのティアについて、あなたがモデルと effort を指定します。
    - `hybrid`：一部の役割は固定、残りは auto。
-3. **コストの方針**：バランス / 節約 / 品質優先。
+3. **利用プロファイル**（コンピュートプランに保存し、ポリシーからはポインタのみ記載）：`balanced` / `frugal` / `performance` / `load-balance`（旧ポリシーの `Cost preference:` の `economize` / `max-quality` は自動で対応付けられます）。
 4. **外部チーム**：どれを使うか、どの方法（CLI / プラグイン / ACP / MCP）でつなぐか、どれがファイルを編集してよく、どれがレビューのみか。今後のセッション開始時に、使うチームを改めて尋ねるかどうか。まだコンピュートプランがない場合は、同じダイアログで下書きされたプラン（役割ごとのモデルと effort、フォールバック、時間枠）と保存先を確認します。
 5. **チームボード**：`docs/agent-team/` とホストのネイティブなタスクリストの併用を推奨します。
 6. **外注しないパスと共有ファイル**：例として、課金・決済・認証のパス、言語ファイルやドキュメント索引。
