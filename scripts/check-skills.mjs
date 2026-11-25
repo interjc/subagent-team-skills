@@ -13,6 +13,7 @@
 // an untracked `.privacy-denylist` file are also rejected, so maintainers can
 // scan for private names without publishing them.
 
+import envCheck from '../skills/subagent-team/scripts/env-check.cjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -315,11 +316,21 @@ export function checkPrivacy(root, files, denylist = []) {
   return errors;
 }
 
+export function checkHostNames(root) {
+  const rel = 'skills/subagent-team/references/host-harness.md';
+  const file = path.join(root, rel);
+  const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  const names = [...envCheck.HOST_HINTS, ...envCheck.WRAPPER_HOSTS].map((host) => host.name);
+  return [...names, 'Orca', 'Pi'].filter((name) => !new RegExp(`\\b${name}\\b`).test(text))
+    .map((name) => `${rel}: missing host name "${name}"`);
+}
+
 export function runChecks(root) {
   const files = walk(root);
   const { errors: skillErrors, skills } = checkSkills(root);
   return [
     ...skillErrors,
+    ...checkHostNames(root),
     ...checkLinks(root, files),
     ...checkSkillIsolation(root, files),
     ...checkEnglish(root, files),

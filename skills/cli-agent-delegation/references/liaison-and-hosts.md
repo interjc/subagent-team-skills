@@ -2,18 +2,21 @@
 
 Detail behind "Tracking through a liaison" in [SKILL.md](../SKILL.md). Script paths are relative to the skill's directory, not the repository.
 
-## Which route: host kind
+## Which route: host kind and scenario
 
-| Client the session runs in | Kind | Another vendor's model goes |
-|---|---|---|
-| Claude Code, Codex, agy (as of 2026-11) | vendor-native | through that vendor's ACP server (Codex: `codex exec`) with a wrapper from this skill, tracked by a liaison |
-| T3 Code, OpenCode, Cursor (as of 2026-11) | multi-vendor | as an in-house subagent, child agent or forked thread on that model (host switch); no wrapper, no liaison |
+| Client the session runs in | Kind | Scenario | Another vendor's model goes |
+|---|---|---|---|
+| Claude Code (verified), Codex (verified), agy (*unverified*), Gemini CLI (*unverified*, deprecated) (as of 2026-11) | vendor-native | `vendor-native` | through that vendor's ACP server (Codex: `codex exec`) with a wrapper from this skill, tracked by a liaison |
+| T3 Code (partly exercised 2026-11), Cursor (*unverified*), Orca (*not tested*) (as of 2026-11) | multi-vendor | `harness` | as an in-house subagent, child agent or forked thread on that model (host switch); no wrapper, no liaison |
+| OpenCode (*unverified*), Pi (*not tested*) (as of 2026-11) | multi-vendor | `open-router` | as an in-house named agent on that model (host switch); ACP + liaison only when a separate CLI sandbox is wanted |
+| Bot front ends (*not tested*) | unknown | `bot` | probe capabilities first (shell + files, files only, or chat only); ACP + liaison only if shell + CLIs exist |
 
-What the multi-vendor harnesses offer, from their documentation, release notes and community reports (2026; none of them tested with these skills as hosts):
+What the multi-vendor harnesses and routers offer (OpenCode and Cursor are *unverified* as hosts; Orca, Pi and bot front ends are *not tested*; T3 Code had host detection, per-child provider/model, and child agents on another vendor's provider exercised in 2026-11, with the rest *unverified*):
 
-- **T3 Code** is a GUI over agent CLIs the user has signed in (Claude Code, Codex, Cursor, OpenCode, agy and ACP agents). Its releases describe switching provider or model between turns, forking a thread and a delegate tool that starts child agents on any provider. Use a child agent or a forked thread for the job, not the director's own thread: a mid-thread switch drops the prompt cache and carries the context only as a handoff summary. Each provider bills on the user's own sign-in for it, so quota is the provider's.
-- **OpenCode** sets a model per agent (`model: <provider>/<model>` in an agent's file or the config's `agent` block), so a subagent per external tier does the job. An inline per-call override is not built in (open feature request in 2026): define the agents in advance.
-- **Cursor** lets subagent definitions name a `model`, but forum reports through 2026 show the orchestrating agent overriding it, and the CLI exposing few models to subagents. Check the served model on every job; when it is wrong, take ACP + liaison or ask the user.
+- **T3 Code** is a GUI over agent CLIs the user has signed in (Claude Code, Codex, Cursor, OpenCode, agy and ACP agents). Its releases describe switching provider or model between turns, forking a thread and a delegate tool that starts child agents on any provider. Use a child agent or a forked thread for the job, not the director's own thread: a mid-thread switch drops the prompt cache and carries the context only as a handoff summary. Each provider bills on the user's own sign-in for it, so quota is per declared account in `hosts.t3-code.serves`.
+- **OpenCode** (`open-router`) sets a model per agent (`model: <provider>/<model>` in an agent's file or the config's `agent` block), so a subagent per external tier does the job. An inline per-call override is not built in (open feature request in 2026): define the agents in advance.
+- **Cursor** (`harness`) lets subagent definitions name a `model`, but forum reports through 2026 show the orchestrating agent overriding it, and the CLI exposing few models to subagents. Check the served model on every job; when it is wrong, take ACP + liaison or ask the user.
+- **Orca** (`harness`, *not tested*), **Pi** (`open-router`, *not tested*) and **bot front ends** (`bot`, *not tested*): not tested with these skills as hosts; confirm scenario and capabilities on first use (`subagent-team`, `scenarios.md`) before routing external work.
 
 Rules on the host-switch route: one job, one subagent with a frozen brief and a lease; pin model and effort; confirm the served model (from the harness's display or the agent's result) before the job counts as another vendor's opinion; record the outcome in the usage log under a resource for that provider · model whose channel is `host` (`compute-config.mjs set ... --channel host`); keep the vendor's confidentiality level and the quota ledger as on the ACP route. Models the harness does not serve, and work the user wants on the vendor's own sandbox, accounts or quota, keep the ACP + liaison route.
 
@@ -45,7 +48,8 @@ When the host can run subagents with shell access, give each external job (or ea
 - **Codex as host**: Codex is then in-house, so its CLI is not an external team; agy-staff installs as a Codex plugin, and agy and OpenCode work through their ACP wrappers. Request escalated execution when the sandbox blocks agy (its language-server port and OAuth credentials), OpenCode or the network; if escalation is refused, agy-staff's runner is the print-mode fallback, with the risk stated. Codex hosts poll background work and each wake-up carries their full context, so prefer fewer, larger jobs.
 - **OpenCode as host**: a multi-vendor harness, so other vendors' models it is configured for are reached by host switch (an agent with its own `model`), not through this skill. `opencode acp` starts its own private server, so the wrapper also works from inside an OpenCode session, for example to keep a job on a separate sandbox or session.
 - **agy as host** (*unverified*): vendor-native by default, so Codex and OpenCode are external teams through their channels here. agy also serves some other vendors' models on some plans; filling a tier with those in-house is the user's choice, asked once.
-- **T3 Code, Cursor and other multi-vendor harnesses** (*not tested*): route by host switch for the models they serve ("Which route: host kind", above); a liaison only for jobs that still go through ACP.
-- **Other hosts / other CLIs** (Pi, Grok, DeepSeek-backed agents and others): not tested here. The principles carry over ([other-agents.md](other-agents.md)), but adapt the mechanics yourself. For a new worker CLI, agy-staff's [DESIGN.md](https://github.com/keli-wen/agy-staff/blob/master/docs/DESIGN.md) is a good blueprint. It covers headless mode, a prompt file, one background wait per job, continuation by conversation id, and results written to files.
+- **T3 Code** (partly exercised 2026-11) and **Cursor** (*unverified*): route by host switch for the models they serve ("Which route: host kind and scenario", above); a liaison only for jobs that still go through ACP.
+- **Orca, Pi and bot front ends as hosts** (*not tested*): confirm scenario and capabilities first (`subagent-team`, `scenarios.md`). For bot hosts, run external CLI wrappers only when the capability probe confirms shell access and working CLIs.
+- **Other CLIs** (Pi, Grok, DeepSeek-backed agents and others): not tested here. The principles carry over ([other-agents.md](other-agents.md)), but adapt the mechanics yourself. For a new worker CLI, agy-staff's [DESIGN.md](https://github.com/keli-wen/agy-staff/blob/master/docs/DESIGN.md) is a good blueprint. It covers headless mode, a prompt file, one background wait per job, continuation by conversation id, and results written to files.
 
 Measured runs and their lessons: [field-data.md](field-data.md). OpenCode details: [opencode-acp.md](opencode-acp.md). Adding any other ACP agent: [acp-agents.md](acp-agents.md).

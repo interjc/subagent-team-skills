@@ -47,7 +47,7 @@
 |---|---|
 | **Claude Code** | 主推。日常开发使用，以插件形式提供 skills 和两个只读审核 agent。 |
 | **Codex** | 次选。真实项目里当过主 session；skills 可以作为插件安装。审核 agent 是 Claude Code 的定义，Codex 下请用 `reviewer-prompt.md`。 |
-| 其他（T3 Code、OpenCode、Cursor、agy、Pi、Gemini CLI 等） | 未测试，不保证使用质量。skills 遵循开放的 [Agent Skills](https://agentskills.io) 格式，方法本身不绑定工具，所以支持 skills 的 agent 都能安装和加载。请通过 `npx skills` 或你所用 agent 自己的插件 / skill 市场安装，并自行微调 harness 相关的部分。 |
+| 其他（T3 Code、OpenCode、Cursor、agy、Orca、Pi、Gemini CLI、bot 前端等） | T3 Code 经过部分验证（宿主检测与跨厂商子 agent）；OpenCode、Cursor、agy 和 Gemini CLI *未经验证*；Orca、Pi 和 bot 前端*未测试*。skills 遵循开放的 [Agent Skills](https://agentskills.io) 格式，方法本身不绑定工具，所以支持 skills 的 agent 都能安装和加载。请通过 `npx skills` 或你所用 agent 自己的插件 / skill 市场安装，并自行微调 harness 相关的部分。 |
 
 宿主不用你先说：环境检查会根据环境变量给出初步判断，首次使用时再和你确认，并记进项目策略。之后按这个宿主的能力调整团队，例如能不能起 subagent、能不能按 subagent 指定模型和 effort、有没有原生任务列表。
 
@@ -68,6 +68,12 @@
 **你的外部算力方案保存在本地文件中，而不是存在 agent 的记忆里**。哪个团队 · 模型 · effort 接哪种活（翻译、批量改动、读代码同步、第二意见审核）、各自的降级路线、何时可以使用（仅限工作日、夜间、直到额度在某天到期）、各自的额度以及每项任务的日志（结果、耗时、token、费用，按天和按小时统计），都会为你机器上的所有项目保存在 `~/.subagent-team/` 中；针对单个项目的差异，则保存在被 git 忽略的 `.agent-team/` 里。agent 对此只问**一次**：没有方案时，它会根据检测到的情况和一份最新的模型榜单（OpenRouter 价格加上 LMArena 的 Code Arena 评分）起草一份，让你在一个对话框中确认或修改，并指定保存位置（全局、当前项目或仅本次会话）。此后它会自行按方案路由，并在做出改动时**告知**你（例如你的 CLI 现已支持更新的模型、额度报错后的降级），只要你没反对就直接继续；每隔几天它还会展示方案供你快速过目。之后你提出的每项改动它都只问一句：仅本次会话、当前项目，还是全局？当上榜的新模型在你的 CLI 中缺失时，它会告诉你更新命令，并在运行前询问。详情见 [compute-config.md](skills/subagent-team/references/compute-config.md)。
 
 只要你开口（"Codex 能审这个吗？""加上 OpenCode""别再用 agy 了"），随时可以重新核实并调整团队。每个团队都有降级路线：先换同一团队的其他通道，再换同档位的其他团队，最后收回内部。当某个通道 · 模型额度用尽时，agent 会将其及恢复时间记入额度台账（查不到就问你），沿着降级路线切换；外部全部用尽后再收回内部，待恢复后再切回。如果某个通道额度还很富余，或者额度快到期，它会问你要不要优先消耗。每个外包团队能看到多少代码也由你决定：agent 会逐个团队向你确认保密等级，长期有效的答案存在项目里的一个文件中，默认不进 git，你要求时才纳入版本管理。
+
+### 场景与配置档
+
+每次会话开始时运行 `compute-config.mjs start`，检测当前宿主并加载该宿主自己的方案（切换宿主后不会沿用上一次会话的宿主方案），同时把机器写入的会话状态单独保存在 `compute-state.json`。宿主分为五种**场景**——`vendor-native`、`harness`、`open-router`、`bot`（*未测试*）和 `unknown`——将*派发方式*与*模型所属厂商家族*分开（审核独立性与保密等级仍由厂商家族决定）。详见 [scenarios.md](skills/subagent-team/references/scenarios.md)。
+
+四种内置**配置档**（`performance`、默认 `balanced`、`frugal`、`load-balance`）、基于它们扩展的自定义配置档以及厂商**约束**（`onlyVendors`、`denyVendors`、`inHouseOnly`）共同控制开销、并行度与批量分配顺序，但绝不降低安全底线。只有在你明确声明并登录了多个账号时，才可按你的规则在账号间分摊任务；agent 绝不会自行探测凭据或轮换账号。会话中的临时调整默认仅限当前会话，未经你同意不会提升为持久配置；每 7 天的模型榜单复核通知与每 30 天的"保留 / 调整 / 稍后"偏好检查会合并进会话开始时唯一的一次确认对话。详见 [profiles.md](skills/subagent-team/references/profiles.md)。
 
 ## 安装
 
@@ -164,7 +170,7 @@ Claude Code 插件附带两个审核 agent：
 | `skills/subagent-team/scripts/env-check.cjs` | 会话开始时的环境健康检查，覆盖 Node.js（下限 22、推荐 24 及以上、nvm）、git、宿主 agent 的初步判断、外包团队（Codex CLI 及其插件、agy 及其是否支持 `agy acp`、agy-staff、OpenCode、其他 agent CLI、项目 MCP server）、团队策略（包括是否询问本次用哪些外包团队）和团队看板。用最保守的语法编写，Node 版本过旧时也能运行，并把问题说清楚 |
 | `skills/subagent-team/scripts/team-board.mjs` | 团队看板：`init` 生成 `docs/agent-team/` 骨架（从不覆盖已有文件），`new` 新建任务卡片并登记到索引，`set` 同时修改卡片和索引里的状态，`status` 汇总任务状态和待回答的问题，并报告索引、卡片、`lessons.md` 和 `AGENTS.md` 之间的不一致（加 `--strict` 时有任何不一致即失败） |
 | `skills/subagent-team/scripts/model-roster.mjs` | 从 OpenRouter 的公开模型列表拉取 Anthropic / OpenAI / Google / DeepSeek 的最新模型，附价格和上下文长度；`--arena` 加入 LMArena 的 Code Arena 排行榜表现（无需 key），`--save` 保存排行供 `compute-config.mjs` 使用。用来把抽象档位映射到当前型号 |
-| `skills/subagent-team/scripts/compute-config.mjs` | 本地文件中的外部算力方案（全局与按项目合并）：`show`（方案、待复核项、排行时效、额度备注）、`set` / `route` / `schedule`（每个角色的团队 · 模型 · effort、降级、时间窗口）、`resolve --role <role>`（当前由谁接活及原因）、`quota`、`record` 与 `usage`（带一次通过率的任务日志，按天和按小时统计）、`check-models`（某通道上的更新模型，或需要更新的 CLI）。加锁写入；项目目录不进 git |
+| `skills/subagent-team/scripts/compute-config.mjs` | 本地文件中的算力方案（全局、项目、宿主与会话状态）：`start`（会话开始宿主检查、配置档、`ask[]`/`say[]`）、`show`、`profile`、`account`（用户声明的账号与 `accountQuota`）、`seat`、`host`、`set` / `route` / `schedule`（支持 `--scope session`）、`promote`、`resolve --role <role>`（支持 `--host`、`--profile`、`--count`）、`plan check|render|apply`、`migrate --dry-run`、`quota`、`reviewed`（模型与偏好检查）、`record` 与 `usage`、`check-models`。加锁写入；`.agent-team/` 不进 git |
 | `skills/subagent-team/scripts/audit-dispatch.mjs` | 从宿主会话记录中列出本次会话实际跑了什么：每个 subagent 的模型与 effort，以及外包作业。仅限 Claude Code |
 | `skills/cli-agent-delegation/scripts/codex-run.mjs` | 封装 `codex exec` 和 `exec resume`。必须显式传 effort；拒绝 `ultra` 和 `danger-full-access`；支持超时；日志和最终回复写到文件；输出带 session id 的 JSON 摘要 |
 | `skills/cli-agent-delegation/scripts/agy-acp-run.mjs` | agy 官方 ACP server（`agy acp`）的客户端。`run` 固定模型和思考档位，只读任务用 agy 的 `default` 模式、改动用 `accept-edits`，拒绝所有权限请求，如实报出自己的名字，去掉环境里的 Google 凭据，拒绝 1.5.0 以下的 agy，支持超时和续做，输出 JSON 摘要。`probe` 只做握手；加 `--session-check` 时在空目录里列出模式和模型。与 OpenCode 封装脚本共用 ACP 核心（`acp-core.mjs`） |
@@ -183,7 +189,7 @@ Claude Code 插件附带两个审核 agent：
    - `auto`（推荐）：主 session 按当时可用的模型，为每个角色自行选定推荐的模型和 effort，并说明选了什么。
    - `fixed`：由你为每个档位指定模型和 effort。
    - `hybrid`：部分角色固定，其余 auto。
-3. **成本偏好**：均衡 / 省钱 / 质量优先
+3. **消费配置档**（保存在算力方案中，策略小节只保留指针）：`balanced` / `frugal` / `performance` / `load-balance`（旧策略里的 `Cost preference:` 值 `economize` / `max-quality` 会自动映射）。
 4. **外包团队**：用哪些、通过什么方式接入（CLI / 插件 / ACP / MCP）、哪些可以改文件、哪些只做审核，以及以后每次会话开始时是否再问一遍用哪些团队。如果你还没有算力方案，同一个对话框还会确认起草好的方案（每个角色的模型和 effort、降级、时间窗口）及保存位置。
 5. **团队看板**：推荐 `docs/agent-team/` 加宿主的原生任务列表
 6. **不外包的路径与共享文件**：例如计费、支付、鉴权；语言文件、文档索引

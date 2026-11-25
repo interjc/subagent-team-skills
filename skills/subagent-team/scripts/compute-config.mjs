@@ -1,21 +1,16 @@
 #!/usr/bin/env node
-// compute-config.mjs - the user's external compute plan, kept in local files
-// instead of an agent's memory: which external team · model · effort takes
-// which responsibility, fallbacks, time windows, quota state and a usage log.
-//
-//   compute-config.mjs paths | show | init | set | remove | route | schedule
-//                      | quota | record | usage | resolve | reviewed | check-models
-//
-// Two scopes, merged project over global:
-//   global   $SUBAGENT_TEAM_HOME, else ~/.subagent-team
-//   project  <main checkout>/.agent-team/ (git-ignored through .git/info/exclude)
-// Session-only choices are not written here. Dependency-free. Run --help.
+// Manage the user's compute plan across global and project scopes. Session
+// overrides and host observations live separately in compute-state.json.
+// Dependency-free. Run --help for commands, paths and exit codes.
 
 import { spawnSync } from 'node:child_process';
+import { createHash, randomBytes } from 'node:crypto';
+import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 
 // Hard minimum shared by every script in these skills. Recommended: 24.
 export const MIN_NODE_MAJOR = 22;
@@ -48,17 +43,29 @@ const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const ID_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const ROLE_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const DAY_MS = 86_400_000;
+const { detectHost, scenarioFromName, kindFromName, HOST_HINTS, WRAPPER_HOSTS } = createRequire(import.meta.url)('./env-check.cjs');
+const STATE_FILE = 'compute-state.json';
+const PARALLEL = { balanced: 'normal', performance: 'max', frugal: 'low', 'load-balance': 'normal' };
+const SCENARIOS = ['vendor-native', 'harness', 'open-router', 'bot', 'unknown'];
+const SEAT_TIERS = ['top', 'high', 'mid', 'low'];
+const AUTO = /^auto:(top|high|mid|low)(?::([^:\s]+))?$/;
+const RESOURCE_FIELDS = ['team', 'channel', 'model', 'effort', 'tier', 'roles', 'fallback', 'mayEdit', 'enabled', 'windows', 'vendor', 'note', 'account', 'cost'];
+const RULE_FIELDS = ['when', 'prefer', 'avoid', 'roles', 'note'];
+const record = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+const entries = (value) => Object.entries(value ?? {});
+const fields = (obj, keys) => Object.fromEntries(keys.filter((k) => obj[k] !== undefined).map((k) => [k, obj[k]]));
 
 export const USAGE = `compute-config.mjs - the user's external compute plan in local files (project or global).
 
 Usage:
   compute-config.mjs paths    [--root <dir>]
-  compute-config.mjs show     [--root <dir>] [--at <time>]
+  compute-config.mjs start    [--root <dir>] [--host H] [--runtime R] [--session K] [--served file] [--at time]
+  compute-config.mjs show     [--root <dir>] [--at <time>] [--host H] [--session K]
   compute-config.mjs init     --scope project|global [--from <file.json>] [--force] [--root <dir>]
   compute-config.mjs set      <id> --scope S [--team T] [--channel C] [--model M] [--effort E]
                               [--tier external-fast|external-strong] [--roles a,b] [--fallback x,y]
                               [--may-edit yes|no] [--enabled yes|no] [--windows "<when>[; <when>]"]
-                              [--vendor v] [--note text]
+                              [--vendor v] [--note text] [--account id] [--cost free|included|metered]
   compute-config.mjs remove   <id> --scope S
   compute-config.mjs route    <role> <id,id,...|-> --scope S
   compute-config.mjs schedule add <rule-id> --scope S --when "<when>" [--prefer ids] [--avoid ids]
@@ -70,12 +77,30 @@ Usage:
                               [--minutes n] [--tokens-in n] [--tokens-out n] [--cost usd] [--note text]
                               [--scope global|project]
   compute-config.mjs usage    [--since-days n] [--resource id] [--root <dir>]
-  compute-config.mjs resolve  --role <role> [--at <time>] [--root <dir>]
-  compute-config.mjs reviewed --scope S [--every-days n]
+  compute-config.mjs resolve  --role <role> [--at time] [--root dir] [--host H] [--session K] [--profile name] [--count 1-50]
+  compute-config.mjs reviewed --scope S [--what models|preferences] [--decision keep|adjust|later] [--snooze-days n] [--every-days n]
+  compute-config.mjs profile list
+  compute-config.mjs profile use <name> --scope S [--session K] [--until time]
+  compute-config.mjs profile define <name> --extends base [--parallelism max|normal|low] [--note text] --scope S
+  compute-config.mjs account set <id> --scope S --vendor v --team t --billing b [--plan p] [--cycle c] [--resets time] [--expires time] [--weight n] [--note text]
+  compute-config.mjs account remove <id> --scope S
+  compute-config.mjs account quota <id> --state s [--resets time] [--expires time] [--remaining n] [--source s] [--note text] [--scope S]
+  compute-config.mjs seat set <id> --scope S --team t --vendor v --model m --effort e --tier top|high|mid|low [--note text]
+  compute-config.mjs seat remove <id> --scope S
+  compute-config.mjs host set <id> --scope S (--from file | [--name n] [--scenario s] [--kind k] [--route r] [--home a,b] [--confirmed date])
+  compute-config.mjs host remove <id> --scope S
+  compute-config.mjs host show <id>
+  compute-config.mjs promote --session K (--scope project|global | --decline) (--all | --what "note summary")
+  compute-config.mjs plan check --from file [--host H]
+  compute-config.mjs plan render [--from file] [--host H] [--session K]
+  compute-config.mjs plan apply --from file --scope project|global
+  compute-config.mjs migrate --dry-run [--root dir]
   compute-config.mjs check-models --available <team>=<file> [--available ...] [--ranking <file>]
 
 Scopes: global = ${'$'}SUBAGENT_TEAM_HOME, else ~/.subagent-team;
 project = <main checkout>/${PROJECT_DIR}/ (added to .git/info/exclude on first write).
+Session overrides: set, route, schedule add and profile use accept --scope session --session K.
+record also accepts --host H, --account id, --instance id and --session K.
 Effective config = global, overridden by project. Writes to the config need an
 explicit --scope: ask the user which one. quota and record default to global
 (quota and spend belong to the account, not the project).
@@ -90,7 +115,7 @@ Fallback entries: resource ids, or in-house:<tier>[:<effort>] (e.g. in-house:mid
 
 Output: one JSON object on stdout; hints on stderr.
 Exit codes: 0 ok; 1 usage error; 2 no compute config yet (run init); 3 invalid config file;
-4 file system, lock or unexpected error; 5 unknown resource or rule id; 6 config exists (init without --force).
+4 file system, lock or unexpected error; 5 unknown id; 6 config exists (init without --force).
 `;
 
 export class UsageError extends Error {}
@@ -100,7 +125,10 @@ export class CodedError extends Error {
 
 // ---------- argument parsing ----------
 
-const COMMANDS = ['paths', 'show', 'init', 'set', 'remove', 'route', 'schedule', 'quota', 'record', 'usage', 'resolve', 'reviewed', 'check-models'];
+const ACTIONS = { profile: ['use', 'list', 'define'], account: ['set', 'remove', 'quota'],
+  seat: ['set', 'remove'], host: ['set', 'remove', 'show'], plan: ['check', 'render', 'apply'] };
+const COMMANDS = ['paths', 'show', 'init', 'set', 'remove', 'route', 'schedule', 'quota', 'record', 'usage',
+  'resolve', 'reviewed', 'check-models', 'start', 'promote', 'migrate', ...Object.keys(ACTIONS)];
 const VALUED = {
   '--root': 'root', '--scope': 'scope', '--at': 'at', '--from': 'from', '--team': 'team', '--channel': 'channel',
   '--model': 'model', '--effort': 'effort', '--tier': 'tier', '--roles': 'roles', '--fallback': 'fallback',
@@ -109,6 +137,11 @@ const VALUED = {
   '--expires': 'expires', '--source': 'source', '--outcome': 'outcome', '--task': 'task', '--role': 'role',
   '--minutes': 'minutes', '--tokens-in': 'tokensIn', '--tokens-out': 'tokensOut', '--cost': 'cost',
   '--since-days': 'sinceDays', '--resource': 'resource', '--every-days': 'everyDays', '--ranking': 'ranking',
+  '--host': 'host', '--runtime': 'runtime', '--served': 'served', '--session': 'session', '--profile': 'profile',
+  '--count': 'count', '--until': 'until', '--extends': 'extends', '--parallelism': 'parallelism', '--billing': 'billing',
+  '--plan': 'plan', '--cycle': 'cycle', '--weight': 'weight', '--remaining': 'remaining', '--name': 'name',
+  '--scenario': 'scenario', '--kind': 'kind', '--route': 'route', '--home': 'home', '--confirmed': 'confirmed',
+  '--what': 'what', '--decision': 'decision', '--snooze-days': 'snoozeDays', '--account': 'account', '--instance': 'instance',
 };
 
 export function parseArgs(argv) {
@@ -125,6 +158,7 @@ export function parseArgs(argv) {
     }
     if (arg === '--help' || arg === '-h') return { help: true };
     if (arg === '--force') { opts.force = true; continue; }
+    if (['--dry-run', '--all', '--decline'].includes(arg)) { opts[arg.slice(2)] = true; continue; }
     if (arg === '--available' || VALUED[arg]) {
       const v = inline ?? rest[++i];
       if (v === undefined) throw new UsageError(`${arg} needs a value`);
@@ -137,7 +171,37 @@ export function parseArgs(argv) {
     opts.positional.push(arg);
   }
   const needScope = ['init', 'set', 'remove', 'route', 'schedule', 'reviewed'];
-  if (opts.scope !== undefined && !['project', 'global'].includes(opts.scope)) throw new UsageError('--scope must be project or global');
+  const [action, item] = opts.positional;
+  if (Object.hasOwn(ACTIONS, command)) {
+    if (!ACTIONS[command].includes(action)) throw new UsageError(`${command} needs ${ACTIONS[command].join(' or ')}`);
+    opts.action = action;
+    if (command !== 'plan' && action !== 'list') {
+      if (!item || !ID_RE.test(item)) throw new UsageError(`${command} ${action} needs a valid id`);
+      opts.id = item;
+    }
+    if (['use', 'define', 'set', 'remove', 'apply'].includes(action)) needScope.push(command);
+    if (['check', 'apply'].includes(action) && !opts.from) throw new UsageError(`plan ${action} needs --from`);
+    if (action === 'quota' && !opts.scope) opts.scope = 'global';
+    const required = { 'profile define': ['extends'], 'account set': ['vendor', 'team', 'billing'],
+      'seat set': ['team', 'vendor', 'model', 'effort', 'tier'], 'account quota': ['state'] };
+    for (const key of required[`${command} ${action}`] ?? []) {
+      if (!opts[key]) throw new UsageError(`${command} ${action} needs --${key}`);
+    }
+  }
+  const sessionWrite = ['set', 'route'].includes(command) || (command === 'schedule' && action === 'add') || (command === 'profile' && action === 'use');
+  if (opts.scope === 'session' && sessionWrite) {
+    if (!opts.session) throw new UsageError('--scope session needs --session');
+  } else if (opts.scope !== undefined && !['project', 'global'].includes(opts.scope)) throw new UsageError('--scope must be project or global');
+  if (command === 'promote') {
+    const oneTarget = Boolean(opts.scope) !== Boolean(opts.decline);
+    const oneSelector = Boolean(opts.all) !== (opts.what !== undefined);
+    if (!opts.session || !oneTarget || !oneSelector || opts.what === '') {
+      throw new UsageError('promote needs --session and either --scope or --decline, with exactly one of --all or --what');
+    }
+  }
+  if (command === 'migrate' && !opts['dry-run']) throw new UsageError('use migrate --dry-run, then plan apply after the user confirms');
+  if (command === 'reviewed' && ((opts.what && !['preferences', 'models'].includes(opts.what)) ||
+    (opts.what === 'preferences' && !['keep', 'adjust', 'later'].includes(opts.decision)))) throw new UsageError('reviewed needs --what models or --what preferences --decision keep|adjust|later');
   if (needScope.includes(command) && !opts.scope) throw new UsageError(`${command} needs --scope project|global (ask the user which)`);
   if (['quota', 'record'].includes(command) && !opts.scope) opts.scope = 'global';
   const id = opts.positional[0];
@@ -163,20 +227,23 @@ export function parseArgs(argv) {
   if (command === 'quota' && !QUOTA_STATES.includes(opts.state)) throw new UsageError(`--state must be one of ${QUOTA_STATES.join(', ')}`);
   if (command === 'record' && !OUTCOMES.includes(opts.outcome)) throw new UsageError(`--outcome must be one of ${OUTCOMES.join(', ')}`);
   if (command === 'resolve' && (!opts.role || !ROLE_RE.test(opts.role))) throw new UsageError('resolve needs --role');
-  if (opts.tier !== undefined && !TIERS.includes(opts.tier)) throw new UsageError(`--tier must be ${TIERS.join(' or ')}`);
+  if (opts.tier !== undefined && command !== 'seat' && !TIERS.includes(opts.tier)) throw new UsageError(`--tier must be ${TIERS.join(' or ')}`);
   for (const k of ['mayEdit', 'enabled']) {
     if (opts[k] !== undefined) {
       if (!['yes', 'no'].includes(opts[k])) throw new UsageError(`--${k === 'mayEdit' ? 'may-edit' : 'enabled'} must be yes or no`);
       opts[k] = opts[k] === 'yes';
     }
   }
-  for (const k of ['minutes', 'tokensIn', 'tokensOut', 'cost', 'sinceDays', 'everyDays']) {
+  for (const k of ['minutes', 'tokensIn', 'tokensOut', ...(command === 'set' ? [] : ['cost']), 'sinceDays', 'everyDays', 'count', 'snoozeDays', 'remaining', 'weight']) {
     if (opts[k] !== undefined) {
       const n = Number(opts[k]);
-      if (!Number.isFinite(n) || n < 0) throw new UsageError(`--${k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)} must be a non-negative number`);
+      if ((!Number.isFinite(n) || n < 0) && !['weight', 'remaining'].includes(k)) throw new UsageError(`--${k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)} must be a non-negative number`);
       opts[k] = n;
     }
   }
+  if (opts.host !== undefined && !ID_RE.test(opts.host)) throw new UsageError('--host needs a valid host id');
+  if (opts.count !== undefined && !(Number.isInteger(opts.count) && opts.count >= 1 && opts.count <= 50)) throw new UsageError('--count must be an integer from 1 to 50');
+  if (opts.snoozeDays !== undefined && !Number.isInteger(opts.snoozeDays)) throw new UsageError('--snooze-days must be an integer');
   if (opts.everyDays !== undefined && !(Number.isInteger(opts.everyDays) && opts.everyDays > 0)) throw new UsageError('--every-days must be a positive integer');
   if (opts.windows !== undefined) opts.windows = opts.windows.split(';').map((s) => s.trim()).filter(Boolean).map(parseWhen);
   if (opts.when !== undefined) opts.when = parseWhen(opts.when);
@@ -186,7 +253,7 @@ export function parseArgs(argv) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(opts.at)) throw new UsageError('--at needs a time with an offset, not a date alone');
     opts.at = parseTime(opts.at, '--at');
   }
-  for (const k of ['resets', 'expires']) {
+  for (const k of ['resets', 'expires', 'until']) {
     if (opts[k] === undefined || opts[k] === 'unknown') continue;
     // A date alone stays a date, read in the plan's zone: resets at its start, expires at its end.
     opts[k] = /^\d{4}-\d{2}-\d{2}$/.test(opts[k]) ? (parseTime(opts[k], `--${k}`), opts[k]) : parseTime(opts[k], `--${k}`).toISOString();
@@ -348,27 +415,132 @@ export function emptyConfig() {
   return { schema: SCHEMA, resources: {}, routing: {}, schedules: [], quota: {}, review: {} };
 }
 
-export function readConfig(dir) {
+export function readConfig(dir, parent = null) {
   const file = path.join(dir, CONFIG_FILE);
   if (!fs.existsSync(file)) return null;
   let data;
   try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (err) {
     throw new CodedError(3, `${file}: not valid JSON (${err.message})`);
   }
-  const errors = validateConfig(data);
+  const errors = validateConfig(data, parent);
   if (errors.length) throw new CodedError(3, `${file}: ${errors.join('; ')}`);
   return { ...emptyConfig(), ...data };
 }
 
-export function validateConfig(c) {
+export function profileInfo(name, profiles) {
+  const seen = new Set();
+  let base = name;
+  let parallel;
+  while (!Object.hasOwn(PARALLEL, base)) {
+    if (seen.has(base) || !Object.hasOwn(profiles, base)) return null;
+    seen.add(base);
+    const definition = profiles[base];
+    if (typeof definition?.extends !== 'string') return null;
+    parallel ??= definition?.parallelism;
+    base = definition?.extends;
+  }
+  return { name, base, parallel: parallel ?? PARALLEL[base] };
+}
+
+function validateAdditions(c, inheritedProfiles = {}) {
+  const errors = [];
+  const check = (ok, path, message) => { if (!ok) errors.push(`${path}: ${message}`); };
+  const string = (v) => typeof v === 'string' && v.trim().length > 0;
+  const list = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
+  const time = (v) => {
+    if (v === null) return true;
+    if (typeof v !== 'string' || v === 'now') return false;
+    try {
+      parseTime(v);
+      const day = v.slice(0, 10);
+      return new Date(day).toISOString().slice(0, 10) === day;
+    } catch { return false; }
+  };
+  const items = (obj, path, fn) => {
+    if (obj === undefined) return;
+    if (!record(obj)) { errors.push(`${path}: must be an object`); return; }
+    for (const [id, value] of entries(obj)) {
+      const key = `${path}.${id}`;
+      check(ID_RE.test(id), key, 'invalid id');
+      if (record(value)) fn(value, key, id);
+      else errors.push(`${key}: must be an object`);
+    }
+  };
+  const constraints = (v, path) => {
+    if (v === undefined) return;
+    if (!record(v)) { errors.push(`${path}: must be an object`); return; }
+    for (const k of ['onlyVendors', 'denyVendors']) if (k in v) check(list(v[k]), `${path}.${k}`, 'must list vendors');
+    if ('inHouseOnly' in v) check(typeof v.inHouseOnly === 'boolean', `${path}.inHouseOnly`, 'must be boolean');
+  };
+  const profiles = { ...inheritedProfiles, ...c.profiles };
+  const active = (v, path) => {
+    const name = typeof v === 'string' ? v : v?.active;
+    check(string(name) && profileInfo(name, profiles), record(v) ? `${path}.active` : path, 'unknown or cyclic profile');
+    if (record(v) && 'until' in v) check(time(v.until), `${path}.until`, 'invalid time or date');
+  };
+  if ('rev' in c) check(Number.isInteger(c.rev) && c.rev >= 1, 'rev', 'must be a positive integer');
+  if ('profile' in c) {
+    check(record(c.profile), 'profile', 'must be an object');
+    active(c.profile, 'profile');
+  }
+  items(c.profiles, 'profiles', (v, path, id) => {
+    check(!Object.hasOwn(PARALLEL, id), path, 'built-in profile name');
+    check(string(v.extends) && profileInfo(id, profiles), `${path}.extends`, 'must resolve to a built-in profile without cycles');
+    if ('parallelism' in v) check(['normal', 'max', 'low'].includes(v.parallelism), `${path}.parallelism`, 'invalid parallelism');
+  });
+  constraints(c.constraints, 'constraints');
+  items(c.accounts, 'accounts', (v, path) => {
+    for (const k of ['team', 'vendor']) check(string(v[k]), `${path}.${k}`, 'required string');
+    check(['subscription', 'prepaid', 'metered', 'free'].includes(v.billing), `${path}.billing`, 'invalid billing');
+    check(/^\d{4}-\d\d-\d\d$/.test(v.declared) && time(v.declared), `${path}.declared`, 'date required');
+    if ('weight' in v) check(Number.isFinite(v.weight) && v.weight > 0, `${path}.weight`, 'must be positive');
+    for (const k of ['resets', 'expires']) if (k in v) check(time(v[k]), `${path}.${k}`, 'invalid time or date');
+  });
+  items(c.accountQuota, 'accountQuota', (v, path) => {
+    check(QUOTA_STATES.includes(v.state), `${path}.state`, 'invalid state');
+    if ('remaining' in v) check(Number.isFinite(v.remaining) && v.remaining >= 0 && v.remaining <= 100, `${path}.remaining`, 'must be 0-100');
+  });
+  items(c.seats, 'seats', (v, path) => {
+    check(SEAT_TIERS.includes(v.tier), `${path}.tier`, 'invalid in-house tier');
+    for (const k of ['model', 'effort']) check(string(v[k]), `${path}.${k}`, 'required string');
+  });
+  items(c.hosts, 'hosts', (h, path) => {
+    for (const [key, allowed] of [['scenario', SCENARIOS], ['kind', ['vendor-native', 'multi-vendor', 'unknown']], ['route', ['acp-liaison', 'host-switch', 'none']]]) {
+      if (key in h) check(allowed.includes(h[key]), `${path}.${key}`, `must be one of ${allowed.join(', ')}`);
+    }
+    if ('home' in h) check(list(h.home), `${path}.home`, 'must list vendors');
+    if (h.profile != null) active(h.profile, `${path}.profile`);
+    constraints(h.constraints, `${path}.constraints`);
+    for (const k of ['roles', 'routing']) {
+      if (!(k in h)) continue;
+      check(record(h[k]), `${path}.${k}`, 'must be an object');
+      for (const [role, ids] of entries(h[k])) {
+        check(list(ids) && (k !== 'roles' || ids.every((id) => ID_RE.test(id) || AUTO.test(id))), `${path}.${k}.${role}`, 'invalid candidate list');
+      }
+    }
+    items(h.serves, `${path}.serves`, (v, p) => {
+      if ('strategy' in v) check(['primary-backup', 'spread', 'fixed'].includes(v.strategy), `${p}.strategy`, 'invalid strategy');
+      if ('accounts' in v) check(Array.isArray(v.accounts) && v.accounts.every((x) => record(x) && string(x.account) && string(x.instance)), `${p}.accounts`, 'must list {account, instance} objects');
+      for (const k of ['options', 'models']) if (k in v) check(record(v[k]) && Object.values(v[k]).every(string), `${p}.${k}`, 'must map strings to strings');
+    });
+  });
+  for (const [id, r] of entries(c.resources)) {
+    if (!record(r)) continue;
+    if ('account' in r) check(string(r.account), `resources.${id}.account`, 'must be a string');
+    if ('cost' in r) check(['free', 'included', 'metered'].includes(r.cost), `resources.${id}.cost`, 'invalid cost');
+  }
+  return errors;
+}
+
+export function validateConfig(c, parent = null) {
   const errors = [];
   if (!c || typeof c !== 'object' || Array.isArray(c)) return ['config must be a JSON object'];
   if (c.schema !== SCHEMA) errors.push(`schema must be ${SCHEMA}`);
   const res = c.resources ?? {};
-  if (typeof res !== 'object' || Array.isArray(res)) errors.push('resources must be an object keyed by id');
+  if (c.resources !== undefined && !record(c.resources)) errors.push('resources must be an object keyed by id');
   for (const [id, r] of Object.entries(res)) {
     if (!ID_RE.test(id)) errors.push(`resource id "${id}" is invalid`);
-    if (!r || typeof r !== 'object') { errors.push(`resource ${id} must be an object`); continue; }
+    if (!record(r)) { errors.push(`resource ${id} must be an object`); continue; }
     if (r.tier !== undefined && !TIERS.includes(r.tier)) errors.push(`resource ${id}: tier must be ${TIERS.join(' or ')}`);
     if (r.roles !== undefined && (!Array.isArray(r.roles) || r.roles.some((x) => !ROLE_RE.test(x)))) errors.push(`resource ${id}: roles must be a list of role names`);
     if (r.fallback !== undefined && !Array.isArray(r.fallback)) errors.push(`resource ${id}: fallback must be a list`);
@@ -405,7 +577,15 @@ export function validateConfig(c) {
     const e = windowErr(sch.when ?? {}, `schedule ${sch.id}`); if (e) errors.push(e);
     for (const k of ['prefer', 'avoid', 'roles']) if (sch[k] !== undefined && !strList(sch[k])) errors.push(`schedule ${sch.id}: ${k} must be a list`);
   }
-  if (c.review !== undefined && (typeof c.review !== 'object' || c.review === null)) errors.push('review must be an object');
+  const inherited = { ...c };
+  for (const key of ['profiles', 'accounts', 'seats', 'hosts']) {
+    if (parent?.[key] && record(c[key]) && Object.values(c[key]).every(record)) {
+      inherited[key] = key === 'hosts' ? mergeHosts(parent[key], c[key]) : mergeRows(parent[key], c[key]);
+    }
+  }
+  errors.push(...validateAdditions(inherited, parent?.profiles));
+  if (c.review !== undefined && !record(c.review)) errors.push('review must be an object');
+  if (c.review?.preferences !== undefined && !record(c.review.preferences)) errors.push('review.preferences must be an object');
   return errors;
 }
 
@@ -472,8 +652,9 @@ function writeScope(opts, mutate) {
   const next = updateFile(file, (cur) => {
     const base = cur ? { ...emptyConfig(), ...cur } : emptyConfig();
     const out = mutate(base);
+    out.rev = 2;
     out.updatedAt = new Date().toISOString();
-    const errors = validateConfig(out);
+    const errors = validateConfig(out, opts.scope === 'project' ? readConfig(globalDir()) : null);
     if (errors.length) throw new CodedError(3, errors.join('; '));
     return out;
   });
@@ -481,6 +662,47 @@ function writeScope(opts, mutate) {
 }
 
 // ---------- merging ----------
+
+export function mergeConstraints(a = {}, b = {}) {
+  const left = a.onlyVendors ?? [], right = b.onlyVendors ?? [];
+  const both = left.length > 0 && right.length > 0;
+  const onlyVendors = both ? left.filter((v) => right.includes(v)) : [...left, ...right];
+  const result = { onlyVendors: [...new Set(onlyVendors)], denyVendors: [...new Set([...(a.denyVendors ?? []), ...(b.denyVendors ?? [])])],
+    inHouseOnly: !!(a.inHouseOnly || b.inHouseOnly) };
+  if (a.noVendorsAllowed || b.noVendorsAllowed || (both && !onlyVendors.length)) {
+    result.onlyVendors = [];
+    result.noVendorsAllowed = true;
+  }
+  return result;
+}
+
+function mergeRows(a, b) {
+  const result = { ...a };
+  for (const [id, row] of entries(b)) result[id] = { ...a?.[id], ...row };
+  return result;
+}
+
+function mergeHosts(a, b) {
+  const result = mergeRows(a, b);
+  for (const [id, host] of entries(b)) {
+    if (record(host.serves)) result[id].serves = { ...a?.[id]?.serves, ...host.serves };
+  }
+  return result;
+}
+
+function mergeQuota(a, b) {
+  const result = { ...a };
+  const checked = (row) => {
+    const time = Date.parse(row?.checked);
+    return Number.isNaN(time) ? -Infinity : time;
+  };
+  for (const [id, q] of entries(b)) if (checked(q) >= checked(result[id])) result[id] = q;
+  return result;
+}
+
+function newestReviewDate(a, b) {
+  return [a, b].filter((date) => typeof date === 'string' && !Number.isNaN(Date.parse(date))).sort().at(-1) ?? null;
+}
 
 export function mergeConfigs(globalCfg, projectCfg) {
   const g = globalCfg ? { ...emptyConfig(), ...globalCfg } : null;
@@ -499,16 +721,31 @@ export function mergeConfigs(globalCfg, projectCfg) {
     seen.add(s.id);
     out.schedules.push(s);
   }
-  for (const src of [g?.quota ?? {}, p?.quota ?? {}]) {
-    for (const [id, q] of Object.entries(src)) {
-      const prev = out.quota[id];
-      const t = (x) => { const n = Date.parse(x?.checked ?? ''); return Number.isNaN(n) ? -Infinity : n; };
-      if (!prev || t(q) >= t(prev)) out.quota[id] = q;
+  out.quota = mergeQuota(g?.quota, p?.quota);
+  out.accountQuota = mergeQuota(g?.accountQuota, p?.accountQuota);
+  out.rowSources = { resources: { ...out.sources } };
+  for (const key of ['accounts', 'seats', 'profiles']) {
+    out[key] = mergeRows(g?.[key], p?.[key]);
+    out.rowSources[key] = {};
+    for (const id of Object.keys(out[key])) {
+      out.rowSources[key][id] = g?.[key]?.[id] && p?.[key]?.[id] ? 'project+global' : p?.[key]?.[id] ? 'project' : 'global';
     }
   }
+  out.hosts = mergeHosts(g?.hosts, p?.hosts);
+  out.rev = Math.max(p?.rev ?? 1, g?.rev ?? 1);
+  out.profile = p?.profile ?? g?.profile ?? { active: 'balanced' };
+  out.profileSource = p?.profile ? 'project' : g?.profile ? 'global' : 'default';
+  out.constraints = mergeConstraints(g?.constraints, p?.constraints);
   out.review = { ...(g?.review ?? {}), ...(p?.review ?? {}) };
-  const dates = [g?.review?.lastReviewed, p?.review?.lastReviewed].filter((d) => typeof d === 'string' && !Number.isNaN(Date.parse(d)));
-  out.review.lastReviewed = dates.sort().at(-1) ?? null;
+  if (g?.review.preferences || p?.review.preferences) {
+    const global = g?.review.preferences ?? {}, project = p?.review.preferences ?? {};
+    const prefs = { ...global, ...project };
+    for (const key of ['lastConfirmed', 'lastAsked', 'snoozeUntil']) {
+      if (key in prefs) prefs[key] = newestReviewDate(global[key], project[key]);
+    }
+    out.review.preferences = prefs;
+  }
+  out.review.lastReviewed = newestReviewDate(g?.review?.lastReviewed, p?.review?.lastReviewed);
   out.timezone = p?.timezone || g?.timezone || null;
   return out;
 }
@@ -525,6 +762,7 @@ export function configWarnings(eff) {
   }
   for (const [role, list] of Object.entries(eff.routing)) for (const x of list) ref(x, `routing.${role}`);
   for (const s of eff.schedules) for (const x of [...(s.prefer ?? []), ...(s.avoid ?? [])]) ref(x, `schedule ${s.id}`);
+  checkReferences(eff, (_path, message) => w.push(message));
   return w;
 }
 
@@ -537,16 +775,19 @@ export function defaultInHouse(role, tier) {
   return 'in-house:mid:medium';
 }
 
-export function resolveRole(eff, role, at = new Date()) {
+export function resolveRole(eff, role, at = new Date(), opts = {}) {
   const tz = eff.timezone || systemZone();
   const res = eff.resources;
   const candidates = [];
   const excluded = [];
+  const outsideRole = new Set();
   const via = new Map();
-  const base = eff.routing[role]
-    ? eff.routing[role]
-    : Object.keys(res).filter((id) => (res[id].roles ?? []).includes(role));
-  for (const id of base) via.set(id, eff.routing[role] ? `routing.${role}` : `role ${role}`);
+  const host = opts.host && Object.hasOwn(eff.hosts ?? {}, opts.host) ? eff.hosts[opts.host] : null;
+  const hostRoles = Object.hasOwn(host?.roles ?? {}, role) ? host.roles[role] : null;
+  const routing = Object.hasOwn(eff.routing, role) ? eff.routing[role] : null;
+  const base = hostRoles ?? routing ?? Object.keys(res).filter((id) => (res[id].roles ?? []).includes(role));
+  const origin = hostRoles ? `hosts.${opts.host}.roles.${role}` : routing ? `routing.${role}` : `role ${role}`;
+  for (const id of base) via.set(id, origin);
   let list = [...base];
   const active = [];
   const avoided = new Map();
@@ -555,7 +796,7 @@ export function resolveRole(eff, role, at = new Date()) {
     if (!matchesWindow(s.when ?? {}, at, tz)) continue;
     active.push(s.id);
     for (const id of s.avoid ?? []) if (!avoided.has(id)) avoided.set(id, s.id);
-    const pref = (s.prefer ?? []).filter((id) => res[id] && (list.includes(id) || (res[id].roles ?? []).includes(role)));
+    const pref = (hostRoles ? [] : s.prefer ?? []).filter((id) => res[id] && (list.includes(id) || (res[id].roles ?? []).includes(role)));
     for (const id of pref) via.set(id, `schedule ${s.id}`);
     list = [...pref, ...list.filter((x) => !pref.includes(x))];
   }
@@ -572,15 +813,29 @@ export function resolveRole(eff, role, at = new Date()) {
     if (id.startsWith('in-house:')) { inHouse.push(id); continue; }
     if (avoided.has(id)) continue;
     ordered.push(id);
+    // An in-house seat may share its id with an external resource.
+    if (hostRoles?.includes(id) && Object.hasOwn(eff.seats, id)) continue;
     for (const f of res[id]?.fallback ?? []) {
       if (!seen.has(f)) { queue.push(f); if (!via.has(f)) via.set(f, `fallback of ${id}`); }
     }
   }
   for (const [id, rule] of avoided) if (base.includes(id) || seen.has(id)) excluded.push({ id, reason: `avoided by schedule ${rule}` });
   for (const id of ordered) {
-    const r = res[id];
+    if (hostRoles?.includes(id)) {
+      const seat = Object.hasOwn(eff.seats, id) ? eff.seats[id] : null, auto = AUTO.exec(id);
+      if (seat || auto) {
+        const reason = seat?.vendor && vendorDenied(seat.vendor, eff.constraints) ? 'denied by constraint' : null;
+        if (reason) excluded.push({ id, reason });
+        else if (auto) candidates.push({ kind: 'auto', route: 'in-house', tier: auto[1], effort: auto[2] ?? null });
+        else candidates.push({ kind: 'seat', route: 'in-house', id, ...fields(seat, ['team', 'vendor', 'model', 'effort', 'tier']) });
+        continue;
+      }
+    }
+    const r = Object.hasOwn(res, id) ? res[id] : null;
     if (!r) { excluded.push({ id, reason: 'unknown resource' }); continue; }
     if (excluded.some((e) => e.id === id)) continue;
+    const restriction = resourceRestriction(r, eff.constraints, host, role);
+    if (restriction) { excluded.push({ id, reason: restriction }); continue; }
     if (r.enabled === false) { excluded.push({ id, reason: 'disabled' }); continue; }
     if (EDIT_ROLES.includes(role) && r.mayEdit === false) { excluded.push({ id, reason: 'review only (mayEdit: false)' }); continue; }
     if (r.windows?.length && !r.windows.some((w) => matchesWindow(w, at, tz))) {
@@ -595,19 +850,125 @@ export function resolveRole(eff, role, at = new Date()) {
       if (!pastBound(q.resets, at, tz, 'start')) { excluded.push({ id, reason: `quota exhausted until ${q.resets}` }); continue; }
       flags.push(`reset ${q.resets} has passed: the next job is the probe`);
     } else if (q?.state === 'low') flags.push('quota low: small batches only');
-    if (!(r.roles ?? []).includes(role)) flags.push(`fallback outside its roles (${(r.roles ?? []).join(',') || 'none'}): state it`);
-    candidates.push({
+    if (!hostRoles?.includes(id) && !(r.roles ?? []).includes(role)) {
+      outsideRole.add(id);
+      flags.push(`fallback outside its roles (${(r.roles ?? []).join(',') || 'none'}): state it`);
+    }
+    const candidate = {
       id, team: r.team ?? null, channel: r.channel ?? null, model: r.model ?? null, effort: r.effort ?? null,
       tier: r.tier ?? null, via: via.get(id) ?? null, flags,
-    });
+    };
+    expandResource(candidate, r, eff, host, opts, at, tz, candidates, excluded);
   }
   const tier = candidates[0]?.tier ?? res[base[0]]?.tier ?? null;
-  return {
+  const result = {
     role, at: at.toISOString(), timezone: tz, activeSchedules: active,
     pick: candidates[0] ?? null,
     candidates, excluded,
     inHouse: inHouse[inHouse.length - 1] ?? defaultInHouse(role, tier),
   };
+  return orderCandidates(result, eff, opts, at, outsideRole);
+}
+
+function resourceVendor(r) {
+  return r.vendor ?? TEAM_VENDORS[r.team]?.[0] ?? null;
+}
+
+function vendorDenied(vendor, c) {
+  return c && (c.noVendorsAllowed || c.denyVendors?.includes(vendor) ||
+    (c.onlyVendors?.length && !c.onlyVendors.includes(vendor)));
+}
+
+function resourceRestriction(r, constraints, host, role) {
+  if (constraints?.inHouseOnly) return 'in-house only';
+  const vendor = resourceVendor(r);
+  if (vendorDenied(vendor, constraints)) return 'denied by constraint';
+  if (!role.startsWith('in-house-') && host?.home?.includes(vendor)) return 'home vendor on this host: dispatch in-house';
+  return null;
+}
+
+function expandResource(candidate, r, eff, host, opts, at, tz, candidates, excluded) {
+  const id = candidate.id;
+  const served = Object.hasOwn(host?.serves ?? {}, r.team) ? host.serves[r.team] : null;
+  const routes = served?.accounts ?? [{ account: r.account ?? null, instance: null }];
+  if (!routes.length) {
+    excluded.push({ id, reason: `no account served for team ${r.team} on this host` });
+    return;
+  }
+  if (r.account && !routes.some((a) => a.account === r.account)) {
+    excluded.push({ id, reason: `account ${r.account} ${Object.hasOwn(eff.accounts ?? {}, r.account) ? 'not served on this host' : 'undeclared'}` });
+    return;
+  }
+  for (const { account, instance } of routes) {
+    if (r.account && account !== r.account) continue;
+    if (account && !Object.hasOwn(eff.accounts ?? {}, account)) { excluded.push({ id, reason: `account ${account} undeclared` }); continue; }
+    const quota = account == null ? null : eff.accountQuota?.[account];
+    if (quota?.state === 'exhausted' && (!quota.resets || quota.resets === 'unknown' || !pastBound(quota.resets, at, tz, 'start'))) {
+      const until = quota.resets && quota.resets !== 'unknown' ? ` until ${quota.resets}` : ', reset unknown: ask the user once';
+      excluded.push({ id, reason: `account ${account} exhausted${until}` });
+      continue;
+    }
+    if (!opts.host) { candidates.push(candidate); continue; }
+    candidates.push({ ...candidate, route: served ? 'host-switch' : 'acp-liaison', account, instance,
+      hostModel: served?.models?.[r.model] ?? candidate.model, options: served?.options?.effort ? { [served.options.effort]: r.effort } : {} });
+  }
+}
+
+function orderCandidates(result, eff, opts, at, outsideRole) {
+  const name = opts.profile ?? eff.profile?.active ?? 'balanced';
+  const profile = profileInfo(name, eff.profiles ?? {});
+  if (!profile) throw new CodedError(opts.profile ? 5 : 3, `profile: unknown profile ${name}`);
+  const ranked = result.candidates.map((candidate) => {
+    const id = candidate.id;
+    const r = candidate.kind ? {} : eff.resources[id] ?? {};
+    const account = candidate.account ?? r.account ?? null;
+    const a = account == null ? null : eff.accounts?.[account];
+    const aq = account == null ? null : eff.accountQuota?.[account];
+    const rq = candidate.kind ? null : eff.quota?.[id];
+    const state = aq?.state ?? rq?.state;
+    const soon = [a?.expires, aq?.expires, rq?.expires].some((t) => expiresSoon(t, at, result.timezone));
+    const bucket = soon ? 0 : state === 'plenty' ? 1 : state === 'low' ? 3 : 2;
+    const cost = r.cost ?? { free: 'free', subscription: 'included', metered: 'metered', prepaid: 'metered' }[a?.billing];
+    return { candidate, account, bucket, weight: a?.weight ?? 1, cost: { free: 0, included: 1, metered: 3 }[cost] ?? 2,
+      tier: candidate.tier === 'external-strong' ? 1 : 0, outside: outsideRole.has(id) ? 1 : 0 };
+  });
+  // Every profile keeps the role's own candidates ahead of out-of-role fallbacks, so `pick` agrees with `assignments`.
+  if (profile.base === 'frugal') ranked.sort((a, b) => a.outside - b.outside || a.cost - b.cost || a.tier - b.tier);
+  if (profile.base === 'load-balance') ranked.sort((a, b) => a.outside - b.outside || a.bucket - b.bucket);
+  result.candidates = ranked.map((item) => item.candidate);
+  result.pick = result.candidates[0] ?? null;
+  if (opts.host || opts.profile || opts.session || opts.count || eff.constraints?.noVendorsAllowed) {
+    result.host = opts.host ?? null;
+    result.constraints = eff.constraints;
+    result.profile = { name, base: profile.base, source: opts.profile ? 'session' : eff.profileSource ?? 'default' };
+    result.parallel = profile.parallel;
+  }
+  if (opts.count) {
+    const counts = new Map(), usedLow = new Set();
+    const inRole = ranked.filter(({ candidate }) => !outsideRole.has(candidate.id));
+    result.assignments = [];
+    for (let job = 1; job <= opts.count; job++) {
+      let pick = ranked[0];
+      if (profile.base === 'load-balance') {
+        pick = null;
+        let best = Infinity;
+        const eligible = inRole.some((item) => !usedLow.has(item)) ? inRole : ranked;
+        for (const item of eligible) {
+          const used = counts.get(item.account ?? item.candidate) ?? 0;
+          if (usedLow.has(item)) continue;
+          const score = (used + 1) / item.weight;
+          if (!pick || item.bucket < pick.bucket || (item.bucket === pick.bucket && score < best)) { pick = item; best = score; }
+        }
+      }
+      if (!pick) break;
+      if (pick.bucket === 3) usedLow.add(pick);
+      const key = pick.account ?? pick.candidate;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+      result.assignments.push({ job, id: pick.candidate.id ?? `auto:${pick.candidate.tier}${pick.candidate.effort ? ':' + pick.candidate.effort : ''}`,
+        account: pick.account, instance: pick.candidate.instance ?? null });
+    }
+  }
+  return result;
 }
 
 // ---------- review cadence, usage ----------
@@ -759,9 +1120,9 @@ export function checkModels(eff, ranking, available, { perVendor = 3 } = {}) {
 
 function loadEffective(root) {
   const g = globalDir(); const info = projectInfo(root);
-  const gc = readConfig(g); const pc = readConfig(info.dir);
+  const gc = readConfig(g); const pc = readConfig(info.dir, gc);
   const eff = mergeConfigs(gc, pc);
-  return { global: { dir: g, exists: !!gc }, project: { dir: info.dir, root: info.root, exists: !!pc }, eff, any: Object.keys(eff.resources).length > 0 };
+  return { global: { dir: g, exists: !!gc }, project: { dir: info.dir, root: info.root, exists: !!pc }, eff, any: hasPlan(eff) };
 }
 
 // Harness overlays: harness-<host>.md beside compute.json, one per multi-vendor host, mapping each
@@ -789,9 +1150,264 @@ function rankingStatus(now = new Date()) {
   } catch { return { file, fetchedAt: null, ageDays: null, stale: true }; }
 }
 
+function hasPlan(eff) {
+  return ['resources', 'hosts', 'seats'].some((key) => Object.keys(eff[key] ?? {}).length > 0);
+}
+
+function checkReferences(eff, report) {
+  const account = (id, keys) => {
+    if (!Object.hasOwn(eff.accounts ?? {}, id)) report(keys, `${keys.join('.')}: account ${id} undeclared`);
+  };
+  for (const [id, r] of entries(eff.resources)) if (r.account) account(r.account, ['resources', id, 'account']);
+  for (const [id, h] of entries(eff.hosts)) {
+    for (const [team, served] of entries(h.serves)) {
+      for (const a of served.accounts ?? []) account(a.account, ['hosts', id, 'serves', team, 'accounts']);
+    }
+    for (const [role, list] of entries(h.roles)) {
+      for (const x of list) if (!AUTO.test(x) && !Object.hasOwn(eff.seats, x) && !Object.hasOwn(eff.resources, x)) {
+        report(['hosts', id, 'roles', role], `hosts.${id}.roles.${role}: unknown seat or resource ${x}`);
+      }
+    }
+  }
+}
+
+function stateLocation(root) {
+  const info = projectInfo(root);
+  return { info, file: path.join(info.gitCommonDir ? info.dir : globalDir(), STATE_FILE) };
+}
+
+function stateData(raw) {
+  if (raw === null) return { schema: 1, lastHost: null, sessions: Object.create(null), carryOver: [] };
+  if (raw.schema !== 1 || !record(raw.sessions) || !Array.isArray(raw.carryOver)) throw new CodedError(3, 'invalid compute-state.json');
+  raw.sessions = Object.assign(Object.create(null), raw.sessions);
+  // Older carry-over entries omit saveAsked. Only unanswered notes were carried.
+  for (const note of raw.carryOver) if (note.saveAsked === undefined) note.saveAsked = null;
+  return raw;
+}
+
+function readJsonFile(file) {
+  const text = fs.readFileSync(file, 'utf8');
+  try { return JSON.parse(text); } catch (err) { throw new CodedError(3, `${file}: ${err.message}`); }
+}
+
+function readState(root) {
+  const { file } = stateLocation(root);
+  return stateData(fs.existsSync(file) ? readJsonFile(file) : null);
+}
+
+function pruneState(state, at) {
+  for (const [session, current] of entries(state.sessions)) {
+    if (Date.parse(current.touchedAt) >= at.getTime() - 14 * DAY_MS) continue;
+    for (const note of current.notes) if (note.saveAsked === null) {
+      state.carryOver.push({ at: note.at, session, what: note.what, saveAsked: null });
+    }
+    delete state.sessions[session];
+  }
+  state.carryOver.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  state.carryOver = state.carryOver.slice(-10);
+}
+
+// A summary retains the individual edit even after a later edit or pruning.
+// Quote free text as one JSON string so notes round-trip without invoking a shell.
+function summaryWord(text) {
+  return /^[a-z0-9.,_:+/-]+$/i.test(text) ? text : JSON.stringify(text);
+}
+
+function summarizeEdit(command, values) {
+  const words = [command];
+  for (const [key, value] of entries(values)) {
+    let arg;
+    if (key === 'windows') arg = value.map(formatWhen).join('; ');
+    else if (key === 'when') arg = formatWhen(value);
+    else if (Array.isArray(value)) arg = value.join(',');
+    else if (typeof value === 'boolean') arg = value ? 'yes' : 'no';
+    else arg = value;
+    const flag = '--' + key.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase());
+    words.push(flag, summaryWord(arg));
+  }
+  return words.join(' ');
+}
+
+function notePatch(note) {
+  const words = note.what.match(/"(?:\\.|[^"\\])*"|[^\s"]+/g) ?? [];
+  const argv = [];
+  const decode = (word) => word.startsWith('"') ? JSON.parse(word) : word;
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    if (!word.startsWith('--')) { argv.push(decode(word)); continue; }
+    const next = words[++i];
+    if (next === undefined) throw new CodedError(3, `missing value for ${word} in session note`);
+    argv.push(word + '=' + decode(next));
+  }
+  const opts = parseArgs([...argv, '--scope', 'session', '--session', 'saved']);
+  if (opts.command === 'set') return { resources: { [opts.id]: fields(opts, RESOURCE_FIELDS) } };
+  if (opts.command === 'route') return { routing: { [opts.role]: opts.order } };
+  if (opts.command === 'schedule' && opts.action === 'add') return { schedules: [{ id: opts.id, ...fields(opts, RULE_FIELDS) }] };
+  if (opts.command === 'profile' && opts.action === 'use') return { profile: { active: opts.id, until: opts.until ?? null } };
+  throw new CodedError(3, 'unrecognized session override');
+}
+
+function updateState(opts, mutate) {
+  const { info, file } = stateLocation(opts.root);
+  if (info.gitCommonDir && !fs.existsSync(file)) ensureExcluded(info);
+  const at = opts.at ?? new Date();
+  const state = updateFile(file, (cur) => {
+    const data = stateData(cur);
+    pruneState(data, at);
+    mutate(data, at);
+    return data;
+  });
+  return { state, file };
+}
+
+function newSession(host, runtime, at) {
+  return { host, runtime, startedAt: at.toISOString(), touchedAt: at.toISOString(),
+    patch: { resources: {}, routing: {}, schedules: [], constraints: {} }, notes: [] };
+}
+
+function mergePlan(base, patch) {
+  const out = { ...base, ...patch };
+  for (const key of ['accounts', 'seats', 'profiles', 'resources', 'hosts']) {
+    if (key in patch) out[key] = mergeRows(base[key], patch[key]);
+  }
+  for (const key of ['routing', 'quota', 'accountQuota']) if (key in patch) out[key] = { ...base[key], ...patch[key] };
+  if ('schedules' in patch) {
+    const byId = new Map((base.schedules ?? []).map((s) => [s.id, s]));
+    for (const s of patch.schedules) byId.set(s.id, s);
+    out.schedules = [...byId.values()];
+  }
+  if ('review' in patch) {
+    out.review = { ...base.review, ...patch.review };
+    if (patch.review.preferences) out.review.preferences = { ...base.review?.preferences, ...patch.review.preferences };
+  }
+  return out;
+}
+
+function scopedPlan(eff, hostId, patch = {}) {
+  const host = hostId && Object.hasOwn(eff.hosts, hostId) ? eff.hosts[hostId] : {};
+  const result = mergePlan(eff, patch);
+  result.routing = { ...eff.routing, ...host.routing, ...patch.routing };
+  result.constraints = mergeConstraints(mergeConstraints(eff.constraints, host.constraints), patch.constraints);
+  const p = patch.profile ?? host.profile ?? eff.profile;
+  result.profile = typeof p === 'string' ? { active: p } : p;
+  result.profileSource = patch.profile ? 'session' : host.profile ? 'host' : eff.profileSource;
+  result.sources = { ...eff.sources };
+  for (const id of Object.keys(patch.resources ?? {})) result.sources[id] = 'session';
+  result.rowSources = { ...eff.rowSources, resources: result.sources };
+  return result;
+}
+
+function loadPlan(opts) {
+  const loaded = loadEffective(opts.root);
+  const session = opts.session ? readState(opts.root).sessions[opts.session] : null;
+  loaded.eff = scopedPlan(loaded.eff, opts.host, session?.patch);
+  loaded.any = hasPlan(loaded.eff);
+  return loaded;
+}
+
+function profileSummary(eff) {
+  const info = profileInfo(eff.profile.active, eff.profiles);
+  if (!info) throw new CodedError(3, `profile.active: unknown profile ${eff.profile.active}`);
+  return { active: info.name, base: info.base, source: eff.profileSource };
+}
+
+export function preferencesStatus(p = {}, at, tz) {
+  const everyDays = p.everyDays ?? 30;
+  const lastConfirmed = p.lastConfirmed ?? null, snoozeUntil = p.snoozeUntil ?? null;
+  const today = zoned(at, tz).date;
+  const due = (!snoozeUntil || snoozeUntil < today) &&
+    (!lastConfirmed || (Date.parse(today) - Date.parse(lastConfirmed)) / DAY_MS >= everyDays);
+  return { due, lastConfirmed, snoozeUntil, everyDays };
+}
+
+function expiresSoon(time, at, tz) {
+  if (!time || pastBound(time, at, tz, 'end')) return false;
+  const end = new Date(at.getTime() + 3 * DAY_MS);
+  return /^\d{4}-\d\d-\d\d$/.test(time) ? time <= zoned(end, tz).date : Date.parse(time) <= end.getTime();
+}
+
+function startQuestions(host, state, key, eff, prefs, at) {
+  const ask = [];
+  const add = (id, question, options, recommended) => ask.push({ id, question, options, recommended });
+  if (['unknown', 'new'].includes(host.change)) add('host-scenario', 'Where does this session run?', SCENARIOS, host.scenario);
+  if (host.change === 'served-changed') add('host-served-changed', 'Update the providers and models this host serves?', ['review', 'keep'], 'review');
+  if (prefs.due && hasPlan(eff)) add('preferences-review', 'Keep or adjust your compute preferences?', ['keep', 'adjust', 'later'], 'keep');
+  const pending = (n) => n.saveAsked === null;
+  if (state.carryOver.some(pending) || entries(state.sessions).some(([id, s]) => id !== key && s.notes.some(pending))) {
+    add('unsaved-overrides', 'Where should the previous overrides be kept?', ['session', 'project', 'global'], 'session');
+  }
+  const seen = new Map();
+  const remember = (id, what) => { if (!seen.has(what)) seen.set(what, new Set()); seen.get(what).add(id); };
+  for (const [id, s] of entries(state.sessions)) for (const n of s.notes.filter(pending)) remember(id, n.what);
+  for (const n of state.carryOver.filter(pending)) remember(n.session, n.what);
+  if ([...seen.values()].some((ids) => ids.size >= 2)) add('repeat-override', 'Where should the repeated override be kept?', ['session', 'project', 'global'], 'project');
+  const tz = eff.timezone || systemZone();
+  if ([...Object.values(eff.accounts), ...Object.values(eff.accountQuota)].some((a) => expiresSoon(a.expires, at, tz))) {
+    add('account-expiry', 'Review accounts expiring within three days?', ['review', 'later'], 'review');
+  }
+  if (eff.profile.until && pastBound(eff.profile.until, at, tz, 'end')) add('profile-until-passed', 'Review the expired profile?', ['review', 'keep'], 'review');
+  return ask;
+}
+
+function cmdStart(opts) {
+  const loaded = loadEffective(opts.root);
+  const hint = detectHost(process.env);
+  const id = opts.host ?? hint.id;
+  const h = Object.hasOwn(loaded.eff.hosts, id) ? loaded.eff.hosts[id] : null;
+  const matched = id === hint.id;
+  const runtime = opts.runtime ?? hint.runtime ?? null;
+  const known = matched ? hint : [...HOST_HINTS, ...WRAPPER_HOSTS].find((entry) => entry.id === id);
+  const sha = (s) => createHash('sha256').update(s).digest('hex');
+  const generated = !opts.session && !hint.sessionVar;
+  const key = opts.session ?? (generated ? randomBytes(6).toString('hex') : sha(`${id}:${process.env[hint.sessionVar]}`).slice(0, 16));
+  const lines = opts.served ? fs.readFileSync(opts.served, 'utf8').split('\n').map((s) => s.trim()).filter(Boolean) : null;
+  const served = lines ? `sha256:${sha([...new Set(lines)].sort().join('\n'))}` : null;
+  const kind = h?.kind ?? known?.kind ?? kindFromName(id) ?? 'unknown';
+  const kindRoute = { 'vendor-native': 'acp-liaison', 'multi-vendor': 'host-switch' }[kind] ?? null;
+  const host = { id, name: h?.name ?? known?.name ?? id, scenario: h?.scenario ?? known?.scenario ?? scenarioFromName(id) ?? 'unknown',
+    kind, route: h?.route ?? (matched && !h?.kind ? hint.route : kindRoute),
+    runtime, evidence: matched ? hint.evidence : [], verified: matched && hint.verified, plan: h ? 'present' : 'missing' };
+  if (!matched) host.detected = { id: hint.id, evidence: hint.evidence };
+  let resumed;
+  const at = opts.at ?? new Date();
+  const { state, file } = updateState({ ...opts, at }, (s) => {
+    const prev = s.lastHost;
+    const current = Object.hasOwn(s.sessions, key) ? s.sessions[key] : null;
+    resumed = !!current;
+    host.previous = prev;
+    if (!opts.host && ['unknown', 'other'].includes(id)) host.change = 'unknown';
+    else if (!h) host.change = 'new';
+    else if (prev && (id !== prev.id || (current?.host != null && current.host !== id))) host.change = 'changed';
+    else if (prev && runtime !== prev.runtime) host.change = 'runtime-changed';
+    else if (served && prev?.served && served !== prev.served) host.change = 'served-changed';
+    else host.change = 'same';
+    s.lastHost = { id, runtime, served, at: at.toISOString(), session: key };
+    s.sessions[key] = { ...(current ?? newSession(id, runtime, at)), host: id, runtime, touchedAt: at.toISOString() };
+  });
+  const eff = scopedPlan(loaded.eff, id, state.sessions[key].patch);
+  const tz = eff.timezone || systemZone();
+  const review = { models: reviewStatus(eff.review, at, tz), preferences: preferencesStatus(eff.review.preferences, at, tz) };
+  const ranking = rankingStatus(at);
+  const harnessOverlays = overlaysFor(loaded);
+  const say = [];
+  if (eff.constraints.noVendorsAllowed) say.push('No vendors satisfy the combined vendor allowlists.');
+  if (['same', 'changed', 'runtime-changed'].includes(host.change)) say.push(`Host ${id} (${host.change}), runtime ${runtime ?? 'unknown'}.`);
+  if (review.models.due) say.push('Model review is due.');
+  if (ranking.stale) say.push('Model ranking is stale or missing.');
+  for (const o of harnessOverlays) if (o.superseded) say.push(`Host ${o.host}: the plan supersedes ${path.basename(o.file)}.`);
+  return { ok: true, needsInit: !hasPlan(eff), host, session: { key, generated, resumed, file },
+    profile: profileSummary(eff), constraints: eff.constraints, review, ranking, harnessOverlays,
+    ask: startQuestions(host, state, key, eff, review.preferences, at), say };
+}
+
+function overlaysFor({ project, global, eff }) {
+  return listOverlays([['project', project.dir], ['global', global.dir]]).map((o) =>
+    eff.hosts[o.host]?.serves ? { ...o, superseded: true } : o);
+}
+
 function cmdShow(opts) {
   const at = opts.at ?? new Date();
-  const { global, project, eff, any } = loadEffective(opts.root);
+  const { global, project, eff, any } = loadPlan(opts);
   const tz = eff.timezone || systemZone();
   const quotaNotes = [];
   for (const [id, q] of Object.entries(eff.quota)) {
@@ -804,12 +1420,15 @@ function cmdShow(opts) {
   const expired = eff.schedules.filter((s) => s.when?.until && !boundOk(s.when.until, at, zoned(at, s.when.tz || tz), true)).map((s) => `${s.id} (${s.scope})`);
   return {
     ok: true, needsInit: !any, global, project, timezone: tz,
+    rev: eff.rev, profile: profileSummary(eff), constraints: eff.constraints, sources: eff.rowSources, accounts: eff.accounts, accountQuota: eff.accountQuota,
+    seats: eff.seats, profiles: eff.profiles, hosts: Object.fromEntries(entries(eff.hosts).map(([id, h]) => [id, fields(h, ['scenario', 'kind', 'route'])])),
+    ...(opts.host ? { effectiveHost: eff.hosts[opts.host] ?? null } : {}),
     review: reviewStatus(eff.review, at, tz),
     ranking: rankingStatus(at),
     resources: Object.fromEntries(Object.entries(eff.resources).map(([id, r]) => [id, { ...r, scope: eff.sources[id] }])),
     routing: eff.routing, schedules: eff.schedules, activeSchedules: active, expiredSchedules: expired,
     quota: eff.quota, quotaNotes, warnings: configWarnings(eff),
-    harnessOverlays: listOverlays([['project', project.dir], ['global', global.dir]]),
+    harnessOverlays: overlaysFor({ global, project, eff }),
   };
 }
 
@@ -822,15 +1441,17 @@ function cmdInit(opts) {
     try { data = { ...emptyConfig(), ...JSON.parse(fs.readFileSync(opts.from, 'utf8')) }; } catch (err) { throw new CodedError(3, `${opts.from}: ${err.message}`); }
   }
   data.review = { everyDays: DEFAULT_REVIEW_DAYS, ...data.review, lastReviewed: data.review?.lastReviewed ?? zoned(new Date(), data.timezone || systemZone()).date };
-  const errors = validateConfig(data);
+  const errors = validateConfig(data, opts.scope === 'project' ? readConfig(globalDir()) : null);
   if (errors.length) throw new CodedError(3, errors.join('; '));
   const out = writeScope(opts, () => data);
   return { ok: true, scope: opts.scope, file: out.file, exclude: out.exclude, resources: Object.keys(out.config.resources) };
 }
 
 function cmdSet(opts) {
-  const fields = ['team', 'channel', 'model', 'effort', 'tier', 'roles', 'fallback', 'mayEdit', 'enabled', 'windows', 'vendor', 'note'];
-  const patch = Object.fromEntries(fields.filter((f) => opts[f] !== undefined).map((f) => [f, opts[f]]));
+  const patch = fields(opts, RESOURCE_FIELDS);
+  if (opts.scope === 'session') {
+    return sessionEdit(opts, { resources: { [opts.id]: patch } }, summarizeEdit(`set ${opts.id}`, patch));
+  }
   const out = writeScope(opts, (c) => {
     c.resources[opts.id] = { ...(c.resources[opts.id] ?? {}), ...patch };
     return c;
@@ -848,6 +1469,7 @@ function cmdRemove(opts) {
 }
 
 function cmdRoute(opts) {
+  if (opts.scope === 'session') return sessionEdit(opts, { routing: { [opts.role]: opts.order } }, `route ${opts.role} ${summaryWord(opts.order?.join(',') ?? '-')}`);
   const out = writeScope(opts, (c) => {
     if (opts.order === null) delete c.routing[opts.role];
     else c.routing[opts.role] = opts.order;
@@ -857,6 +1479,9 @@ function cmdRoute(opts) {
 }
 
 function cmdSchedule(opts) {
+  const values = fields(opts, RULE_FIELDS);
+  const rule = { id: opts.id, ...values };
+  if (opts.scope === 'session') return sessionEdit(opts, { schedules: [rule] }, summarizeEdit(`schedule add ${opts.id}`, values));
   const out = writeScope(opts, (c) => {
     const i = c.schedules.findIndex((s) => s.id === opts.id);
     if (opts.action === 'remove') {
@@ -864,15 +1489,110 @@ function cmdSchedule(opts) {
       c.schedules.splice(i, 1);
       return c;
     }
-    const rule = { id: opts.id, when: opts.when };
-    if (opts.prefer) rule.prefer = opts.prefer;
-    if (opts.avoid) rule.avoid = opts.avoid;
-    if (opts.roles) rule.roles = opts.roles;
-    if (opts.note) rule.note = opts.note;
     if (i >= 0) c.schedules[i] = rule; else c.schedules.push(rule);
     return c;
   });
   return { ok: true, scope: opts.scope, file: out.file, schedules: out.config.schedules };
+}
+
+function sessionEdit(opts, patch, what) {
+  const { eff } = loadEffective(opts.root);
+  const { state, file } = updateState(opts, (s, at) => {
+    const current = s.sessions[opts.session] ??= newSession(null, null, at);
+    const merged = mergePlan(current.patch, patch);
+    if (patch.routing && opts.order === null) delete merged.routing[opts.role];
+    const plan = scopedPlan(eff, opts.host ?? current.host, merged);
+    const errors = validateConfig({ ...plan, schema: SCHEMA });
+    if (errors.length) throw new CodedError(3, errors.join('; '));
+    current.patch = merged;
+    current.touchedAt = at.toISOString();
+    current.notes.push({ at: at.toISOString(), what, saveAsked: null });
+  });
+  return { ok: true, scope: 'session', file, session: opts.session, patch: state.sessions[opts.session].patch };
+}
+
+function cmdPromote(opts) {
+  let saved = 0, target;
+  const matches = (note) => (!opts.what || note.what === opts.what);
+  const { file } = updateState(opts, (s, at) => {
+    const current = s.sessions[opts.session];
+    const notes = (current?.notes ?? []).filter(matches);
+    const carried = s.carryOver.filter((n) => n.session === opts.session && matches(n));
+    if (!current && !carried.length) throw new CodedError(5, 'session patch is unavailable');
+    const selected = [...carried, ...notes].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+    if (!opts.decline && selected.length) {
+      const tz = loadEffective(opts.root).eff.timezone || systemZone();
+      target = writeScope(opts, (c) => {
+        for (const n of selected) {
+          const patch = notePatch(n);
+          c = mergePlan(c, patch);
+          if (patch.profile) c.profile = { ...patch.profile, by: 'user', at: zoned(new Date(n.at), tz).date };
+          for (const [role, ids] of entries(patch.routing)) if (ids === null) delete c.routing[role];
+        }
+        return c;
+      }).file;
+    }
+    s.carryOver = s.carryOver.filter((n) => !carried.includes(n));
+    for (const n of notes) n.saveAsked = opts.decline ? 'session' : opts.scope;
+    if (current) current.touchedAt = at.toISOString();
+    saved = selected.length;
+  });
+  return { ok: true, session: opts.session, scope: opts.scope ?? 'session', file: target ?? file, saved };
+}
+
+function cmdEntity(opts) {
+  const { eff } = loadEffective(opts.root);
+  const key = { profile: 'profiles', host: 'hosts', account: 'accounts', seat: 'seats' }[opts.command];
+  const id = opts.id;
+  const at = opts.at ?? new Date(), today = zoned(at, eff.timezone || systemZone()).date;
+  if (opts.action === 'list') {
+    return { ok: true, profiles: Object.fromEntries([...Object.keys(PARALLEL), ...Object.keys(eff.profiles)].map((name) => [name, profileInfo(name, eff.profiles)])) };
+  }
+  if (opts.action === 'show') {
+    if (!Object.hasOwn(eff.hosts, id)) throw new CodedError(5, `unknown host ${id}`);
+    return { ok: true, id, host: eff.hosts[id] };
+  }
+  if (opts.action === 'use') {
+    if (!profileInfo(id, eff.profiles)) throw new CodedError(5, `unknown profile ${id}`);
+    const profile = { active: id, by: 'user', at: today, until: opts.until ?? null };
+    if (opts.scope === 'session') return sessionEdit(opts, { profile: opts.until ? profile : id }, `profile use ${id}${opts.until ? ' --until ' + opts.until : ''}`);
+    const { file } = writeScope(opts, (c) => ({ ...c, profile }));
+    return { ok: true, scope: opts.scope, file, profile };
+  }
+  if (opts.action === 'quota') {
+    if (!Object.hasOwn(eff.accounts, id)) throw new CodedError(5, `unknown account ${id}`);
+    const quota = { checked: at.toISOString(), ...fields(opts, ['state', 'resets', 'expires', 'remaining', 'source', 'note']) };
+    const { file } = writeScope(opts, (c) => ({ ...c, accountQuota: { ...c.accountQuota, [id]: quota } }));
+    return { ok: true, scope: opts.scope, file, account: id, quota };
+  }
+  let value;
+  if (opts.action !== 'remove') {
+    switch (key) {
+      case 'profiles': value = fields(opts, ['extends', 'parallelism', 'note']); break;
+      case 'accounts': value = fields(opts, ['vendor', 'team', 'billing', 'plan', 'cycle', 'resets', 'expires', 'weight', 'note']); break;
+      case 'seats': value = fields(opts, ['team', 'vendor', 'model', 'effort', 'tier', 'note']); break;
+      case 'hosts':
+        if (opts.from && ['name', 'scenario', 'kind', 'route', 'home', 'confirmed'].some((k) => opts[k] !== undefined)) throw new UsageError('host set takes --from or host fields');
+        value = opts.from ? readJsonFile(opts.from) : fields(opts, ['name', 'scenario', 'kind', 'route', 'confirmed']);
+        if (!record(value)) throw new CodedError(3, `hosts.${id}: must be an object`);
+        if (opts.home !== undefined) value.home = splitList(opts.home);
+        break;
+    }
+  }
+  const { file, config } = writeScope(opts, (c) => {
+    c[key] ??= {};
+    if (opts.action === 'remove') {
+      if (!Object.hasOwn(c[key], id)) throw new CodedError(5, `unknown ${opts.command} ${id} in ${opts.scope}`);
+      delete c[key][id];
+    } else {
+      if (key === 'accounts') {
+        value.declared = c.accounts[id]?.declared ?? (opts.scope === 'project' ? eff.accounts[id]?.declared : null) ?? today;
+      }
+      c[key][id] = { ...c[key][id], ...value };
+    }
+    return c;
+  });
+  return { ok: true, file, scope: opts.scope, id, value: config[key][id] ?? null };
 }
 
 function cmdQuota(opts) {
@@ -889,10 +1609,10 @@ function cmdRecord(opts) {
   const dir = scopeDir(opts.scope, opts.root);
   if (opts.scope === 'project') ensureExcluded(projectInfo(opts.root));
   fs.mkdirSync(dir, { recursive: true });
-  const { eff } = loadEffective(opts.root);
+  const { eff } = loadPlan(opts);
   const r = eff.resources[opts.id] ?? {};
   const entry = { at: new Date().toISOString(), resource: opts.id, model: r.model ?? null, effort: r.effort ?? null, outcome: opts.outcome };
-  for (const k of ['task', 'role', 'minutes', 'tokensIn', 'tokensOut', 'note']) if (opts[k] !== undefined) entry[k] = opts[k];
+  for (const k of ['task', 'role', 'minutes', 'tokensIn', 'tokensOut', 'note', 'host', 'account', 'instance', 'session']) if (opts[k] !== undefined) entry[k] = opts[k];
   if (opts.cost !== undefined) entry.costUsd = opts.cost;
   entry.project = path.basename(projectInfo(opts.root).root);
   const file = path.join(dir, USAGE_FILE);
@@ -908,13 +1628,23 @@ function cmdUsage(opts) {
 }
 
 function cmdResolve(opts) {
-  const { eff, any } = loadEffective(opts.root);
+  const { eff, any } = loadPlan(opts);
   if (!any) throw new CodedError(2, 'no compute config yet: ask the user the setup questions, then run init');
-  return { ok: true, ...resolveRole(eff, opts.role, opts.at ?? new Date()) };
+  return { ok: true, ...resolveRole(eff, opts.role, opts.at ?? new Date(), opts) };
 }
 
 function cmdReviewed(opts) {
+  const { eff } = loadEffective(opts.root);
+  const today = zoned(opts.at ?? new Date(), eff.timezone || systemZone()).date;
   const out = writeScope(opts, (c) => {
+    if (opts.what === 'preferences') {
+      const p = c.review.preferences ??= {};
+      p.lastAsked = today;
+      if (opts.decision === 'later') p.snoozeUntil = new Date(Date.parse(today) + (opts.snoozeDays ?? 3) * DAY_MS).toISOString().slice(0, 10);
+      else { p.lastConfirmed = today; p.snoozeUntil = null; }
+      if (opts.everyDays) p.everyDays = opts.everyDays;
+      return c;
+    }
     c.review = { ...c.review, lastReviewed: zoned(new Date(), c.timezone || systemZone()).date };
     if (opts.everyDays) c.review.everyDays = opts.everyDays;
     return c;
@@ -940,9 +1670,160 @@ function cmdCheckModels(opts) {
   return { ok: true, rankingFile, ...result };
 }
 
+function checkPlan(eff, hostId, draft) {
+  const errors = [], warnings = [];
+  // Resources and ledger rows are keyed by id. Hosts also inherit routes,
+  // role lists and served teams independently; a name edit touches none of those.
+  const report = (keys, message) => {
+    const [section, id, field, item] = keys;
+    const touched = section === 'hosts'
+      ? Object.hasOwn(draft?.hosts?.[id]?.[field] ?? {}, item)
+      : Object.hasOwn(draft?.[section] ?? {}, id);
+    (draft && !touched ? warnings : errors).push(message);
+  };
+  checkReferences(eff, report);
+  for (const id of Object.keys(eff.accountQuota)) {
+    if (!Object.hasOwn(eff.accounts, id)) report(['accountQuota', id], `accountQuota.${id}: account ${id} undeclared`);
+  }
+  const reachesInHouse = (id, seen) => {
+    if (id.startsWith('in-house:')) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return (eff.resources[id]?.fallback ?? []).some((next) => reachesInHouse(next, seen));
+  };
+  for (const [id, r] of entries(eff.resources)) {
+    if (typeof r.effort !== 'string' || !r.effort.trim()) report(['resources', id], `resources.${id}.effort: pin an effort`);
+    if (!reachesInHouse(id, new Set())) warnings.push(`resources.${id}.fallback never reaches an in-house: entry`);
+  }
+  const checkRoutes = (routing, prefix, home = [], roles = false) => {
+    for (const [role, list] of entries(routing)) for (const id of list) {
+      if (id.startsWith('in-house:') || (roles && (AUTO.test(id) || Object.hasOwn(eff.seats, id)))) continue;
+      const keys = [...prefix, role];
+      if (!Object.hasOwn(eff.resources, id)) {
+        // checkReferences already checked seat/resource references in host roles.
+        if (!roles) report(keys, `${keys.join('.')}: unknown resource ${id}`);
+      } else if (!role.startsWith('in-house-') && home.includes(resourceVendor(eff.resources[id]))) {
+        (draft ? warnings : errors).push(`${keys.join('.')}: ${id} is a home-vendor resource`);
+      }
+    }
+  };
+  checkRoutes(eff.routing, ['routing']);
+  const hosts = hostId ? [[hostId, eff.hosts[hostId] ?? {}]] : entries(eff.hosts);
+  for (const [id, host] of hosts) {
+    checkRoutes(host.routing, ['hosts', id, 'routing'], host.home);
+    checkRoutes(host.roles, ['hosts', id, 'roles'], host.home, true);
+  }
+  for (const [id, host] of hosts.length ? hosts : [[null, {}]]) {
+    const vendorsFor = (role) => {
+      const ids = host.roles?.[role] ?? host.routing?.[role] ?? eff.routing[role] ??
+        entries(eff.resources).filter(([, r]) => r.roles?.includes(role)).map(([key]) => key);
+      return ids.map((key) => host.roles?.[role] && Object.hasOwn(eff.seats, key)
+        ? eff.seats[key].vendor : resourceVendor(eff.resources[key] ?? {}));
+    };
+    const edits = EDIT_ROLES.flatMap(vendorsFor);
+    for (const role of REVIEW_ROLES) {
+      const review = vendorsFor(role);
+      if (review.length && edits.length && review[0] && [...edits, ...review].every((v) => v === review[0])) {
+        warnings.push(`${id ? 'hosts.' + id + '.' : ''}${role}: review and edit candidates all share vendor ${review[0]}`);
+      }
+    }
+  }
+  return { ok: errors.length === 0, errors: [...new Set(errors)], warnings };
+}
+
+function renderPlan(eff, opts) {
+  const rows = [['Role', 'Candidate', 'Model · effort', 'Route', 'Account → instance', 'Fallback']];
+  const roles = new Set([...Object.keys(eff.routing), ...Object.keys(eff.hosts[opts.host]?.roles ?? {}),
+    ...Object.values(eff.resources).flatMap((r) => r.roles ?? [])]);
+  for (const role of roles) {
+    const resolved = resolveRole(eff, role, opts.at ?? new Date(), opts);
+    if (!resolved.candidates.length) rows.push([role, '—', '—', '—', '—', resolved.inHouse]);
+    for (const c of resolved.candidates) {
+      const id = c.id ?? `auto:${c.tier}${c.effort ? ':' + c.effort : ''}`;
+      const resource = c.kind ? null : eff.resources[id];
+      const fallback = resource?.fallback?.join(' → ') || resolved.inHouse;
+      const account = c.account ?? resource?.account;
+      rows.push([role, id, `${c.hostModel ?? c.model ?? c.tier ?? '—'} · ${c.effort ?? '—'}`,
+        c.route ?? 'acp-liaison', [account, c.instance].filter(Boolean).join(' → ') || '—', fallback]);
+    }
+  }
+  const markdown = rows.map((r) => `| ${r.map((cell) => String(cell).replaceAll('|', '\\|').replace(/[\r\n]+/g, ' ')).join(' | ')} |`);
+  markdown.splice(1, 0, '| --- | --- | --- | --- | --- | --- |');
+  return markdown.join('\n');
+}
+
+function changedKeys(base, next, draft) {
+  const changed = [];
+  for (const [key, value] of entries(draft)) {
+    if (['resources', 'seats', 'accounts', 'profiles', 'hosts', 'routing', 'quota', 'accountQuota'].includes(key)) {
+      for (const id of Object.keys(value)) if (!isDeepStrictEqual(base[key]?.[id], next[key][id])) changed.push(`${key}.${id}`);
+    } else if (key === 'schedules') {
+      for (const s of value) if (!isDeepStrictEqual(base.schedules.find((p) => p.id === s.id), s)) changed.push(`schedules.${s.id}`);
+    } else if (key !== 'schema' && !isDeepStrictEqual(base[key], next[key])) changed.push(key);
+  }
+  return changed;
+}
+
+function cmdPlan(opts) {
+  const { eff } = loadEffective(opts.root);
+  let draft;
+  if (opts.from) {
+    try { draft = readJsonFile(opts.from); }
+    catch (err) {
+      if (opts.action === 'check' && err instanceof CodedError) return { ok: false, errors: [err.message], warnings: [] };
+      throw err;
+    }
+    const errors = record(draft) ? validateConfig({ schema: SCHEMA, ...draft }, eff) : ['draft must be an object'];
+    if (errors.length) {
+      if (opts.action === 'check') return { ok: false, errors, warnings: [] };
+      throw new CodedError(3, errors.join('; '));
+    }
+  }
+  if (opts.action === 'apply') {
+    let changed, warnings;
+    const { file } = writeScope(opts, (base) => {
+      const next = mergePlan(base, draft);
+      const parent = opts.scope === 'project' ? readConfig(globalDir()) : null;
+      const errors = validateConfig(next, parent);
+      if (errors.length) throw new CodedError(3, errors.join('; '));
+      const checked = checkPlan(mergeConfigs(parent, next), null, draft);
+      if (!checked.ok) throw new CodedError(3, checked.errors.join('; '));
+      warnings = checked.warnings;
+      changed = changedKeys(base, next, draft);
+      return next;
+    });
+    return { ok: true, scope: opts.scope, file, changed, warnings };
+  }
+  const plan = draft ? mergePlan(eff, draft) : eff;
+  if (opts.action === 'check') return checkPlan(plan, opts.host);
+  const session = opts.session ? readState(opts.root).sessions[opts.session] : null;
+  return { ok: true, markdown: renderPlan(scopedPlan(plan, opts.host, session?.patch), opts) };
+}
+
+function cmdMigrate(opts) {
+  const loaded = loadEffective(opts.root);
+  const global = readConfig(loaded.global.dir), project = readConfig(loaded.project.dir, global);
+  let policyCostPreference = null;
+  for (const name of ['AGENTS.md', 'CLAUDE.md']) {
+    const file = path.join(loaded.project.root, name);
+    if (!fs.existsSync(file)) continue;
+    const match = /^[\t ]*-[\t ]*Cost preference:[\t ]*([^\r\n<]+)/im.exec(fs.readFileSync(file, 'utf8'));
+    if (match) { policyCostPreference = match[1].trim().replaceAll('`', ''); break; }
+  }
+  return { ok: true, rev: { global: global ? global.rev ?? 1 : null, project: project ? project.rev ?? 1 : null },
+    overlaysWithoutHost: [...new Set(overlaysFor(loaded).map((o) => o.host).filter((id) => !Object.hasOwn(loaded.eff.hosts, id)))],
+    inHouseRoutingRoles: Object.keys(loaded.eff.routing).filter((id) => id.startsWith('in-house-')),
+    policyCostPreference, legacyProfile: new Map([['economize', 'frugal'], ['balanced', 'balanced'], ['max-quality', 'performance']]).get(policyCostPreference) ?? null };
+}
+
 export function run(opts) {
   switch (opts.command) {
     case 'paths': { const info = projectInfo(opts.root); return { ok: true, global: globalDir(), project: info.dir, projectRoot: info.root, files: { config: CONFIG_FILE, usage: USAGE_FILE, ranking: RANKING_FILE } }; }
+    case 'start': return cmdStart(opts);
+    case 'profile': case 'account': case 'seat': case 'host': return cmdEntity(opts);
+    case 'promote': return cmdPromote(opts);
+    case 'plan': return cmdPlan(opts);
+    case 'migrate': return cmdMigrate(opts);
     case 'show': return cmdShow(opts);
     case 'init': return cmdInit(opts);
     case 'set': return cmdSet(opts);
@@ -974,6 +1855,7 @@ export function main(argv = process.argv.slice(2)) {
   try {
     const out = run(opts);
     process.stdout.write(`${JSON.stringify(out, null, 2)}\n`);
+    if (out.ok === false && out.errors) { process.stderr.write(out.errors.join('\n') + '\n'); return 3; }
     if (out.needsInit) process.stderr.write('compute-config: no compute config yet; ask the user the setup questions (references/compute-config.md), then run init.\n');
     if (out.review?.due && !out.needsInit) process.stderr.write(`compute-config: review due (last ${out.review.lastReviewed ?? 'never'}); tell the user the current plan and proceed unless they object.\n`);
     return 0;

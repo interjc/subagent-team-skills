@@ -4,7 +4,7 @@ description: Keep multi-agent coding work resumable at any moment. Record progre
 license: MIT with Commons Clause v1.0 (see LICENSE)
 compatibility: Built for Claude Code (primary) and Codex (secondary); other hosts are unverified. Needs only a repository it can write to.
 metadata:
-  version: "0.6.1"
+  version: "0.7.0"
 ---
 
 # Agent Handover
@@ -60,7 +60,7 @@ For when a session may end, context is nearly full, or you hand over deliberatel
 
 1. Capture the scene (read-only): `git rev-parse --short HEAD; git status --short`.
 2. List running work: agent names or ids (Claude Code `ListAgents`), external job ids and conversation ids (for wrapper jobs also the `--out-dir`, PID, model, effort and sandbox, and whether the process is detached, e.g. started with `nohup`, or will end with this session), and which liaison tracks each job. **Do not cancel running work just to tidy up.**
-3. Write an in-flight record into the status snapshot. Include: task id, branch and HEAD, files in the working tree that belong to the task, the step it is stuck on, running agents and jobs, who holds the edit lease, the next concrete action, and anything awaiting the user.
+3. Write an in-flight record into the status snapshot. Include: task id, branch and HEAD, files in the working tree that belong to the task, the step it is stuck on, running agents and jobs, who holds the edit lease, the **host id**, the **session key** (from `compute-config.mjs start`), any **unsaved session overrides**, the next concrete action, and anything awaiting the user. **Never** write account ids, provider instance ids or served-model fingerprints into tracked repository records; those stay in the local git-ignored compute files.
 4. Write unrecorded user decisions to the decision log or summary, and unanswered questions to open questions. Bring every task card's status, job ids and `[open]` questions up to date (holders do their own cards).
 5. Move rules that exist only in local memory into the repository.
 6. Add new pitfalls.
@@ -80,7 +80,8 @@ For a new agent, a cold start, or after context compaction.
 5. Check running work (`ListAgents`; the external tool's job status, or a wrapper job's `summary.json` in its recorded `--out-dir` and whether its PID is alive, run **from the same worktree**, since job state is per worktree). Never start a duplicate of something already running. With a team board, list cards and open escalations (`team-board.mjs status` from the `subagent-team` skill, or read the cards).
 6. Read the next-up queue, open questions, pitfalls and lessons relevant to the task.
 7. Treat local memory as leads only and check it against the repository.
-8. Before acting, reply with a short recovery summary: HEAD, in-flight tasks, next step, and what awaits the user.
+8. Before any new dispatch, run the `subagent-team` skill's `compute-config.mjs start --root <project root>` (pass `--session <key>` only when resuming the same session on the same host). The receiving session may run under another host with its own host plan, so never reuse the previous host's plan blindly.
+9. Before acting, reply with a short recovery summary: HEAD, host and session check result, in-flight tasks, next step, and what awaits the user.
 
 ## 6. External job state
 
